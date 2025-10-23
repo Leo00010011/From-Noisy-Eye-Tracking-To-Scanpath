@@ -6,6 +6,8 @@ import numpy as np
 from pathlib import Path
 
 ###
+# ABOUT THE ANGLE TO PIXEL CONVERSION
+# ----------------------------------
 # In the Github Repo they said that the COCO search dataset was made
 # in an 1680x1050 display, but they downscaled to 512x320.
 # Looking at the publication of HAT which is a second one that
@@ -15,6 +17,7 @@ from pathlib import Path
 # In the code I found that they used the scipy.ndimage.filters.gaussian_filter 
 # with sigma equal to 16. This is made over a fixation map that was downscaled as they 
 # said previously. Can I now compute the visual angle #
+# ------------------------------------
 class CocoFreeView:
     def __init__(self, data_path = 'data\\Coco FreeView'):
         json_path = os.path.join(data_path, 'COCOFreeView_fixations_trainval.json')
@@ -60,14 +63,20 @@ class CocoFreeView:
             
     def get_scanpath(self, idx, downscale = True):
         row = self.df.iloc[idx]
+        fx,fy = 1,1
         if downscale:
             fx = self.dest_res[1] / self.ori_res[1]
             fy = self.dest_res[0] / self.ori_res[0]
+
+        if (type(idx) == int):
+            x = np.array(row['X'])*fx
+            y = np.array(row['Y'])*fy
+            t = np.array(row['T'])
+        else:
             x = row['X'].apply(lambda arr: np.array(arr) * fx)
             y = row['Y'].apply(lambda arr: np.array(arr) * fy)
             t = row['T'].apply(np.array)
-                
-        return x,y, t   
+        return x,y,t   
     
     def get_img(self, idx, downscale = True):
         row = self.df.iloc[idx]
