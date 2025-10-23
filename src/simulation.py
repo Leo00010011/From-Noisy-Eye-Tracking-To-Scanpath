@@ -223,6 +223,7 @@ def _synthesize_gaze_data(x_coords, y_coords, fixation_mask, sac_proportions, ti
 
 
 def downsampling_index(gaze, down_time_step = 200):
+    # TODO Optimization: Avoid the search sorted computing the right step index
     count = []
     idx = []
     prev_idx = 0
@@ -235,13 +236,16 @@ def downsampling_index(gaze, down_time_step = 200):
     return idx, count
 
 def downsample(gaze_list, down_time_step = 200):
-    gaze_down = []
-    for gaze in gaze_list:
-        idx,_ = downsampling_index(gaze,down_time_step)
-        new_gaze = np.empty((3,len(idx)))
-        new_gaze = gaze[:,idx]
-        gaze_down.append(new_gaze)
-    return gaze_down
+    if type(gaze_list) == list:
+        gaze_down = []
+        for gaze in gaze_list:
+            idx,_ = downsampling_index(gaze,down_time_step)
+            gaze_down.append(gaze[:,idx])
+        return gaze_down
+    else:
+        idx,_ = downsampling_index(gaze_list,down_time_step)
+        return gaze_list[:,idx]
+    
 
 def downsampling_with_same_size(gaze_list, down_time_step = 200):
     gaze_down = []
