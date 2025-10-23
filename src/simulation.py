@@ -5,14 +5,11 @@ from scipy.signal import lfilter
 # Saccades
 
 def get_saccade_amp(x,y, ptoa):
-    p_dist = [np.sqrt(np.diff(xx)**2 + np.diff(yy)**2) for xx, yy in zip(x, y)]
-    ang_dist = [d * ptoa for d in p_dist]
-    return ang_dist
+    return np.sqrt(np.diff(x)**2 + np.diff(y)**2)* ptoa
 
 def get_saccade_durations(ang_dist):
-    return [2.1*d + 21 for d in ang_dist]
+    return 2.1*ang_dist + 21 
         
-
 def saccadic_displacement(s, normalized = True):
     if normalized:
         norm_factor = saccadic_displacement(1, normalized= False)
@@ -74,9 +71,20 @@ def gen_fixations(x,y,t, time_step, ptoa):
     return fixations
 
 
+def _gen_single_gaze(data, idx, sampling_rate, get_fixation_mask = False, get_scanpath = False):
+    x, y, d = data.get_scanpath(idx)
+    sac_amp = get_saccade_amp(x, y, data.ptoa)
+    sac_durs = get_saccade_durations(sac_amp)
+    gaze, fixation_mask = _generate_gaze_from_scanpath(x, y, d, sac_durs, sampling_rate)
 
+    output = gaze
+    if get_scanpath:        
+        output = (output, np.vstack([x,y,d]))
+    if get_fixation_mask:
+       output = (*output, fixation_mask)
+    return output 
 
-def process_scanpaths(data, indices, sampling_rate, get_fixation_mask = False, get_scanpath = False):
+def gen_gaze(data, idx, sampling_rate, get_fixation_mask = False, get_scanpath = False):
     """
     Processes a batch of scanpaths to generate continuous gaze data.
 
@@ -87,34 +95,15 @@ def process_scanpaths(data, indices, sampling_rate, get_fixation_mask = False, g
     Returns:
         list[np.ndarray]: A list of generated gaze trajectories.
     """
-    batch_x, batch_y, batch_fix_durs = data.get_scanpath(indices)
-    batch_sac_amp = get_saccade_amp(batch_x, batch_y, data.ptoa)
-    batch_sac_durs = get_saccade_durations(batch_sac_amp)
-
-    gaze_list, fm_list = [], []
-    for i in range(len(indices)):
-        gaze, fixation_mask = _generate_gaze_from_scanpath(
-            batch_x.iloc[i],
-            batch_y.iloc[i],
-            batch_fix_durs.iloc[i],
-            batch_sac_durs[i],
-            sampling_rate
-        )
-        gaze_list.append(gaze)
-        fm_list.append(fixation_mask)
-    
-    
-
-    output = gaze_list
-    if get_scanpath:
-        fixations = []
-        for x,y,d in zip(batch_x,batch_y,batch_fix_durs):
-            fixations.append(np.vstack((x,y,d)))
-        output = (output, fixations)
-    
-    if get_fixation_mask:
-       output = (*output, fm_list)
-    return output 
+    if type(idx) == int:
+        return _gen_single_gaze(data, idx, sampling_rate,
+                                        get_fixation_mask, get_scanpath)
+    else:
+        output = []
+        for i in idx:
+            output.append(_gen_single_gaze(data, int(i), sampling_rate, 
+                                                  get_fixation_mask, get_scanpath))
+        return output 
 
 # --- Core Logic for a Single Scanpath ---
 

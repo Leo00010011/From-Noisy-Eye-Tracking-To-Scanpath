@@ -73,9 +73,9 @@ class CocoFreeView:
             y = np.array(row['Y'])*fy
             t = np.array(row['T'])
         else:
-            x = [row['X'].apply(lambda arr: np.array(arr) * fx)]
-            y = [row['Y'].apply(lambda arr: np.array(arr) * fy)]
-            t = [row['T'].apply(np.array)]
+            x = row['X'].apply(lambda arr: np.array(arr) * fx)
+            y = row['Y'].apply(lambda arr: np.array(arr) * fy)
+            t = row['T'].apply(np.array)
         return x,y,t   
     
     def get_img(self, idx, downscale = True):
