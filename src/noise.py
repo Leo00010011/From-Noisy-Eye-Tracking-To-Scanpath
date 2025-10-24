@@ -26,6 +26,11 @@ def add_gaussian_noise(gaze_list,ptoa, ang_mean = AVG_WEB_GAZER_ERROR_ANG):
     return noisy_gaze
 
 def gen_elliptical_params(a, r):
+    '''
+    Method that compute the needed x_std and y_std for a multivariate normal to have 
+        **a**: y_std/x_std
+        **r**: expected norm 
+    '''
     # https://chatgpt.com/c/68e64e38-3bb4-832c-b5bd-7061c05a6e3c
     k_sqrd = 1 - r**2
     x_std = a/ellipe(k_sqrd)*((np.pi/2)**(1/2))
@@ -33,6 +38,7 @@ def gen_elliptical_params(a, r):
     return x_std, y_std
 
 def gen_bivariate_normal(n_samples, x_std,y_std):
+    # diagonal covariance bivariate normal can be simulated as two independent gaussians
     noise_ellipx = np.random.normal(0, x_std,(1,n_samples))
     noise_ellipy = np.random.normal(0, y_std,(1,n_samples))
     return np.vstack([noise_ellipx, noise_ellipy])
@@ -136,7 +142,7 @@ def generate_noisy_center_path(initial_center, num_samples, target_std, corr):
     """
     
     # Calculate the required input noise std to achieve the target std in the output
-    if corr**2 >= 1:
+    if corr >= 1:
         input_std = 0
     else:
         # This formula ensures the final path has the desired standard deviation
@@ -208,7 +214,7 @@ def generate_correlated_radial_noise(samples, initial_center, ptoa, radial_corr,
 
     # 3. Calculate input stats for the uncorrelated magnitude noise
     input_mean = target_mean * (1 - radial_corr)
-    if radial_corr**2 >= 1:
+    if radial_corr >= 1:
         input_std = 0
     else:
         input_std = target_std * np.sqrt(1 - radial_corr**2)
@@ -244,7 +250,6 @@ def add_correlated_radial_noise(gaze_list, initial_center, ptoa,
     initial_center = np.asarray(initial_center).reshape(2, 1)
     for gaze in gaze_list:
         new_gaze = gaze.copy()
-        
         # Use the new, more capable function to generate the noise
         noise = generate_correlated_radial_noise(
             samples=new_gaze[:2],
@@ -262,7 +267,7 @@ def add_correlated_radial_noise(gaze_list, initial_center, ptoa,
         
     return noisy_gaze
 
-def add_random_center_correlated_radial_noise(gaze_list, initial_center, ptoa,
+def add_random_center_correlated_radial_noise(gaze, initial_center, ptoa,
                                    radial_corr, 
                                    radial_avg_norm = AVG_WEB_GAZER_ERROR_ANG,
                                    radial_std = STD_WEB_GAZER_ERROR_ANG,
@@ -273,14 +278,18 @@ def add_random_center_correlated_radial_noise(gaze_list, initial_center, ptoa,
     """
     Adds correlated radial noise with an optionally dynamic center to a list of gaze data.
     """
+    boxed = False
+    if type(gaze) != list:
+        boxed = True
+        gaze = [gaze]
+    
     x_std, y_std = gen_elliptical_params(center_delta_norm,center_delta_r)
-    center_delta = gen_bivariate_normal(len(gaze_list),x_std,y_std)
-    print(center_delta.shape)
     initial_center = np.asarray(initial_center).reshape(2, 1)
+    center_delta = gen_bivariate_normal(len(gaze),x_std,y_std)
     initial_center = center_delta + initial_center
     noisy_gaze = []
-    for i, gaze in enumerate(gaze_list):
-        new_gaze = gaze.copy()
+    for i, single_gaze in enumerate(gaze):
+        new_gaze = single_gaze.copy()
         # Use the new, more capable function to generate the noise
         noise = generate_correlated_radial_noise(
             samples=new_gaze[:2],
@@ -295,7 +304,7 @@ def add_random_center_correlated_radial_noise(gaze_list, initial_center, ptoa,
         
         new_gaze[:2] += noise
         noisy_gaze.append(new_gaze)
-        
-    return noisy_gaze, initial_center
-
     
+    if boxed:
+        noisy_gaze = noisy_gaze[0]
+    return noisy_gaze, initial_center
