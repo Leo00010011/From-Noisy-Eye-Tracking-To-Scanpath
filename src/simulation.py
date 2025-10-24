@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.signal import lfilter
+from src.utils import is_number
 
 
 # Saccades
@@ -95,7 +96,7 @@ def gen_gaze(data, idx, sampling_rate, get_fixation_mask = False, get_scanpath =
     Returns:
         list[np.ndarray]: A list of generated gaze trajectories.
     """
-    if type(idx) == int:
+    if is_number(idx):
         return _gen_single_gaze(data, idx, sampling_rate,
                                         get_fixation_mask, get_scanpath)
     else:

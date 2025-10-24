@@ -4,6 +4,7 @@ import cv2
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from src.utils import is_number
 
 ###
 # ABOUT THE ANGLE TO PIXEL CONVERSION
@@ -68,7 +69,7 @@ class CocoFreeView:
             fx = self.dest_res[1] / self.ori_res[1]
             fy = self.dest_res[0] / self.ori_res[0]
 
-        if (type(idx) == int):
+        if is_number(idx):
             x = np.array(row['X'])*fx
             y = np.array(row['Y'])*fy
             t = np.array(row['T'])
@@ -93,7 +94,7 @@ class CocoFreeView:
 
 
 
-######################################################33
+######################################################
 class OurDataset:
     def __init__(self, data_path = 'data\\Ours\\result_total_data_prosegur.csv', img_path = 'data\\Ours\\prosegur_img.jpg'):
         data = pd.read_csv(data_path)
