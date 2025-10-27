@@ -76,7 +76,7 @@ def _gen_single_gaze(data, idx, sampling_rate, get_fixation_mask = False, get_sc
     x, y, d = data.get_scanpath(idx)
     sac_amp = get_saccade_amp(x, y, data.ptoa)
     sac_durs = get_saccade_durations(sac_amp)
-    gaze, fixation_mask = _generate_gaze_from_scanpath(x, y, d, sac_durs, sampling_rate)
+    gaze, fixation_mask = _generate_gaze_from_scanpath(x, y, d, sac_durs, sampling_rate, data.ptoa)
 
     output = gaze
     if get_scanpath:        
@@ -108,7 +108,7 @@ def gen_gaze(data, idx, sampling_rate, get_fixation_mask = False, get_scanpath =
 
 # --- Core Logic for a Single Scanpath ---
 
-def _generate_gaze_from_scanpath(x_coords, y_coords, fixation_durs, saccade_durs, sampling_rate):
+def _generate_gaze_from_scanpath(x_coords, y_coords, fixation_durs, saccade_durs, sampling_rate, ptoa):
     """
     Generates a single continuous gaze trajectory from its event-based representation.
     
@@ -124,7 +124,7 @@ def _generate_gaze_from_scanpath(x_coords, y_coords, fixation_durs, saccade_durs
     fixation_mask, sac_proportions, time_step = _segment_timeline(fixation_durs, saccade_durs,sampling_rate)
 
     gaze_trajectory = _synthesize_gaze_data(
-        x_coords, y_coords, fixation_mask, sac_proportions, time_step
+        x_coords, y_coords, fixation_mask, sac_proportions, time_step, ptoa
     )
     
     return gaze_trajectory, fixation_mask
@@ -183,7 +183,7 @@ def _segment_timeline(fixation_durs, saccade_durs, sampling_rate):
 
     return fixation_mask, sac_proportions, time_step
 
-def _synthesize_gaze_data(x_coords, y_coords, fixation_mask, sac_proportions, time_step):
+def _synthesize_gaze_data(x_coords, y_coords, fixation_mask, sac_proportions, time_step,ptoa):
     """
     Constructs the final gaze coordinate array from the segmented timeline.
     """
@@ -201,7 +201,7 @@ def _synthesize_gaze_data(x_coords, y_coords, fixation_mask, sac_proportions, ti
     
     # Add microsaccadic noise during fixations
     deltas = microsaccades_delta(num_fix_samples * 2).reshape(2, -1)
-    gaze[:2, is_fixation] = fixation_coords[:, fixation_indices_in_mask] + deltas
+    gaze[:2, is_fixation] = fixation_coords[:, fixation_indices_in_mask] + deltas/ptoa
 
     # --- Populate Saccades ---
     is_saccade = fixation_mask == 0
