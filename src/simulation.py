@@ -136,9 +136,11 @@ def _segment_timeline(fixation_durs, saccade_durs, sampling_rate):
     Segments the scanpath timeline into discrete samples for fixations and saccades.
     """
     # TODO Test optimization with numba
+    # TODO understand why ceil solve the problem
     time_step = 1000/sampling_rate
     total_duration = int(sum(fixation_durs) + sum(saccade_durs))
-    total_samples = int(total_duration // time_step)
+    # total_samples = int(np.ceil(total_duration / time_step))
+    total_samples = int(np.ceil(total_duration / time_step))
     fixation_mask = np.zeros(total_samples, dtype=np.uint8)
     sac_proportions = []
     
@@ -178,8 +180,8 @@ def _segment_timeline(fixation_durs, saccade_durs, sampling_rate):
                 time_offset += len(proportions)
                 # Calculate remainder for the next event
                 time_rem = time_step - (event_duration - time_rem) % time_step
-                if time_rem == time_step: time_rem = 0
-
+                if time_rem == time_step: 
+                    time_rem = 0
 
     return fixation_mask, sac_proportions, time_step
 
