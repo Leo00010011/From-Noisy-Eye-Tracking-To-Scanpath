@@ -2,6 +2,7 @@ import numpy as np
 from scipy.special import ellipe
 from numba import njit
 
+
 AVG_WEB_GAZER_ERROR_ANG = 4.17
 STD_WEB_GAZER_ERROR_ANG = 3.54
 WEIGHTS = [0.66488757, 0.33511243]
@@ -36,12 +37,22 @@ def gen_elliptical_params(a, r):
     x_std = a/ellipe(k_sqrd)*((np.pi/2)**(1/2))
     y_std = x_std*np.sqrt(1 - k_sqrd)
     return x_std, y_std
-
+@njit
 def gen_bivariate_normal(n_samples, x_std,y_std):
     # diagonal covariance bivariate normal can be simulated as two independent gaussians
-    noise_ellipx = np.random.normal(0, x_std,(1,n_samples))
-    noise_ellipy = np.random.normal(0, y_std,(1,n_samples))
-    return np.vstack([noise_ellipx, noise_ellipy])
+    """
+    Numba-jitted version of bivariate normal generation.
+    Generates two independent normal distributions and stacks them.
+    """
+    # Numba's np.random.normal creates 1D arrays
+    noise_ellipx = np.random.normal(0.0, x_std, n_samples)
+    noise_ellipy = np.random.normal(0.0, y_std, n_samples)
+    
+    # Manually stack them into a (2, n_samples) array
+    output = np.empty((2, n_samples), dtype=np.float64) # Specify dtype for clarity
+    output[0, :] = noise_ellipx
+    output[1, :] = noise_ellipy
+    return output
 
 
 def add_elliptical_gaussian_noise(gaze_list,ptoa,r = 0.7, ang_mean = AVG_WEB_GAZER_ERROR_ANG):
@@ -132,8 +143,8 @@ def add_learned_gaussian_noiseV2(gaze_list, scale = 1):
 #         )
 #     return noisy_gaze
 
-
-def generate_noisy_center_path(initial_center, num_samples, target_std, corr):
+@njit
+def generate_noisy_center_path(initial_center_1d, num_samples, target_std, corr):
     """
     Generates a 2D correlated noise path for a moving center point.
     
@@ -141,33 +152,43 @@ def generate_noisy_center_path(initial_center, num_samples, target_std, corr):
     Ornstein-Uhlenbeck process, which tends to revert to the mean (initial_center).
     """
     
-    # Calculate the required input noise std to achieve the target std in the output
-    if corr >= 1:
-        input_std = 0
+    # 1. Calculate input noise std
+    if corr >= 1.0:
+        input_std = 0.0
     else:
-        # This formula ensures the final path has the desired standard deviation
-        input_std = target_std * np.sqrt(1 - corr**2)
+        input_std = target_std * np.sqrt(1.0 - corr**2)
         
-    # Generate the underlying white noise (random "kicks")
-    white_noise = np.random.normal(
-        loc=0.0,
-        scale=input_std,
-        size=(2, num_samples)
-    )
+    # 2. Generate underlying white noise
+    # Numba's np.random.normal supports positional args and a size tuple
+    white_noise = np.random.normal(0.0, input_std, (2, num_samples))
     
-    # Generate the correlated path
+    # 3. Generate the correlated path
     path = np.zeros_like(white_noise)
-    path[:, 0] = initial_center.flatten() # Start at the initial center
     
+    # Set initial position (explicitly indexing)
+    path[0, 0] = initial_center_1d[0]
+    path[1, 0] = initial_center_1d[1]
+    
+    # Use explicit loops for x (j=0) and y (j=1)
     for i in range(1, num_samples):
-        # The process is pulled back towards the initial_center, creating a stable jitter
-        previous_pos = path[:, i - 1].reshape(2, 1)
-        path[:, i] = (initial_center + (previous_pos - initial_center) * corr + white_noise[:, i].reshape(2, 1)).flatten()
+        # Get the (2,) slice of the previous position
+        prev_pos_x = path[0, i - 1]
+        prev_pos_y = path[1, i - 1]
         
+        # Get the (2,) slice of the current noise sample
+        noise_x = white_noise[0, i]
+        noise_y = white_noise[1, i]
+        
+        # Calculate the new position for x and y coordinates
+        # path[j, i] = (initial_center[j] + (prev_pos[j] - initial_center[j]) * corr + noise[j])
+        path[0, i] = initial_center_1d[0] + (prev_pos_x - initial_center_1d[0]) * corr + noise_x
+        path[1, i] = initial_center_1d[1] + (prev_pos_y - initial_center_1d[1]) * corr + noise_y
+            
     return path
 
 
 # The original correlate_magnitudes function remains the same
+@njit
 def correlate_magnitudes(magnitudes, corr):
     """
     Applies a standard AR(1) correlation to a 1D array of noise magnitudes.
@@ -178,9 +199,76 @@ def correlate_magnitudes(magnitudes, corr):
         output[i] = output[i - 1] * corr + magnitudes[i]
     return output
 
+@njit
+def generate_correlated_radial_noise_numba(
+    samples, initial_center_1d, ptoa, radial_corr,
+    radial_avg_norm, radial_std,
+    center_noise_std, center_corr
+):
+    num_samples = samples.shape[1]
+    
+    # 1. Generate the center path (either static or dynamic)
+    center_path = np.empty((2, num_samples))
+    if center_noise_std > 0:
+        # Call the jitted function
+        center_path = generate_noisy_center_path(
+            initial_center_1d, num_samples, center_noise_std, center_corr
+        )
+    else:
+        # Create a static path by repeating the initial center
+        # Use explicit loops for Numba-friendliness
+        for i in range(num_samples):
+            center_path[0, i] = initial_center_1d[0]
+            center_path[1, i] = initial_center_1d[1]
+            
+    # 2. Define target statistics
+    target_mean = radial_avg_norm / ptoa
+    target_std = radial_std / ptoa
+
+    # 3. Calculate input stats
+    input_mean = target_mean * (1.0 - radial_corr)
+    if radial_corr >= 1.0:
+        input_std = 0.0
+    else:
+        input_std = target_std * np.sqrt(1.0 - radial_corr**2)
+        
+    # 4. Generate and correlate the radial magnitudes
+    uncorrelated_magnitudes = np.random.normal(input_mean, input_std, num_samples)
+    correlated_magnitudes = correlate_magnitudes(uncorrelated_magnitudes, radial_corr)
+    
+    # 5. Create final noise array
+    final_noise = np.empty_like(samples)
+    
+    # 6. Main processing loop (replaces steps 5-8 from original)
+    # This single loop calculates the radial vector, norm, and final noise
+    # for each sample, avoiding large intermediate arrays.
+    for i in range(num_samples):
+        
+        # Step 5: Determine the radial vector
+        rad_x = samples[0, i] - center_path[0, i]
+        rad_y = samples[1, i] - center_path[1, i]
+        
+        # Step 6: Normalize (replaces np.linalg.norm and boolean indexing)
+        norm = np.sqrt(rad_x**2 + rad_y**2)
+        
+        # Avoid division by zero
+        if norm == 0.0:
+            norm = 1.0 # Set to 1 to avoid NaN; noise magnitude will be 0 if mag is 0
+            
+        # Step 7: Create unit vectors
+        unit_x = rad_x / norm
+        unit_y = rad_y / norm
+        
+        # Step 8: Scale unit vectors by correlated magnitudes
+        mag = correlated_magnitudes[i]
+        final_noise[0, i] = unit_x * mag
+        final_noise[1, i] = unit_y * mag
+        
+    return final_noise
+
 def generate_correlated_radial_noise(samples, initial_center, ptoa, radial_corr,
-                                        radial_avg_norm, radial_std,
-                                        center_noise_std=0.0, center_corr=0.98):
+                                     radial_avg_norm, radial_std,
+                                     center_noise_std=0.0, center_corr=0.98):
     """
     Generates temporally correlated radial noise with an optionally dynamic center.
     
@@ -195,47 +283,18 @@ def generate_correlated_radial_noise(samples, initial_center, ptoa, radial_corr,
                                      If 0, the center is static. Defaults to 0.
         center_corr (optional): The correlation factor for the center's movement.
     """
-    num_samples = samples.shape[1]
     
-    # 1. Generate the center path (either static or dynamic)
-    if center_noise_std > 0:
-        center_path = generate_noisy_center_path(
-            initial_center, num_samples, center_noise_std, center_corr
-        )
-    else:
-        # Create a static path by repeating the initial center
-        center_path = np.asarray(initial_center).reshape(2, 1)
-    
-    # --- The rest of the function generates the radial noise around this path ---
-    
-    # 2. Define target statistics for the radial noise magnitudes
-    target_mean = radial_avg_norm / ptoa
-    target_std = radial_std / ptoa
-
-    # 3. Calculate input stats for the uncorrelated magnitude noise
-    input_mean = target_mean * (1 - radial_corr)
-    if radial_corr >= 1:
-        input_std = 0
-    else:
-        input_std = target_std * np.sqrt(1 - radial_corr**2)
+    # Prepare initial_center for Numba
+    initial_center_1d = initial_center.flatten()
+    if initial_center_1d.shape[0] != 2:
+        raise ValueError("initial_center must be a 2-element array.")
         
-    # 4. Generate and correlate the radial magnitudes
-    uncorrelated_magnitudes = np.random.normal(input_mean, input_std, num_samples)
-    correlated_magnitudes = correlate_magnitudes(uncorrelated_magnitudes, radial_corr)
-    
-    # 5. Determine the radial direction from the (now possibly dynamic) center
-    # The subtraction works element-wise for each time step
-    radial_vectors = samples - center_path
-    
-    # 6. Normalize to get unit direction vectors
-    norms = np.linalg.norm(radial_vectors, ord=2, axis=0)
-    norms[norms == 0] = 1 # Avoid division by zero
-    unit_vectors = radial_vectors / norms
-    
-    # 7. Create the final noise by scaling unit vectors by correlated magnitudes
-    final_noise = unit_vectors * correlated_magnitudes
-    
-    return final_noise
+    # Call the jitted function with all arguments positionally
+    return generate_correlated_radial_noise_numba(
+        samples, initial_center_1d, ptoa, radial_corr,
+        radial_avg_norm, radial_std,
+        center_noise_std, center_corr
+    )
 
 def add_correlated_radial_noise(gaze_list, initial_center, ptoa,
                                    radial_corr, 
