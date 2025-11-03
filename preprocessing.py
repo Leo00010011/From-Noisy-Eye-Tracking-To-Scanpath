@@ -1,21 +1,24 @@
     
 import h5py
 from src.preprocess.simulation import gen_gaze, downsample
-from src.datasets import CocoFreeView
+from src.parsers import CocoFreeView
+from tqdm import tqdm
 
 
-def preprocess(sampling_rate, downsample_int,min_scanpath_duration,sample_size,max_fixation_duration, log):
+def preprocess(sampling_rate, downsample_int,min_scanpath_duration,sample_size,min_fixation_duration, max_fixation_duration, log):
+    # TODO Optimization, do not remove noisy scanpath cut wrong parts
     data = CocoFreeView()
     gen_data = []
     original_data_count = len(data)
-    for index in range(original_data_count):
+    for index in tqdm(range(original_data_count), desc="Processing"):
         gaze, fixations, fixation_mask = gen_gaze(data,
                                                     index, sampling_rate,
                                                     get_scanpath=True,
                                                     get_fixation_mask=True)
         down_gaze = downsample(gaze, down_time_step=downsample_int)
         if (gaze[2,-1] < max(min_scanpath_duration, (sample_size - 1)*downsample_int) or
-            fixations[2].max() > max_fixation_duration) :
+            fixations[2].max() > max_fixation_duration or
+            fixations[2].min() < min_fixation_duration) :
             continue
         gen_data.append({'down_gaze': down_gaze,
                             'fixations': fixations,
@@ -52,9 +55,10 @@ if __name__ == "__main__":
     sampling_rate = 60
     downsample_int = 200
     min_scanpath_duration = 3000
-    sample_size = 128
+    sample_size = 8
+    min_fixation_duration = 30
     max_fixation_duration = 1200
-    save_path = 'data/Coco_FreeView_preprocessed.h5'
+    save_path = 'data/Coco FreeView/dataset.hdf5'
     log = True
-    gen_data = preprocess(sampling_rate, downsample_int, min_scanpath_duration, sample_size, max_fixation_duration, log)
+    gen_data = preprocess(sampling_rate, downsample_int, min_scanpath_duration, sample_size,min_fixation_duration ,max_fixation_duration , log)
     save_gen_data(save_path, gen_data, log=log)

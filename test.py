@@ -1,4 +1,4 @@
-from src.datasets import CocoFreeView
+from src.parsers import CocoFreeView
 from src.simulation import gen_gaze
 
 data = CocoFreeView()
