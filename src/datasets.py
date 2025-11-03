@@ -1,11 +1,12 @@
-from src.preprocess.simulation import add_random_center_correlated_radial_noise
 
+from src.preprocess.noise import add_random_center_correlated_radial_noise
 
 from torch.utils.data import Dataset
 import h5py
 import os
 import math
 import numpy as np
+import torch
 
 def extract_random_period(size, noisy_samples, fixations, fixation_mask, sampling_rate, downsample):
     down_idx = np.random.randint(0, noisy_samples.shape[1] - size + 1, 1, dtype = int)[0]
@@ -202,3 +203,166 @@ class FreeViewBatch(Dataset):
             #     print('closing shuffled data file')
             self.shuffled_data.close()
             self.shuffled_data = None
+
+
+# TODO Compute image embeddings just once
+# TODO Review the outputs in the validation and with some tests
+
+
+class FreeViewInMemory(Dataset):
+    def __init__(self, data_path = 'data\\Coco FreeView', sample_size=-1, log = False, sampling_rate=60, downsample_int=200):
+        self.sampling_rate = sampling_rate
+        self.downsample = downsample_int
+        self.sample_size = sample_size
+        file_path = os.path.join(data_path, 'dataset.hdf5')
+        self.data_path = data_path
+        self.log = log
+        self.data_store = {}
+        with h5py.File(file_path, 'r') as f:
+            for key in f.keys():
+                self.data_store[key] = f[key][:] # [:] reads all data
+        if self.log:
+            print('Data loaded in memory')
+        self.length = self.data_store['down_gaze'].shape[0]
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, index):
+        """
+        Fetches a single sample from RAM, applies sampling and noise.
+        """
+        # Get the pre-loaded data for this index
+        down_gaze = self.data_store['down_gaze'][index].reshape((3, -1))
+        fixations = self.data_store['fixations'][index].reshape((3, -1))
+        # gaze = self.data_store['gaze'][index].reshape((3, -1))
+
+        x = down_gaze
+        y = fixations
+
+        if self.sample_size != -1:
+            fixation_mask = self.data_store['fixation_mask'][index]
+            x, y, _, _ = extract_random_period(
+                self.sample_size,
+                x,
+                fixations,
+                fixation_mask,
+                self.sampling_rate,
+                self.downsample
+            )
+            
+        # Apply noise augmentation
+        # (Assuming your noise function can process a single [3, N] array)
+        x, _ = add_random_center_correlated_radial_noise(x, [320//2, 512//2], 1/16,
+                                                                radial_corr=.2,
+                                                                radial_avg_norm=4.13,
+                                                                radial_std=3.5,
+                                                                center_noise_std=100,
+                                                                center_corr=.3,
+                                                                center_delta_norm=300,
+                                                                center_delta_r=.3)
+        # test_segment_is_inside(index, x, start_fixation, end_fixation, gaze, fixation_mask)
+        # location_test(index, start_fixation, end_fixation, gaze, fixation_mask, fixations)
+        
+        
+        return x, y
+    
+
+
+
+def seq2seq_collate_fn(batch):
+    """
+    Collate function for a seq-to-seq task with variable sequence lengths.
+
+    Pads the input (encoder) sequences and the target (decoder) sequences 
+    to the maximum length found in the current batch.
+
+    Args:
+        batch: A list of tuples, where each tuple is (input_seq, target_seq).
+               - input_seq: torch.Tensor of shape (L_in,)
+               - target_seq: torch.Tensor of shape (L_target,)
+
+    Returns:
+        A dictionary containing the batched and padded tensors.
+    """
+    # 1. Separate inputs and targets
+    input_sequences = [torch.from_numpy(item[0].T).float() for item in batch]
+    target_sequences = [torch.from_numpy(item[1].T).float() for item in batch]
+
+    PAD_TOKEN_ID = 0.0
+
+    # 4. Pad sequences
+    # torch.nn.utils.rnn.pad_sequence is the most straightforward way
+    # batch_first=True makes the output shape (Batch_Size, Max_Length)
+    
+    padded_inputs = torch.nn.utils.rnn.pad_sequence(
+        input_sequences, 
+        batch_first=True, 
+        padding_value=PAD_TOKEN_ID
+    )
+    
+    padded_targets = torch.nn.utils.rnn.pad_sequence(
+        target_sequences, 
+        batch_first=True, 
+        padding_value=PAD_TOKEN_ID
+    )
+    # print('finishing collate')
+    # 5. Return the collated batch
+    return padded_inputs, padded_targets
+
+
+def search(mask, fixation, side = 'right'):
+    start = 0
+    stop = mask.shape[0]
+    step = 1
+    if side == 'left':
+        start = mask.shape[0] - 1 
+        stop = -1
+        step = -1
+
+    for i in range(start,stop, step):
+        if mask[i] == fixation:
+            return i
+    return -1
+
+def test_segment_is_inside(index, x, si,ei,gaze, fixation_mask):
+    sidx = search(fixation_mask, si + 1, side = 'right')
+    eidx = search(fixation_mask, ei + 1, side = 'left')
+    if sidx == -1:
+        print(f'{index}❌ Start Fixation not found: si:{si + 1} \n {fixation_mask}')
+        return
+    if eidx == -1:
+        print(f'{index}❌ End Fixation not found: si:{ei + 1} \n {fixation_mask}')
+        return
+    if x[2,0] <= gaze[2,sidx] and (x[2,-1] + 200) >= gaze[2,eidx]:
+        # print(f'{index}✅Pass: DS [{x[2,0]},{x[2,-1]}] Ori [{gaze[2,sidx]},{gaze[2,eidx]}]')
+        return 
+    else:
+        print(f'{index}❌Outside: DS [{x[2,0]},{x[2,-1]}] Ori [{gaze[2,sidx]},{gaze[2,eidx]}]')
+
+
+def location_test(index, si, ei, gaze, fixation_mask, fixations):
+    sidx = search(fixation_mask, si + 1, side = 'right')
+    eidx = search(fixation_mask, ei + 1, side = 'left')
+    if sidx == -1:
+        print(f'{index}❌ Start Fixation not found: si:{si + 1} \n {fixation_mask}')
+        return
+    if eidx == -1:
+        print(f'{index}❌ End Fixation not found: si:{ei + 1} \n {fixation_mask}')
+        return
+    max_dist = 0
+    for i in range(sidx, eidx + 1):
+        if fixation_mask[i] == 0:
+            continue
+        f_index = fixation_mask[i] - 1
+        fx = fixations[0,f_index]
+        fy = fixations[1,f_index]
+        gx = gaze[0,i]
+        gy = gaze[1,i]
+        dist = math.sqrt((fx - gx)**2 + (fy - gy)**2)
+        max_dist = max(max_dist, dist)
+        if dist > 100:
+            print(f'{index}❌ Fixation point too far from gaze point at index {i}: Fixation({fx},{fy}) Gaze({gx},{gy}) Dist:{dist}')
+            return
+    # print(f'✅ All fixation points are within acceptable distance from gaze points between indices {sidx} and {eidx}.')
+    print(f'✅ Max distance between fixation and gaze points: {max_dist}')
