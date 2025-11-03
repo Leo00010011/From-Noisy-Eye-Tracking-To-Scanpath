@@ -7,7 +7,7 @@ from pathlib import Path
 from src.utils import is_number
 
 ###
-# ABOUT THE ANGLE TO PIXEL CONVERSION
+# NOTE ABOUT THE ANGLE TO PIXEL CONVERSION
 # ----------------------------------
 # In the Github Repo they said that the COCO search dataset was made
 # in an 1680x1050 display, but they downscaled to 512x320.

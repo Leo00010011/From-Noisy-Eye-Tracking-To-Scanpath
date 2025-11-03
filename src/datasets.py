@@ -1,128 +1,204 @@
+from src.preprocess.simulation import add_random_center_correlated_radial_noise
+
+
+from torch.utils.data import Dataset
+import h5py
 import os
-import json
-import cv2
-import pandas as pd
+import math
 import numpy as np
-from pathlib import Path
-from src.utils import is_number
 
-###
-# ABOUT THE ANGLE TO PIXEL CONVERSION
-# ----------------------------------
-# In the Github Repo they said that the COCO search dataset was made
-# in an 1680x1050 display, but they downscaled to 512x320.
-# Looking at the publication of HAT which is a second one that
-# was made for the same people of HAT. They said :
-# "We compute Y by smoothing the ground-truth fixation map with a Gaussian kernel
-# with the kernel size being one degree of visual angle."
-# In the code I found that they used the scipy.ndimage.filters.gaussian_filter 
-# with sigma equal to 16. This is made over a fixation map that was downscaled as they 
-# said previously. Can I now compute the visual angle #
-# ------------------------------------
-class CocoFreeView:
-    def __init__(self, data_path = 'data\\Coco FreeView'):
-        json_path = os.path.join(data_path, 'COCOFreeView_fixations_trainval.json')
-        with open(json_path, 'r') as f:
-            data = json.load(f)
-        
-        ta_folder = Path(os.path.join(data_path, 'COCOSearch18-images-TA'))
-        tp_folder = Path(os.path.join(data_path, 'COCOSearch18-images-TP'))
-
-        stimulus_paths = list(ta_folder.rglob('*.jpg')) + list(tp_folder.rglob('*.jpg'))
-
-        ntop = {str(path).split('\\')[-1]: str(path) for path in stimulus_paths }
-        for scan_path in data:
-            path = ntop[scan_path['name']]
-            scan_path['img_path'] = path
-            scan_path['class'] = path.split('\\')[-2]
-        self.df = pd.DataFrame.from_dict(data)
-        row = self.df.iloc[0]
-        
-        img = cv2.imread(row['img_path'])
-        self.ori_res = img.shape[:2]
-        self.dest_res = (320,512)
-        # conversion factor from pixel to angles
-        self.ptoa = 1/16
-    
-    def __len__(self):
-        return len(self.df)
-
-    def summary(self):
-        df = self.df
-        print('all stimuli ', len(df['name'].unique()))
-        for split in  ['train', 'valid']:
-            split_df = df.loc[df['split'] == split, ['name','subject']]
-            print(split.upper())
-            print('scanpaths: ', len(split_df))
-            print('stimuli: ', split_df['name'].nunique())
-            count = split_df.groupby('subject')['name'].nunique()
-            print('min stimuli per subject: ', count.min())
-            print('max stimuli per subject: ', count.max())
-            count = split_df.groupby('name')['subject'].nunique()
-            print('min subject per stimuli: ', count.min())
-            print('max subject per stimuli: ', count.max())    
-            
-    def get_scanpath(self, idx, downscale = True):
-        row = self.df.iloc[idx]
-        fx,fy = 1,1
-        if downscale:
-            fx = self.dest_res[1] / self.ori_res[1]
-            fy = self.dest_res[0] / self.ori_res[0]
-
-        if is_number(idx):
-            x = np.array(row['X'])*fx
-            y = np.array(row['Y'])*fy
-            t = np.array(row['T'])
+def extract_random_period(size, noisy_samples, fixations, fixation_mask, sampling_rate, downsample):
+    down_idx = np.random.randint(0, noisy_samples.shape[1] - size + 1, 1, dtype = int)[0]
+    # get the values in the original sampling rate
+    conversion_factor = downsample/(1000/sampling_rate)
+    ori_idx = math.floor(down_idx*conversion_factor)
+    ori_size = math.ceil((size - 1)*conversion_factor)
+    last_idx = ori_idx + ori_size
+    # TEST
+    # get the fisrt fixation and if it is not completely included get the next one
+    if fixation_mask[ori_idx] > 0:
+        if (ori_idx - 1) >= 0 and fixation_mask[ori_idx - 1] == fixation_mask[ori_idx]:
+            start_fixation = fixation_mask[ori_idx] + 1
         else:
-            x = row['X'].apply(lambda arr: np.array(arr) * fx)
-            y = row['Y'].apply(lambda arr: np.array(arr) * fy)
-            t = row['T'].apply(np.array)
-        return x,y,t   
-    
-    def get_img(self, idx, downscale = True):
-        row = self.df.iloc[idx]
-        img = cv2.imread(row['img_path'])
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        if downscale:
-            img = cv2.resize(img, dsize = (self.dest_res[1], self.dest_res[0]))
-        return img
+            start_fixation = fixation_mask[ori_idx]
+    else:
+        # if the first value is a saccade look for the first fixation
+        current_idx = ori_idx + 1
+        while current_idx < (ori_idx + ori_size) and fixation_mask[current_idx] == 0:
+            current_idx += 1
+        if current_idx == (ori_idx + ori_size):
+            # if there is not a fixation return an empty array
+            return noisy_samples[:, down_idx:down_idx + size],np.array([]), -1,-1
+        else:
+            # TEST
+            start_fixation = fixation_mask[current_idx]
+    # search the last fixation
+    if fixation_mask[last_idx] > 0:
+        if (last_idx + 1) < fixation_mask.shape[0] and fixation_mask[last_idx + 1] == fixation_mask[last_idx]:
+            end_fixation = fixation_mask[last_idx] - 1
+        else:
+            end_fixation = fixation_mask[last_idx]
+    else:
+        current_idx = last_idx - 1
+        while current_idx > ori_idx and fixation_mask[current_idx] == 0:
+            current_idx -= 1
+        end_fixation = fixation_mask[current_idx]
+    # the mask are saved shifted in order to assign 0 to the saccade samples
+    start_fixation -= 1
+    end_fixation -= 1
+    x = noisy_samples[:, down_idx:down_idx + size]
+    y = fixations[:, start_fixation: end_fixation + 1]
+    return x, y, start_fixation, end_fixation
 
 
-
-
-
-
-
-
-######################################################
-class OurDataset:
-    def __init__(self, data_path = 'data\\Ours\\result_total_data_prosegur.csv', img_path = 'data\\Ours\\prosegur_img.jpg'):
-        data = pd.read_csv(data_path)
-        data = data[data['Module'].str.contains('BI')]
-        data_small = data[['User','TimeBlock','XEyeTracking','YEyeTracking']]
-
-        user_list = [group[["XEyeTracking", "YEyeTracking", "TimeBlock"]].to_numpy().T 
-                     for _, group in data_small.groupby("User")]
+class FreeViewBatch(Dataset):
+    '''
+    The noisy and downsampled simulated eye-tracking and the section of the scanpath that fits entirely in that part
+    '''
+    def __init__(self,
+                 data_path = 'data\\Coco FreeView',
+                 sample_size=-1,
+                 sampling_rate=60,
+                 downsample_int=200,
+                 batch_size=128,
+                 min_scanpath_duration = 3000,
+                 max_fixation_duration = 1200,
+                 log = False,
+                 debug = False):
+        super().__init__()
+        self.sampling_rate = sampling_rate
+        self.sample_size = sample_size # 90% larger than 20 at downsample 200
+        self.downsample = downsample_int
+        self.min_scanpath_duration = min_scanpath_duration
+        self.max_fixation_duration = max_fixation_duration
+        self.log = log
+        self.batch_size = batch_size
+        self.debug = debug
+        self.ori_path = os.path.join(data_path, 'dataset.hdf5')
+        self.ori_data = None        
+        if not os.path.exists(self.ori_path):
+            print('Execute preprocess')
+        self.shuffled_path = self.ori_path.replace('.hdf5', '_shuffled.hdf5')
+        self.shuffled_data = None
+        self.json_dataset = None
         
-        img = cv2.imread(img_path)
-        self.img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        x_size = img.shape[1]/100
-        y_size = img.shape[0]/100
-        self.user_arrays = []
-        for gaze in user_list:
-            gaze[0,:] = (gaze[0,:] + 0.5)*x_size
-            gaze[1,:] = (gaze[1,:] + 0.5)*y_size
-            self.user_arrays.append(gaze)
-        
 
-
-    def summary(self):
-        print('sample_num: ',len(self.user_arrays))
-        print('subject_num:', len(self.user_arrays))
-        print('samples_per_subject:', 1)
 
     def __len__(self):
-        return len(self.user_arrays)
+        with h5py.File(self.ori_path,'r') as ori_data:
+            return math.ceil(ori_data['down_gaze'].shape[0]/self.batch_size)
+    
+    def sample_count(self):
+        with h5py.File(self.ori_path,'r') as ori_data:
+            return ori_data['down_gaze'].shape[0]
 
-    def get_eye_track(self,idx):
-        return [self.user_arrays[i] for i in idx]
+
+    def get_single_item(self, index):
+        # reading is inefficient because is reading from memory one by one
+        if self.ori_data is None:
+            self.ori_data = h5py.File(self.ori_path,'r')
+        down_gaze = self.ori_data['down_gaze'][index].reshape((3,-1))
+        fixations = self.ori_data['fixations'][index].reshape((3,-1))
+        x = down_gaze
+        y = fixations
+        if self.sample_size != -1:
+            fixation_mask = self.ori_data['fixation_mask'][index]
+            x, y, start_fixation, end_fixation = extract_random_period(self.sample_size,
+                                                x,
+                                                fixations,
+                                                fixation_mask,
+                                                self.sampling_rate,
+                                                self.downsample)
+            # if start_fixation != -1:
+            #     gaze = self.ori_data['gaze'][index].reshape((3,-1))
+            #     test_segment_is_inside(x,start_fixation, end_fixation,gaze, fixation_mask)
+
+        x, _ = add_random_center_correlated_radial_noise(x, [320//2, 512//2], 1/16,
+                                                                  radial_corr=.2,
+                                                                  radial_avg_norm=4.13,
+                                                                  radial_std=3.5,
+                                                                  center_noise_std=100,
+                                                                  center_corr=.3,
+                                                                  center_delta_norm=300,
+                                                                  center_delta_r=.3)
+        return x, y
+    
+    def __getitem__(self, index):
+        # reading is 3x faster with batch size 128 
+        # but can´t use the workers of the torch.dataloader (epoch in 4.9)
+        if self.shuffled_data is None:
+            self.shuffled_data = h5py.File(self.shuffled_path,'r')
+        batch_size = self.batch_size
+        down_gaze = self.shuffled_data['down_gaze'][index*batch_size:(index + 1)*batch_size]
+        fixations = self.shuffled_data['fixations'][index*batch_size:(index + 1)*batch_size]
+        vals = None
+        if self.sample_size != -1:
+            fixation_mask = self.shuffled_data['fixation_mask'][index*batch_size:(index + 1)*batch_size]
+            # gaze = self.data['gaze'][index]
+            # vals = (down_gaze,fixations,fixation_mask, gaze)
+            vals = (down_gaze,fixations,fixation_mask)
+        else:
+            vals = (down_gaze,fixations)
+        x_batch = []
+        y_batch = []
+        for value in zip(*vals):
+            x = value[0].reshape((3,-1))        
+            y = value[1].reshape((3,-1))
+            if self.sample_size != -1:
+                fixation_mask = value[2]
+                x, y, start_fixation, end_fixation = extract_random_period(self.sample_size,
+                                                    x,
+                                                    y,
+                                                    fixation_mask)
+                # if start_fixation != -1:
+                #     gaze = value[3].reshape((3,-1))
+                #     test_segment_is_inside(x,start_fixation, end_fixation,gaze, fixation_mask)
+
+            x_batch.append(x)
+            y_batch.append(y)
+        x_batch, _ = add_random_center_correlated_radial_noise(x_batch, [320//2, 512//2], 1/16,
+                                                                radial_corr=.2,
+                                                                radial_avg_norm=4.13,
+                                                                radial_std=3.5,
+                                                                center_noise_std=100,
+                                                                center_corr=.3,
+                                                                center_delta_norm=300,
+                                                                center_delta_r=.3)
+        # self.close_and_remove_data()
+        self.shuffled_data.close()
+        self.shuffled_data = None
+        
+        return x_batch, y_batch
+    
+    def shuffle_dataset(self):
+        
+        with h5py.File(self.ori_path,'r') as ori_data:
+            dataset_names = ['down_gaze', 'fixations', 'fixation_mask', 'gaze']
+            if self.log:
+                print('reading original data')
+            original_data = {name: ori_data[name][:] for name in dataset_names}
+        idx = np.arange(original_data['down_gaze'].shape[0])
+        np.random.shuffle(idx)
+        for name in dataset_names:
+            original_data[name] = original_data[name][idx]
+
+        with h5py.File(self.shuffled_path, 'w') as f_out:
+            for name, data in original_data.items():
+                f_out.create_dataset(
+                    name,
+                    data=data,
+                )
+        if self.log:
+            print('shuffled data saved')
+
+    def close_and_remove_data(self):
+        if self.ori_data is not None:
+            # if self.log:
+            #     print('closing original data file')
+            self.ori_data.close()
+            self.ori_data = None
+        if self.shuffled_data is not None:
+            # if self.log:
+            #     print('closing shuffled data file')
+            self.shuffled_data.close()
+            self.shuffled_data = None

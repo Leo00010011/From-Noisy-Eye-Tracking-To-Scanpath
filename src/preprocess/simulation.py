@@ -135,7 +135,6 @@ def _segment_timeline(fixation_durs, saccade_durs, sampling_rate):
     """
     Segments the scanpath timeline into discrete samples for fixations and saccades.
     """
-    # TODO Test optimization with numba
     # TODO understand why ceil solve the problem
     time_step = 1000/sampling_rate
     total_duration = int(sum(fixation_durs) + sum(saccade_durs))
