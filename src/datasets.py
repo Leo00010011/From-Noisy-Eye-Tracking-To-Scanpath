@@ -260,7 +260,7 @@ class FreeViewInMemory(Dataset):
                                                                 center_noise_std=100,
                                                                 center_corr=.3,
                                                                 center_delta_norm=300,
-                                                                center_delta_r=.3)
+                                                                center_delta_r=.2)
         # test_segment_is_inside(index, x, start_fixation, end_fixation, gaze, fixation_mask)
         # location_test(index, start_fixation, end_fixation, gaze, fixation_mask, fixations)
         
