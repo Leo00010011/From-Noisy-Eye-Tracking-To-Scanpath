@@ -366,3 +366,9 @@ def add_random_center_correlated_radial_noise(gaze, initial_center, ptoa,
     if boxed:
         noisy_gaze = noisy_gaze[0]
     return noisy_gaze, initial_center
+
+
+def discretization_noise(image_shape, gaze):
+    gaze[0,:] = (np.clip(np.round((gaze[0,:]/image_shape[1])*100),0,100) + 0.5)*(image_shape[1]/100)
+    gaze[1,:] = (np.clip(np.round((gaze[1,:]/image_shape[0])*100),0,100) + 0.5)*(image_shape[0]/100)
+    return gaze

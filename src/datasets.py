@@ -1,5 +1,4 @@
-
-from src.preprocess.noise import add_random_center_correlated_radial_noise
+from src.preprocess.noise import add_random_center_correlated_radial_noise, discretization_noise
 
 from torch.utils.data import Dataset
 import h5py
@@ -7,6 +6,7 @@ import os
 import math
 import numpy as np
 import torch
+
 
 def extract_random_period(start_index, size, noisy_samples, fixations, fixation_mask, sampling_rate, downsample):
     down_idx = np.random.randint(start_index, noisy_samples.shape[1] - size + 1, 1, dtype = int)[0]
@@ -244,13 +244,10 @@ class FreeViewInMemory(Dataset):
         Fetches a single sample from RAM, applies sampling and noise.
         """
         # Get the pre-loaded data for this index
-        down_gaze = self.data_store['down_gaze'][index].reshape((3, -1))
-        fixations = self.data_store['fixations'][index].reshape((3, -1))
+        x = self.data_store['down_gaze'][index].reshape((3, -1)).copy()
+        y = self.data_store['fixations'][index].reshape((3, -1)).copy()
         if self.location_test or self.segment_test:
             gaze = self.data_store['gaze'][index].reshape((3, -1))
-
-        x = down_gaze
-        y = fixations
 
         if self.sample_size != -1:
             fixation_mask = self.data_store['fixation_mask'][index]
@@ -258,7 +255,7 @@ class FreeViewInMemory(Dataset):
                 self.start_index,
                 self.sample_size,
                 x,
-                fixations,
+                y,
                 fixation_mask,
                 self.sampling_rate,
                 self.downsample
@@ -266,14 +263,17 @@ class FreeViewInMemory(Dataset):
             
         # Apply noise augmentation
         # (Assuming your noise function can process a single [3, N] array)
-        x, _ = add_random_center_correlated_radial_noise(x, [320//2, 512//2], 1/16,
-                                                                radial_corr=.2,
-                                                                radial_avg_norm=4.13,
-                                                                radial_std=3.5,
-                                                                center_noise_std=100,
-                                                                center_corr=.3,
-                                                                center_delta_norm=300,
-                                                                center_delta_r=.2)
+        x, _ = add_random_center_correlated_radial_noise(x,
+                                                         [320//2,512//2],1/16,
+                                                         radial_corr = .5,
+                                                         radial_avg_norm= 4.13,
+                                                         radial_std=5.5,
+                                                         center_noise_std=300,
+                                                         center_corr=.9,
+                                                         center_delta_norm=800,
+                                                         center_delta_r=.2)
+        
+        x = discretization_noise((320,512), x)
         if self.segment_test:
             test_segment_is_inside(index, x, start_fixation, end_fixation, gaze, fixation_mask)
         if self.location_test:
