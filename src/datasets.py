@@ -274,10 +274,13 @@ class FreeViewInMemory(Dataset):
                                                          center_delta_r=.2)
         
         x = discretization_noise((320,512), x)
+        # normalize time
+        x[2,:] = x[2,:] - x[2,0]
+
         if self.segment_test:
             test_segment_is_inside(index, x, start_fixation, end_fixation, gaze, fixation_mask)
         if self.location_test:
-            location_test(index, start_fixation, end_fixation, gaze, fixation_mask, fixations)
+            location_test(index, start_fixation, end_fixation, gaze, fixation_mask, y)
         
         
         return x, y
@@ -285,30 +288,11 @@ class FreeViewInMemory(Dataset):
 
 
 
-def seq2seq_collate_fn(batch):
-    """
-    Collate function for a seq-to-seq task with variable sequence lengths.
-
-    Pads the input (encoder) sequences and the target (decoder) sequences 
-    to the maximum length found in the current batch.
-
-    Args:
-        batch: A list of tuples, where each tuple is (input_seq, target_seq).
-               - input_seq: torch.Tensor of shape (L_in,)
-               - target_seq: torch.Tensor of shape (L_target,)
-
-    Returns:
-        A dictionary containing the batched and padded tensors.
-    """
-    # 1. Separate inputs and targets
+def seq2seq_padded_collate_fn(batch):
     input_sequences = [torch.from_numpy(item[0].T).float() for item in batch]
     target_sequences = [torch.from_numpy(item[1].T).float() for item in batch]
 
     PAD_TOKEN_ID = 0.0
-
-    # 4. Pad sequences
-    # torch.nn.utils.rnn.pad_sequence is the most straightforward way
-    # batch_first=True makes the output shape (Batch_Size, Max_Length)
     
     padded_inputs = torch.nn.utils.rnn.pad_sequence(
         input_sequences, 
@@ -321,10 +305,16 @@ def seq2seq_collate_fn(batch):
         batch_first=True, 
         padding_value=PAD_TOKEN_ID
     )
-    # print('finishing collate')
-    # 5. Return the collated batch
     return padded_inputs, padded_targets
 
+def seq2seq_jagged_collate_fn(batch):
+    input_sequences = [torch.from_numpy(item[0].T).float() for item in batch]
+    target_sequences = [torch.from_numpy(item[1].T).float() for item in batch]
+    
+    inputs = torch.nested.nested_tensor(input_sequences,layout=torch.jagged)
+    targets = torch.nested.nested_tensor(target_sequences,layout=torch.jagged)
+    
+    return inputs, targets
 
 def search(mask, fixation, side = 'right'):
     start = 0
