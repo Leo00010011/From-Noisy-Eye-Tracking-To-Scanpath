@@ -8,8 +8,8 @@ import math
 import numpy as np
 import torch
 
-def extract_random_period(size, noisy_samples, fixations, fixation_mask, sampling_rate, downsample):
-    down_idx = np.random.randint(0, noisy_samples.shape[1] - size + 1, 1, dtype = int)[0]
+def extract_random_period(start_index, size, noisy_samples, fixations, fixation_mask, sampling_rate, downsample):
+    down_idx = np.random.randint(start_index, noisy_samples.shape[1] - size + 1, 1, dtype = int)[0]
     # get the values in the original sampling rate
     conversion_factor = downsample/(1000/sampling_rate)
     ori_idx = math.floor(down_idx*conversion_factor)
@@ -210,8 +210,19 @@ class FreeViewBatch(Dataset):
 
 
 class FreeViewInMemory(Dataset):
-    def __init__(self, data_path = 'data\\Coco FreeView', sample_size=-1, log = False, sampling_rate=60, downsample_int=200):
+    def __init__(self,
+                 data_path = 'data\\Coco FreeView',
+                 start_index=2,
+                 sample_size=-1,
+                 log = False,
+                 location_test = False,
+                 segment_test = False,
+                 sampling_rate=60,
+                 downsample_int=200):
+        self.start_index = start_index
         self.sampling_rate = sampling_rate
+        self.location_test = location_test
+        self.segment_test = segment_test
         self.downsample = downsample_int
         self.sample_size = sample_size
         file_path = os.path.join(data_path, 'dataset.hdf5')
@@ -235,14 +246,16 @@ class FreeViewInMemory(Dataset):
         # Get the pre-loaded data for this index
         down_gaze = self.data_store['down_gaze'][index].reshape((3, -1))
         fixations = self.data_store['fixations'][index].reshape((3, -1))
-        # gaze = self.data_store['gaze'][index].reshape((3, -1))
+        if self.location_test or self.segment_test:
+            gaze = self.data_store['gaze'][index].reshape((3, -1))
 
         x = down_gaze
         y = fixations
 
         if self.sample_size != -1:
             fixation_mask = self.data_store['fixation_mask'][index]
-            x, y, _, _ = extract_random_period(
+            x, y, start_fixation, end_fixation = extract_random_period(
+                self.start_index,
                 self.sample_size,
                 x,
                 fixations,
@@ -261,8 +274,10 @@ class FreeViewInMemory(Dataset):
                                                                 center_corr=.3,
                                                                 center_delta_norm=300,
                                                                 center_delta_r=.2)
-        # test_segment_is_inside(index, x, start_fixation, end_fixation, gaze, fixation_mask)
-        # location_test(index, start_fixation, end_fixation, gaze, fixation_mask, fixations)
+        if self.segment_test:
+            test_segment_is_inside(index, x, start_fixation, end_fixation, gaze, fixation_mask)
+        if self.location_test:
+            location_test(index, start_fixation, end_fixation, gaze, fixation_mask, fixations)
         
         
         return x, y
@@ -335,8 +350,8 @@ def test_segment_is_inside(index, x, si,ei,gaze, fixation_mask):
         print(f'{index}❌ End Fixation not found: si:{ei + 1} \n {fixation_mask}')
         return
     if x[2,0] <= gaze[2,sidx] and (x[2,-1] + 200) >= gaze[2,eidx]:
-        # print(f'{index}✅Pass: DS [{x[2,0]},{x[2,-1]}] Ori [{gaze[2,sidx]},{gaze[2,eidx]}]')
-        return 
+        print(f'{index}✅Pass: DS [{x[2,0]},{x[2,-1]}] Ori [{gaze[2,sidx]},{gaze[2,eidx]}]')
+        # return 
     else:
         print(f'{index}❌Outside: DS [{x[2,0]},{x[2,-1]}] Ori [{gaze[2,sidx]},{gaze[2,eidx]}]')
 
