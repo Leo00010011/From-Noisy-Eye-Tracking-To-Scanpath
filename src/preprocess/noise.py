@@ -348,10 +348,9 @@ def add_random_center_correlated_radial_noise(gaze, initial_center, ptoa,
     initial_center = center_delta + initial_center
     noisy_gaze = []
     for i, single_gaze in enumerate(gaze):
-        new_gaze = single_gaze.copy()
         # Use the new, more capable function to generate the noise
         noise = generate_correlated_radial_noise(
-            samples=new_gaze[:2],
+            samples=single_gaze[:2],
             initial_center=initial_center[:,i].reshape(2, 1),
             ptoa=ptoa,
             radial_corr=radial_corr,
@@ -360,10 +359,10 @@ def add_random_center_correlated_radial_noise(gaze, initial_center, ptoa,
             center_noise_std=center_noise_std,
             center_corr=center_corr
         )
-        
-        new_gaze[:2] += noise
-        noisy_gaze.append(new_gaze)
-    
+
+        single_gaze[:2] += noise
+        noisy_gaze.append(single_gaze)
+
     if boxed:
         noisy_gaze = noisy_gaze[0]
     return noisy_gaze, initial_center

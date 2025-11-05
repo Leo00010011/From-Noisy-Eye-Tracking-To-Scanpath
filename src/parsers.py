@@ -9,13 +9,15 @@ from src.utils import is_number
 ###
 # NOTE ABOUT THE ANGLE TO PIXEL CONVERSION
 # ----------------------------------
-# In the Github Repo they said that the COCO search dataset was made
+# In the Github Repo (https://github.com/cvlab-stonybrook/Scanpath_Prediction) 
+# they said that the COCO search dataset was made
 # in an 1680x1050 display, but they downscaled to 512x320.
 # Looking at the publication of HAT which is a second one that
-# was made for the same people of HAT. They said :
+# was made for the same people of COCO. They said :
 # "We compute Y by smoothing the ground-truth fixation map with a Gaussian kernel
 # with the kernel size being one degree of visual angle."
-# In the code I found that they used the scipy.ndimage.filters.gaussian_filter 
+# In the code (https://github.com/cvlab-stonybrook/HAT/tree/main?tab=readme-ov-file)
+# I found that they used the scipy.ndimage.filters.gaussian_filter 
 # with sigma equal to 16. This is made over a fixation map that was downscaled as they 
 # said previously. Can I now compute the visual angle #
 # ------------------------------------
