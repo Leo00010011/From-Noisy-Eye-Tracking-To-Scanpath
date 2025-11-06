@@ -211,7 +211,7 @@ class FreeViewBatch(Dataset):
 
 class FreeViewInMemory(Dataset):
     def __init__(self,
-                 data_path = 'data\\Coco FreeView',
+                 data_path = None,
                  start_index=2,
                  sample_size=-1,
                  log = False,
@@ -229,6 +229,9 @@ class FreeViewInMemory(Dataset):
         self.data_path = data_path
         self.log = log
         self.data_store = {}
+        if data_path is None:
+            data_path = os.path.join('data','Coco FreeView')
+
         with h5py.File(file_path, 'r') as f:
             for key in f.keys():
                 self.data_store[key] = f[key][:] # [:] reads all data
