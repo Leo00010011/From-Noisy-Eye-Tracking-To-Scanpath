@@ -161,7 +161,7 @@ class PositionalEncoding:
         div = np.exp(np.arange(0,model_dim,2)*-(np.log(10000)/model_dim))
         pe[:,0::2] = np.sin(position*div)
         pe[:,1::2] = np.cos(position*div)
-        self.pe = torch.Tensor(pe, device = device)
+        self.pe = torch.from_numpy(pe).to(device = device)
 
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
@@ -190,6 +190,7 @@ class PathModel(nn.Module):
         self.dropout_p = dropout_p
         self.n_encoder = n_encoder
         self.n_decoder = n_decoder
+        self.factory_mode = factory_mode
 
         # special token
         self.start_token = nn.Parameter(torch.randn(1,model_dim,**factory_mode))
@@ -233,10 +234,11 @@ class PathModel(nn.Module):
         dec_pe = self.dec_pe.pe
         start = self.start_token
         src = torch.nested.nested_tensor([src[i] + enc_pe[:src[i].size()[0],:] 
-                                          for i in range(src.size()[0])],layout=torch.jagged)
+                                          for i in range(src.size()[0])],layout=torch.jagged,
+                                          **self.factory_mode)
         tgt = torch.nested.nested_tensor([torch.cat([start ,(tgt[i] + dec_pe[:tgt[i].size()[0],:])], dim = 0) 
-                                          for i in range(tgt.size()[0])],layout=torch.jagged)
-
+                                          for i in range(tgt.size()[0])],layout=torch.jagged,
+                                          **self.factory_mode)
         memory = src
         for mod in self.encoder:
             memory = mod(memory)
