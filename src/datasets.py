@@ -225,12 +225,12 @@ class FreeViewInMemory(Dataset):
         self.segment_test = segment_test
         self.downsample = downsample_int
         self.sample_size = sample_size
-        file_path = os.path.join(data_path, 'dataset.hdf5')
-        self.data_path = data_path
         self.log = log
         self.data_store = {}
         if data_path is None:
             data_path = os.path.join('data','Coco FreeView')
+        self.data_path = data_path
+        file_path = os.path.join(data_path, 'dataset.hdf5')
 
         with h5py.File(file_path, 'r') as f:
             for key in f.keys():
