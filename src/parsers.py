@@ -97,6 +97,7 @@ class CocoFreeView:
 
 
 ######################################################
+# TODO Check if we can add video information to improve stats
 class OurDataset:
     def __init__(self, data_path = 'data\\Ours\\result_total_data_prosegur.csv', img_path = 'data\\Ours\\prosegur_img.jpg'):
         data = pd.read_csv(data_path)

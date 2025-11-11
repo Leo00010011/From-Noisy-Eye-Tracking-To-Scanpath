@@ -233,6 +233,7 @@ def generate_correlated_radial_noise_numba(
         input_std = target_std * np.sqrt(1.0 - radial_corr**2)
         
     # 4. Generate and correlate the radial magnitudes
+    # TODO Check if always positive noise is right
     uncorrelated_magnitudes = np.random.normal(input_mean, input_std, num_samples)
     correlated_magnitudes = correlate_magnitudes(uncorrelated_magnitudes, radial_corr)
     
