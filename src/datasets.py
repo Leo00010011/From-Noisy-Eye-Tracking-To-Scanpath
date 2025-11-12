@@ -304,7 +304,7 @@ def build_attn_mask(input_lengths, allow_start = False):
 
 def seq2seq_padded_collate_fn(batch):
     fixation_len = torch.asarray([item[1].shape[1] for item in batch], dtype=int)
-    input_mask = build_attn_mask([item[0].shape[1] for item in batch], allow_start = True)
+    input_mask = build_attn_mask([item[0].shape[1] for item in batch])
     target_mask = build_attn_mask(fixation_len, allow_start = True)
 
     input_sequences = [torch.from_numpy(item[0].T).float() for item in batch]
