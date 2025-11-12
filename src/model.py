@@ -14,6 +14,7 @@ class MultiHeadedAttention(nn.Module):
         self.is_causal = is_causal
         self.head_dim = total_dim//n_heads
         factory_kwargs = {'device': device, 'dtype': dtype}
+        self.factory_kwargs = factory_kwargs
         
         if is_self_attention:
             self.proj_in = nn.Linear(model_dim,total_dim*3, bias = False, **factory_kwargs)
@@ -22,7 +23,9 @@ class MultiHeadedAttention(nn.Module):
             self.proj_kv = nn.Linear(model_dim, total_dim * 2, bias = False, **factory_kwargs )
         self.proj_out = nn.Linear(total_dim,model_dim, bias = False, **factory_kwargs )
     
-    def forward(self,query, key = None, attn_mask = None):
+    def forward(self,query:torch.Tensor,
+                     key :torch.Tensor = None,
+                     attn_mask :torch.Tensor= None):
         # in_proj
         if self.is_self_attention:
             result = self.proj_in(query)
@@ -33,13 +36,24 @@ class MultiHeadedAttention(nn.Module):
             key, value = torch.chunk(result, 2,dim = -1)
         # reshape
         # (B,L_seq, total_dim) -> (B, L_seq, n_heads, head_dim) -> (B, n_heads, L_seq, head_dim)
-        query = query.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2).contiguous()
-        key = key.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2).contiguous()
-        value = value.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2).contiguous()
+        query = query.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2)
+        key = key.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2)
+        value = value.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2)
+        L_b,_,L_q,_ = query.size()
+        L_k = key.size(2)
         # scaled dot product
-        attn_output = F.scaled_dot_product_attention(query, key, value,is_causal= self.is_causal, attn_mask= attn_mask)
+        if attn_mask is None:
+            attn_output = F.scaled_dot_product_attention(query, key, value,is_causal= self.is_causal)
+        else:
+            # attention mask shape (B, L_seq)
+            attn_bias = torch.zeros(size = (L_b, 1, L_q, L_k), device = query.device, dtype = query.dtype)
+            attn_bias = attn_bias.masked_fill(attn_mask.unsqueeze(1).unsqueeze(2).logical_not(), float("-inf"))
+            if self.is_causal:
+                temp_mask = torch.ones((L_q, L_k), dtype = torch.bool, device = query.device).tril()
+                attn_bias = attn_bias.masked_fill(temp_mask.logical_not(), float("-inf"))            
+            attn_output = F.scaled_dot_product_attention(query, key, value, attn_mask = attn_bias)
         # (B, n_heads, L_seq, head_dims)
-        attn_output = attn_output.transpose(1,2).contiguous().flatten(-2)
+        attn_output = attn_output.transpose(1,2).flatten(-2)
         # (B, L_seq, total)
         attn_output = self.proj_out(attn_output)
         return attn_output 
@@ -197,8 +211,8 @@ class PathModel(nn.Module):
         # input processing
         self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
         self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
-        self.enc_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
-        self.dec_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
+        self.enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
+        self.dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
         # encoding
         encoder_layer = TransformerEncoder(model_dim = model_dim,
                                            total_dim = total_dim,

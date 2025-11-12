@@ -290,21 +290,23 @@ class FreeViewInMemory(Dataset):
     
 
 def build_attn_mask(input_lengths, allow_start = False):
-    max_length = max(input_lengths)
+    max_length = int(max(input_lengths))
     batch_size = len(input_lengths)
     if all([length == max_length for length in input_lengths]):
         return None
     if allow_start:
         max_length += 1
         input_lengths = input_lengths + 1
-    attn_mask = torch.ones((batch_size, max_length), dtype=torch.bool)
+    attn_mask = torch.zeros((batch_size, max_length), dtype=torch.bool)
     for i, length in enumerate(input_lengths):
-        attn_mask[i, :length] = False
+        attn_mask[i, :length] = True
     return attn_mask
 
 def seq2seq_padded_collate_fn(batch):
     fixation_len = torch.asarray([item[1].shape[1] for item in batch], dtype=int)
+    print('input mask')
     input_mask = build_attn_mask([item[0].shape[1] for item in batch])
+    print('target mask')
     target_mask = build_attn_mask(fixation_len, allow_start = True)
 
     input_sequences = [torch.from_numpy(item[0].T).float() for item in batch]
