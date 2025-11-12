@@ -22,7 +22,7 @@ class MultiHeadedAttention(nn.Module):
             self.proj_kv = nn.Linear(model_dim, total_dim * 2, bias = False, **factory_kwargs )
         self.proj_out = nn.Linear(total_dim,model_dim, bias = False, **factory_kwargs )
     
-    def forward(self,query, key = None):
+    def forward(self,query, key = None, attn_mask = None):
         # in_proj
         if self.is_self_attention:
             result = self.proj_in(query)
@@ -37,7 +37,7 @@ class MultiHeadedAttention(nn.Module):
         key = key.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2).contiguous()
         value = value.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2).contiguous()
         # scaled dot product
-        attn_output = F.scaled_dot_product_attention(query, key, value,is_causal= self.is_causal)
+        attn_output = F.scaled_dot_product_attention(query, key, value,is_causal= self.is_causal, attn_mask= attn_mask)
         # (B, n_heads, L_seq, head_dims)
         attn_output = attn_output.transpose(1,2).contiguous().flatten(-2)
         # (B, L_seq, total)
@@ -71,20 +71,20 @@ class TransformerEncoder(nn.Module):
         self.linear2 = nn.Linear(ff_dim, model_dim, **factory_kwargs)
         self.norm2 = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
         self.dropout3 = nn.Dropout(dropout_p)
-    
-    def __self_attention(self, x):
-        return self.dropout1(self.self_attn(x))
+
+    def __self_attention(self, x, attn_mask):
+        return self.dropout1(self.self_attn(x, attn_mask=attn_mask))
 
     def __feed_forward(self, x):
         return self.dropout3(self.linear2(self.dropout2(self.activation(self.linear1(x)))))
 
-    def forward(self, src):
+    def forward(self, src, src_mask = None):
         x = src
         if self.norm_first:
-            x = x + self.__self_attention(self.norm1(x))
+            x = x + self.__self_attention(self.norm1(x), src_mask)
             x = x + self.__feed_forward(self.norm2(x))
         else:
-            x = self.norm1(x + self.__self_attention(x))
+            x = self.norm1(x + self.__self_attention(x, src_mask))
             x = self.norm2(x + self.__feed_forward(x))
         return x
     
@@ -127,25 +127,25 @@ class TransformerDecoder(nn.Module):
         self.norm3 = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
         self.dropout4 = nn.Dropout(dropout_p)
 
-    def __self_attention(self, x):
-        return self.dropout1(self.self_attn(x))
+    def __self_attention(self, x, attn_mask = None):
+        return self.dropout1(self.self_attn(x, attn_mask=attn_mask))
 
-    def __cross_attention(self, src, mem):
-        return self.dropout2(self.cross_attn(src,mem))
-    
+    def __cross_attention(self, src, mem, attn_mask = None):
+        return self.dropout2(self.cross_attn(src, mem, attn_mask=attn_mask))
+
     def __feed_forward(self, x):
         return self.dropout4(self.linear2(self.dropout3(self.activation(self.linear1(x)))))
 
     
-    def forward(self, src, mem):
+    def forward(self, src, mem, tgt_mask = None, memory_mask = None):
         x = src
         if self.norm_first:
-            x = x + self.__self_attention(self.norm1(x))
-            x = x + self.__cross_attention(self.norm2(x),mem)
+            x = x + self.__self_attention(self.norm1(x), attn_mask=tgt_mask)
+            x = x + self.__cross_attention(self.norm2(x), mem, attn_mask=memory_mask)
             x = x + self.__feed_forward(self.norm3(x))
         else:
-            x = self.norm1(x + self.__self_attention(x))
-            x = self.norm2(x + self.__cross_attention(x,mem))
+            x = self.norm1(x + self.__self_attention(x, attn_mask=tgt_mask))
+            x = self.norm2(x + self.__cross_attention(x, mem, attn_mask=memory_mask))
             x = self.norm3(x + self.__feed_forward(x))
 
         return x
@@ -156,7 +156,7 @@ class PositionalEncoding:
         self.max_pos = max_pos
         self.model_dim = model_dim
 
-        pe = np.empty((max_pos, model_dim))
+        pe = np.empty((max_pos, model_dim),dtype=np.float32)
         position = np.arange(max_pos)[:,np.newaxis]
         div = np.exp(np.arange(0,model_dim,2)*-(np.log(10000)/model_dim))
         pe[:,0::2] = np.sin(position*div)
@@ -193,7 +193,7 @@ class PathModel(nn.Module):
         self.factory_mode = factory_mode
 
         # special token
-        self.start_token = nn.Parameter(torch.randn(1,model_dim,**factory_mode))
+        self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         # input processing
         self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
         self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
@@ -223,30 +223,28 @@ class PathModel(nn.Module):
         self.regression_head = nn.Linear(model_dim, output_dim,**factory_mode)
         self.end_head = nn.Linear(model_dim,1,**factory_mode)
 
-    def forward(self,src, tgt):
+    def forward(self,src, tgt, src_mask = None, tgt_mask = None):
 
         # src, tgt shape (B,L,F)
         src = self.enc_input_proj(src)
         tgt = self.dec_input_proj(tgt)
-        # add the start to tgt
         # sum up the positional encodings (max_pos, model_dim) -> (L, model_dim)
-        enc_pe = self.enc_pe.pe
-        dec_pe = self.dec_pe.pe
-        start = self.start_token
-        src = torch.nested.nested_tensor([src[i] + enc_pe[:src[i].size()[0],:] 
-                                          for i in range(src.size()[0])],layout=torch.jagged,
-                                          **self.factory_mode)
-        tgt = torch.nested.nested_tensor([torch.cat([start ,(tgt[i] + dec_pe[:tgt[i].size()[0],:])], dim = 0) 
-                                          for i in range(tgt.size()[0])],layout=torch.jagged,
-                                          **self.factory_mode)
+        enc_pe = self.enc_pe.pe.unsqueeze(0)
+        dec_pe = self.dec_pe.pe.unsqueeze(0)
+        start = self.start_token.expand(tgt.size(0),-1,-1)
+        src = src + enc_pe[:,:src.size()[1],:]
+        # add the start to tgt
+        tgt = torch.cat([start, tgt], dim = 1)
+        tgt = tgt + dec_pe[:,:tgt.size()[1],:]
+        # encoding
         memory = src
         for mod in self.encoder:
-            memory = mod(memory)
-        
+            memory = mod(memory, src_mask)
+        # decoding
         output = tgt
         for mod in self.decoder:
-            output = mod(output, memory)
-
+            output = mod(output, memory, tgt_mask, src_mask)
+        # output heads
         reg_out = self.regression_head(output)
         cls_out = self.end_head(output)
         return reg_out, cls_out
