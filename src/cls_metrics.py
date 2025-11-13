@@ -41,12 +41,12 @@ def compute_loss(reg_out,cls_out, y, attn_mask, fixation_len):
 
     # >>>>>> Classification loss
     # balance the classification loss
-    weights = torch.ones(cls_out.size(), dtype = torch.float32)
+    weights = torch.ones(cls_out.size(), dtype = torch.float32, device = reg_out.device)
     div = 1/fixation_len
     div = torch.repeat_interleave(div, repeats=fixation_len, dim=0).unsqueeze(-1)
     weights[attn_mask_reg] = div
     # the end token must be 1, because of the start token the number of fixations points to the end
-    cls_targets = torch.zeros(cls_out.size(), dtype = torch.float32)
+    cls_targets = torch.zeros(cls_out.size(), dtype = torch.float32, device = reg_out.device)
     cls_targets[batch_idx,fixation_len] = 1.0    
     cls_loss = criterion_cls(cls_out[attn_mask], cls_targets[attn_mask])
     
