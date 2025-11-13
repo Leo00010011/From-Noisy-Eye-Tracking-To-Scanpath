@@ -3,7 +3,9 @@ import torch
 
 def create_cls_targets(cls_out, fixation_len):
     batch_idx = torch.arange(cls_out.size()[0])
-    cls_targets = torch.zeros(cls_out.size(), dtype = torch.float32)
+    cls_targets = torch.zeros(cls_out.size(), 
+                              dtype = torch.float32,
+                              device = cls_out.device)
     cls_targets[batch_idx,fixation_len] = 1.0
     return cls_targets
 
