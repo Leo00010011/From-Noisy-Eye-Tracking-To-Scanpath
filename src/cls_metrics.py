@@ -1,4 +1,6 @@
 import torch
+import json
+import matplotlib.pyplot as plt
 
 
 def create_cls_targets(cls_out, fixation_len):
@@ -61,3 +63,77 @@ def compute_loss(reg_out,cls_out, y, attn_mask, fixation_len):
     reg_loss = criterion_reg(reg_out[attn_mask_reg], y[attn_mask])
      # Example target: 1 if point exists, else 0
     return cls_loss, reg_loss
+
+def plt_training_metrics(path):
+    metrics = None
+    with open(path, 'r') as f:
+        metrics = json.load(f)
+    fig, axis = plt.subplots(1,3,figsize=(20,5))
+    for k in metrics.keys():
+        if k != 'epoch':
+            if k == 'regression loss':
+                axis[1].plot(metrics[k], label= "reg_loss_train")
+            elif k == 'regression_loss':
+                axis[1].plot(metrics['epoch'], metrics[k], label="reg_loss_val")
+            elif k == 'classification loss':
+                axis[2].plot(metrics[k], label="cls_loss_train")
+            elif k == 'classification_loss':
+                axis[2].plot(metrics['epoch'],metrics[k], label="cls_loss_val")
+            else:
+                axis[0].plot(metrics['epoch'], metrics[k], label=k)
+    fig.tight_layout()
+
+    axis[0].legend()
+    axis[1].legend()
+    axis[2].legend()
+    plt.show()
+
+def validate(model, val_dataloader, epoch, device, metrics):
+    model.eval()
+    with torch.no_grad():
+        acc_acum = 0
+        pre_pos_acum = 0
+        rec_pos_acum = 0
+        pre_neg_acum = 0
+        rec_neg_acum = 0
+        cnt = 0
+        for batch in val_dataloader:
+            x,x_mask,y, y_mask, fixation_len = batch
+            x = x.to(device=device)
+            y = y.to(device=device)
+            if x_mask is not None:
+                x_mask = x_mask.to(device = device)
+            if y_mask is not None:
+                y_mask = y_mask.to(device = device)
+            fixation_len = fixation_len.to(device = device)
+
+            reg_out, cls_out = model(x,y, src_mask = x_mask, tgt_mask = y_mask)
+            reg_loss, cls_loss = compute_loss(reg_out,cls_out, y, y_mask, fixation_len)
+            reg_loss_acum += reg_loss.item()
+            cls_loss_acum += cls_loss.item()
+            cls_targets = create_cls_targets(cls_out, fixation_len)
+            acc_acum += accuracy(cls_out, y_mask, cls_targets)
+            pre_pos_acum += precision(cls_out, y_mask, cls_targets)
+            rec_pos_acum += recall(cls_out, y_mask, cls_targets)
+            pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
+            rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
+            cnt += 1
+        print('>>>>>>> Validation results:')
+        metrics['epoch'].append(epoch + 1)
+        print('epoch: ',metrics['epoch'][-1])
+        metrics['reg_loss_val'].append(reg_loss_acum / cnt)
+        print('reg_loss_val: ',metrics['reg_loss_val'][-1])
+        metrics['cls_loss_val'].append(cls_loss_acum / cnt)
+        print('cls_loss_val: ',metrics['cls_loss_val'][-1])            
+        metrics['accuracy'].append(acc_acum / cnt)
+        print('accuracy: ',metrics['accuracy'][-1])
+        metrics['precision_pos'].append(pre_pos_acum / cnt)
+        print('precision_pos: ',metrics['precision_pos'][-1])
+        metrics['recall_pos'].append(rec_pos_acum / cnt)
+        print('recall_pos: ',metrics['recall_pos'][-1])
+        metrics['precision_neg'].append(pre_neg_acum / cnt)
+        print('precision_neg: ',metrics['precision_neg'][-1])
+        metrics['recall_neg'].append(rec_neg_acum / cnt)
+        print('recall_neg: ',metrics['recall_neg'][-1])
+        print('<<<<<<<<<<<<<<<<<<')
+    model.train()

@@ -5,3 +5,4 @@ output/*
 count_lines.py
 .ipynb_checkpoints
 *.pth
+outputs/*
