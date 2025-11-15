@@ -41,8 +41,7 @@ def validate(model, val_dataloader, epoch, device, metrics, log = True):
         metrics['recall_neg'].append(rec_neg_acum / cnt)
             
         if log:
-            print('>>>>>>> Validation results:')
-            print('epoch: ',metrics['epoch'][-1])
+            print(f'>>>>>>> Validation results at epoch {metrics["epoch"][-1]}:')
             print('reg_loss_val: ',metrics['reg_loss_val'][-1])
             print('cls_loss_val: ',metrics['cls_loss_val'][-1])            
             print('accuracy: ',metrics['accuracy'][-1])
@@ -82,3 +81,14 @@ def compute_loss(reg_out,cls_out, y, attn_mask, fixation_len):
     attn_mask = attn_mask[:,1:,:]
     reg_loss = criterion_reg(reg_out[attn_mask_reg], y[attn_mask])
     return cls_loss, reg_loss
+
+def move_data_to_device(batch, device):
+    x, x_mask, y, y_mask, fixation_len = batch
+    x = x.to(device=device)
+    y = y.to(device=device)
+    if x_mask is not None:
+        x_mask = x_mask.to(device = device)
+    if y_mask is not None:
+        y_mask = y_mask.to(device = device)
+    fixation_len = fixation_len.to(device = device)
+    return x, x_mask, y, y_mask, fixation_len

@@ -1,18 +1,50 @@
-
-
-import os
 import torch
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
-from src.datasets import FreeViewInMemory, seq2seq_jagged_collate_fn, seq2seq_padded_collate_fn
-from src.model import PathModel
 import numpy as np
 import hydra
 from omegaconf import DictConfig, OmegaConf
+from src.datasets import FreeViewInMemory, seq2seq_jagged_collate_fn, seq2seq_padded_collate_fn
+from src.model import PathModel
+from src.training_utils import compute_loss, validate, move_data_to_device
 
+
+class MetricsStorage:
+    def __init__(self):
+        self.metrics = {
+            'epoch': [],
+            'reg_loss_train': [],
+            'reg_loss_val': [],
+            'cls_loss_train': [],
+            'cls_loss_val': [],
+            'accuracy': [],
+            'precision_pos': [],
+            'recall_pos': [],
+            'precision_neg': [],
+            'recall_neg': []
+        }
+        self.total_reg_loss = 0
+        self.total_cls_loss = 0
+        self.num_batches = 0
+    
+    def init_epoch(self):
+        self.total_reg_loss = 0
+        self.total_cls_loss = 0
+        self.num_batches = 0
+
+    def update_batch_loss(self, reg_loss, cls_loss):
+        self.total_reg_loss += reg_loss.item()
+        self.total_cls_loss += cls_loss.item()
+        self.num_batches += 1
+    
+    def finalize_epoch(self):
+        avg_reg_loss = self.total_reg_loss / self.num_batches
+        avg_cls_loss = self.total_cls_loss / self.num_batches
+        self.metrics['reg_loss_train'].append(avg_reg_loss)
+        self.metrics['cls_loss_train'].append(avg_cls_loss)
+        return avg_reg_loss, avg_cls_loss
 
 class Pipeline:
-    
     def __init__(self, config: DictConfig):
         # dataset parameters
         self.config = config
@@ -59,64 +91,53 @@ class Pipeline:
                           activation = activation,
                           device = self.device)
         return model
-
+    
+    def build_optimizer(self, model: PathModel):
+        optimizer = torch.optim.Adam(model.parameters(), 
+                                     lr = self.config.training.learning_rate)
+        return optimizer
+    
     def train(self):
         cls_weight = self.config.training.cls_weight    
         num_epochs = self.config.training.num_epochs
         needs_validate = self.config.training.validate
         val_interval = self.config.training.val_interval
         device = self.device
-        optimizer = torch.optim.Adam(model.parameters(), 
-                                     lr = self.config.training.learning_rate)
+        model = self.build_model()
         if self.config.model.compile:
             if self.config.training.log:
                 print('starting model compilation')
             model = torch.compile(model) 
-        
-        self.build_dataloader()
+        optimizer = self.build_optimizer(model)
         train_dataloader, val_dataloader, _ = self.build_dataloader()
-        reg_loss_list = []
-        cls_loss_list = []
-        metrics = {'accuracy': [], 'precision_pos': [], 'recall_pos': [], 'precision_neg': [], 'recall_neg': [], 'epoch': []}
         first_time = True
+        metrics = MetricsStorage()
         for epoch in range(num_epochs):
             model.train()  # Set the model to training mode
-            total_reg_loss = 0
-            total_cls_loss = 0
-            num_batches = 0
+            metrics.init_epoch()
             if first_time and self.config.training.log:
                 print('starting data loading')
-            for batch in tqdm(train_dataloader):
-                x,x_mask,y, y_mask, fixation_len = batch
-                x = x.to(device=device)
-                y = y.to(device=device)
-                if x_mask is not None:
-                    x_mask = x_mask.to(device = device)
-                if y_mask is not None:
-                    y_mask = y_mask.to(device = device)
-                fixation_len = fixation_len.to(device = device)
-
+            for batch in tqdm(train_dataloader):#
+                # LOAD DATA TO DEVICE
+                x,x_mask,y, y_mask, fixation_len = move_data_to_device(batch, device)
                 optimizer.zero_grad()  # Zero the gradients
                 if first_time and self.config.training.log:
                     print('model compilation')
-                first_time = False
+                    first_time = False
+                # FORWARD PASS AND LOSS COMPUTATION
                 reg_out, cls_out = model(x,y, src_mask = x_mask, tgt_mask = y_mask)  # Forward pass
                 cls_loss, reg_loss = compute_loss(reg_out,cls_out, y, y_mask, fixation_len) # Compute loss
                 total_loss = (1-cls_weight)*reg_loss + cls_weight*cls_loss
+                # BACKWARD PASS AND OPTIMIZATION
                 total_loss.backward()
                 optimizer.step()
-                total_reg_loss += reg_loss.item()
-                total_cls_loss += cls_loss.item()
-                num_batches += 1
+                metrics.update_batch_loss(reg_loss, cls_loss)
+            avg_reg_loss, avg_cls_loss = metrics.finalize_epoch()
+            print(f"Epoch {epoch+1}/{num_epochs}, Avg Regression Loss: {avg_reg_loss:.4f}, Avg Classification Loss: {avg_cls_loss:.4f}")
 
             if needs_validate and ((epoch + 1) % val_interval == 0):
-                validate(model, val_dataloader, epoch, device, metrics)
+                validate(model, val_dataloader, epoch, device, metrics.metrics, log = self.config.training.log)
             
-            avg_reg_loss = total_reg_loss / num_batches
-            avg_cls_loss = total_cls_loss / num_batches
-            reg_loss_list.append(avg_reg_loss)
-            cls_loss_list.append(avg_cls_loss)
-            print(f"Epoch {epoch+1}/{num_epochs}, Avg Regression Loss: {avg_reg_loss:.4f}, Avg Classification Loss: {avg_cls_loss:.4f}")
 
         print("Training finished!")
 
