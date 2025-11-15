@@ -1,0 +1,30 @@
+data:
+  sample_size:  13
+  train_per:  0.8
+  val_per:  0.1
+  start_index:  2
+  log:  False
+training:
+  batch_size: 128
+  num_epochs: 1
+  validate: True
+  val_interval: 5
+  cls_wei ght: 0.5
+  learning_rate: 0.001
+  log: True
+model:
+  input_dim: 3
+  output_dim: 3
+  n_encoder: 2
+  n_decoder: 2
+  model_dim: 256
+  total_dim: 256
+  n_heads: 4
+  ff_dim: 512
+  max_pos_enc: 15
+  max_pos_dec: 26
+  norm_first: False
+  dropout_p: 0
+  compile: True
+  activation: "relu"
+  device: "cuda"

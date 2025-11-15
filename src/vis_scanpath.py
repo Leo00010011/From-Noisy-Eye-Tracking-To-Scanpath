@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def draw_scanpath(img, x, y): 
+def draw_scanpath(img, x, y, color = (0,255,0), end_color = (255,0,0)): 
     x = [int(coord) for coord in x]
     y = [int(coord) for coord in y]
     for i in range(len(x)-1):
-        cv2.line(img,(x[i],y[i]),(x[i + 1],y[i + 1]),(0,255,0),2)
-    cv2.circle(img,(x[0],y[0]), 3, (255,0,0),-1)
+        cv2.line(img,(x[i],y[i]),(x[i + 1],y[i + 1]),color,2)
+    cv2.circle(img,(x[0],y[0]), 3, end_color,-1)
     return img
 
 
@@ -56,11 +56,11 @@ def make_video_with_points(image, arrays, filename="output.mp4", fps=30, dot_col
     print(f"Video saved to {filename}")
 
 
-def plot_xy_on_image(image, arrays, size=5, color="red", alpha=0.8):
+def plot_xy_on_image(image, arrays, size=5, colors="red", alpha=0.8):
     fig, ax = plt.subplots(figsize=(8,8))
     ax.imshow(image, cmap="gray")
 
-    for arr in arrays:
+    for arr, color in zip(arrays, colors):
         x, y = arr[0], arr[1]
         ax.scatter(x, y, s=size, c=color, alpha=alpha)
 

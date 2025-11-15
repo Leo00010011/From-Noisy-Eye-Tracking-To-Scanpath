@@ -61,7 +61,6 @@ def compute_loss(reg_out,cls_out, y, attn_mask, fixation_len):
     attn_mask = attn_mask.unsqueeze(-1).expand(-1,-1,3)
     attn_mask = attn_mask[:,1:,:]
     reg_loss = criterion_reg(reg_out[attn_mask_reg], y[attn_mask])
-     # Example target: 1 if point exists, else 0
     return cls_loss, reg_loss
 
 def plt_training_metrics(path):
@@ -88,7 +87,7 @@ def plt_training_metrics(path):
     axis[2].legend()
     plt.show()
 
-def validate(model, val_dataloader, epoch, device, metrics):
+def validate(model, val_dataloader, epoch, device, metrics, log = True):
     model.eval()
     with torch.no_grad():
         acc_acum = 0
@@ -118,22 +117,25 @@ def validate(model, val_dataloader, epoch, device, metrics):
             pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
             rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
             cnt += 1
-        print('>>>>>>> Validation results:')
         metrics['epoch'].append(epoch + 1)
-        print('epoch: ',metrics['epoch'][-1])
         metrics['reg_loss_val'].append(reg_loss_acum / cnt)
-        print('reg_loss_val: ',metrics['reg_loss_val'][-1])
         metrics['cls_loss_val'].append(cls_loss_acum / cnt)
-        print('cls_loss_val: ',metrics['cls_loss_val'][-1])            
         metrics['accuracy'].append(acc_acum / cnt)
-        print('accuracy: ',metrics['accuracy'][-1])
         metrics['precision_pos'].append(pre_pos_acum / cnt)
-        print('precision_pos: ',metrics['precision_pos'][-1])
         metrics['recall_pos'].append(rec_pos_acum / cnt)
-        print('recall_pos: ',metrics['recall_pos'][-1])
         metrics['precision_neg'].append(pre_neg_acum / cnt)
-        print('precision_neg: ',metrics['precision_neg'][-1])
         metrics['recall_neg'].append(rec_neg_acum / cnt)
-        print('recall_neg: ',metrics['recall_neg'][-1])
-        print('<<<<<<<<<<<<<<<<<<')
+            
+        if log:
+            print('>>>>>>> Validation results:')
+            print('epoch: ',metrics['epoch'][-1])
+            print('reg_loss_val: ',metrics['reg_loss_val'][-1])
+            print('cls_loss_val: ',metrics['cls_loss_val'][-1])            
+            print('accuracy: ',metrics['accuracy'][-1])
+            print('precision_pos: ',metrics['precision_pos'][-1])
+            print('recall_pos: ',metrics['recall_pos'][-1])
+            print('precision_neg: ',metrics['precision_neg'][-1])
+            print('recall_neg: ',metrics['recall_neg'][-1])
+            print('<<<<<<<<<<<<<<<<<<')
+        
     model.train()
