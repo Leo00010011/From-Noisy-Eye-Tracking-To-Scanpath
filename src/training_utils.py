@@ -9,6 +9,8 @@ def validate(model, val_dataloader, epoch, device, metrics, log = True):
         rec_pos_acum = 0
         pre_neg_acum = 0
         rec_neg_acum = 0
+        reg_loss_acum = 0
+        cls_loss_acum = 0
         cnt = 0
         for batch in val_dataloader:
             x,x_mask,y, y_mask, fixation_len = batch

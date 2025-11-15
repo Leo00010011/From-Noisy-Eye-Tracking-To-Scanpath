@@ -5,14 +5,14 @@ from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 import numpy as np
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 from src.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.model import PathModel
 from src.training_utils import compute_loss, validate, move_data_to_device
-
+from src.model_io import save_checkpoint
 
 class MetricsStorage:
-    def __init__(self, filepath: str = None):
+    def __init__(self, filepath: str = None, decisive_metric: str = 'reg_loss_val'):
         self.metrics = {
             'epoch': [],
             'reg_loss_train': [],
@@ -29,6 +29,8 @@ class MetricsStorage:
         self.total_cls_loss = 0
         self.num_batches = 0
         self.filepath = filepath
+        self.decisive_metric = decisive_metric
+        self.best_metric_value = np.inf
     
     def init_epoch(self):
         self.total_reg_loss = 0
@@ -46,6 +48,12 @@ class MetricsStorage:
         self.metrics['reg_loss_train'].append(avg_reg_loss)
         self.metrics['cls_loss_train'].append(avg_cls_loss)
         return avg_reg_loss, avg_cls_loss
+    
+    def update_best(self):
+        if self.metrics[self.decisive_metric][-1] < self.best_metric_value:
+            self.best_metric_value = self.metrics[self.decisive_metric][-1]
+            return True
+        return False
 
     def save_metrics(self):
         with open(self.filepath, 'w') as f:
@@ -118,7 +126,8 @@ class Pipeline:
         optimizer = self.build_optimizer(model)
         train_dataloader, val_dataloader, _ = self.build_dataloader()
         first_time = True
-        metrics_storage = MetricsStorage()
+        metrics_storage = MetricsStorage(filepath=self.config.training.metric_file, 
+                                         decisive_metric=self.config.training.decisive_metric)
         for epoch in range(num_epochs):
             model.train()  # Set the model to training mode
             metrics_storage.init_epoch()
@@ -145,16 +154,28 @@ class Pipeline:
             if needs_validate and ((epoch + 1) % val_interval == 0):
                 validate(model, val_dataloader, epoch, device, metrics_storage.metrics, log = self.config.training.log)
                 metrics_storage.save_metrics()
+                is_best = metrics_storage.update_best()
+                if is_best:
+                    save_checkpoint(
+                        model=model,
+                        optimizer=optimizer,
+                        filepath=self.config.training.checkpoint_file,
+                        epoch=epoch,
+                        log=self.config.training.log,
+                        save_full_state= self.config.training.save_full_state
+                    )
+
         print("Training finished!")
 
 
 @hydra.main(config_path="./configs", config_name="main", version_base=None)
-def main(config):
+def main(config: DictConfig):
     hydra_path = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
     metric_path = os.path.join(hydra_path, "metrics.json")
     checkpoint_path = os.path.join(hydra_path, "model.pth")
-    config.training.metric_file = metric_path
-    config.training.checkpoint_file = checkpoint_path
+    with open_dict(config):
+        config.training.metric_file = metric_path
+        config.training.checkpoint_file = checkpoint_path
     builder = Pipeline(config)
     builder.train()
 
