@@ -9,7 +9,7 @@ training:
   num_epochs: 1
   validate: True
   val_interval: 5
-  cls_wei ght: 0.5
+  cls_weight: 0.5
   learning_rate: 0.001
   log: True
 model:
@@ -25,6 +25,8 @@ model:
   max_pos_dec: 26
   norm_first: False
   dropout_p: 0
-  compile: True
-  activation: "relu"
+  compilate: False
+  activation: 
+    - relu
+    - gelu
   device: "cuda"

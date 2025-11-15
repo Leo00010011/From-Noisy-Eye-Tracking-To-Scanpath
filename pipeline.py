@@ -1,16 +1,18 @@
+import os
+import json
 import torch
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 import numpy as np
 import hydra
 from omegaconf import DictConfig, OmegaConf
-from src.datasets import FreeViewInMemory, seq2seq_jagged_collate_fn, seq2seq_padded_collate_fn
+from src.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.model import PathModel
 from src.training_utils import compute_loss, validate, move_data_to_device
 
 
 class MetricsStorage:
-    def __init__(self):
+    def __init__(self, filepath: str = None):
         self.metrics = {
             'epoch': [],
             'reg_loss_train': [],
@@ -26,6 +28,7 @@ class MetricsStorage:
         self.total_reg_loss = 0
         self.total_cls_loss = 0
         self.num_batches = 0
+        self.filepath = filepath
     
     def init_epoch(self):
         self.total_reg_loss = 0
@@ -43,6 +46,11 @@ class MetricsStorage:
         self.metrics['reg_loss_train'].append(avg_reg_loss)
         self.metrics['cls_loss_train'].append(avg_cls_loss)
         return avg_reg_loss, avg_cls_loss
+
+    def save_metrics(self):
+        with open(self.filepath, 'w') as f:
+            json.dump(self.metrics, f)
+
 
 class Pipeline:
     def __init__(self, config: DictConfig):
@@ -74,7 +82,8 @@ class Pipeline:
         activation = None
         if self.config.model.activation == "relu":
             activation = torch.nn.ReLU()
-
+        elif self.config.model.activation == "gelu":
+            activation = torch.nn.GELU()
 
         model = PathModel(input_dim = self.config.model.input_dim,
                           output_dim = self.config.model.output_dim,
@@ -104,24 +113,22 @@ class Pipeline:
         val_interval = self.config.training.val_interval
         device = self.device
         model = self.build_model()
-        if self.config.model.compile:
-            if self.config.training.log:
-                print('starting model compilation')
+        if self.config.model.compilate:
             model = torch.compile(model) 
         optimizer = self.build_optimizer(model)
         train_dataloader, val_dataloader, _ = self.build_dataloader()
         first_time = True
-        metrics = MetricsStorage()
+        metrics_storage = MetricsStorage()
         for epoch in range(num_epochs):
             model.train()  # Set the model to training mode
-            metrics.init_epoch()
+            metrics_storage.init_epoch()
             if first_time and self.config.training.log:
                 print('starting data loading')
             for batch in tqdm(train_dataloader):#
                 # LOAD DATA TO DEVICE
                 x,x_mask,y, y_mask, fixation_len = move_data_to_device(batch, device)
                 optimizer.zero_grad()  # Zero the gradients
-                if first_time and self.config.training.log:
+                if first_time and self.config.training.log and self.config.model.compilate:
                     print('model compilation')
                     first_time = False
                 # FORWARD PASS AND LOSS COMPUTATION
@@ -131,26 +138,25 @@ class Pipeline:
                 # BACKWARD PASS AND OPTIMIZATION
                 total_loss.backward()
                 optimizer.step()
-                metrics.update_batch_loss(reg_loss, cls_loss)
-            avg_reg_loss, avg_cls_loss = metrics.finalize_epoch()
+                metrics_storage.update_batch_loss(reg_loss, cls_loss)
+            avg_reg_loss, avg_cls_loss = metrics_storage.finalize_epoch()
             print(f"Epoch {epoch+1}/{num_epochs}, Avg Regression Loss: {avg_reg_loss:.4f}, Avg Classification Loss: {avg_cls_loss:.4f}")
 
             if needs_validate and ((epoch + 1) % val_interval == 0):
-                validate(model, val_dataloader, epoch, device, metrics.metrics, log = self.config.training.log)
-            
-
+                validate(model, val_dataloader, epoch, device, metrics_storage.metrics, log = self.config.training.log)
+                metrics_storage.save_metrics()
         print("Training finished!")
-
-class Pipeline:
-    pass
 
 
 @hydra.main(config_path="./configs", config_name="main", version_base=None)
 def main(config):
+    hydra_path = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+    metric_path = os.path.join(hydra_path, "metrics.json")
+    checkpoint_path = os.path.join(hydra_path, "model.pth")
+    config.training.metric_file = metric_path
+    config.training.checkpoint_file = checkpoint_path
     builder = Pipeline(config)
-    print(builder.training_config())
-
-# compute_loss(reg_out,cls_out, y, y_mask, fixation_len)
+    builder.train()
 
 # fixation_len
 if __name__ == "__main__":

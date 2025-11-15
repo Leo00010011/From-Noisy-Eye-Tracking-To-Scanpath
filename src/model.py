@@ -161,7 +161,7 @@ class TransformerDecoder(nn.Module):
             x = self.norm1(x + self.__self_attention(x, attn_mask=tgt_mask))
             x = self.norm2(x + self.__cross_attention(x, mem, attn_mask=memory_mask))
             x = self.norm3(x + self.__feed_forward(x))
-
+        
         return x
 
 
@@ -205,6 +205,7 @@ class PathModel(nn.Module):
         self.n_encoder = n_encoder
         self.n_decoder = n_decoder
         self.factory_mode = factory_mode
+        self.norm_first = norm_first
 
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
@@ -233,7 +234,9 @@ class PathModel(nn.Module):
                                            norm_first= norm_first,
                                            **factory_mode)
         self.decoder = _get_clones(decoder_layer,n_decoder)
-        # output
+        if  norm_first:
+            self.final_dec_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
+            self.final_enc_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
         self.regression_head = nn.Linear(model_dim, output_dim,**factory_mode)
         self.end_head = nn.Linear(model_dim,1,**factory_mode)
 
@@ -254,10 +257,15 @@ class PathModel(nn.Module):
         memory = src
         for mod in self.encoder:
             memory = mod(memory, src_mask)
+        if self.norm_first:
+            memory = self.final_enc_norm(memory)
         # decoding
         output = tgt
         for mod in self.decoder:
             output = mod(output, memory, tgt_mask, src_mask)
+
+        if self.norm_first:
+            output = self.final_dec_norm(output)
         # output heads
         reg_out = self.regression_head(output)
         cls_out = self.end_head(output)
