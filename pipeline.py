@@ -115,18 +115,23 @@ class Pipeline:
         return optimizer
     
     def build_scheduler(self, optimizer: torch.optim.Optimizer, train_dataloader: DataLoader):
-        sample_count = len(train_dataloader.dataset)
-        steps_per_epoch = int(np.ceil(sample_count / train_dataloader.batch_size))
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            optimizer,
-            max_lr=self.config.scheduler.max_lr,
-            total_steps=None,
-            epochs=self.config.training.num_epochs,
-            steps_per_epoch= steps_per_epoch,
-            pct_start=self.config.scheduler.pct_start,
-            div_factor=self.config.scheduler.div_factor,
-            final_div_factor=self.config.scheduler.final_div_factor,
-        )
+        if self.config.scheduler.type == 'one_cycle':
+            if self.config.training.log:
+                print("Using One Cycle Learning Rate Scheduler")
+            sample_count = len(train_dataloader.dataset)
+            steps_per_epoch = int(np.ceil(sample_count / train_dataloader.batch_size))
+            scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                optimizer,
+                max_lr=self.config.scheduler.max_lr,
+                total_steps=None,
+                epochs=self.config.training.num_epochs,
+                steps_per_epoch= steps_per_epoch,
+                pct_start=self.config.scheduler.pct_start,
+                div_factor=self.config.scheduler.div_factor,
+                final_div_factor=self.config.scheduler.final_div_factor,
+            )
+        else:
+            raise ValueError(f"Scheduler type {self.config.scheduler.type} not supported.")
         return scheduler
 
     def train(self):
@@ -134,12 +139,15 @@ class Pipeline:
         num_epochs = self.config.training.num_epochs
         needs_validate = self.config.training.validate
         val_interval = self.config.training.val_interval
+        train_dataloader, val_dataloader, _ = self.build_dataloader()
         if self.config.training.log:
             print(""" Traning Summary:
             Number of epochs: {}
             Classification Loss Weight: {}
             Validation every {} epochs
-            """.format(num_epochs, cls_weight, val_interval))
+            Training Percentage: {}
+            Training Samples: {}
+            """.format(num_epochs, cls_weight, val_interval, self.config.data.train_per, len(train_dataloader.dataset)))
         device = self.device
         model = self.build_model()
         if self.config.training.log:
@@ -147,7 +155,6 @@ class Pipeline:
         if self.config.model.compilate:
             model = torch.compile(model) 
         optimizer = self.build_optimizer(model)
-        train_dataloader, val_dataloader, _ = self.build_dataloader()
         scheduler = self.build_scheduler(optimizer, train_dataloader)
         first_time = True
         metrics_storage = MetricsStorage(filepath=self.config.training.metric_file, 
