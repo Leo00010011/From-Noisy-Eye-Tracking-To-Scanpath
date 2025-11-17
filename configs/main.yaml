@@ -5,7 +5,7 @@ defaults:
 
 data:
   sample_size:  13
-  train_per:  0.3
+  train_per:  0.7
   val_per:  0.1
   start_index:  2
   log:  False
