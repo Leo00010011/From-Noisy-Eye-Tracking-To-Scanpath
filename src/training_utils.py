@@ -58,6 +58,7 @@ def validate(model, val_dataloader, epoch, device, metrics, log = True):
 
 def compute_loss(reg_out,cls_out, y, attn_mask, fixation_len):
     criterion_reg = torch.nn.MSELoss()
+    
     criterion_cls = torch.nn.BCEWithLogitsLoss()
     # the end token should not have a regression
     attn_mask_reg = attn_mask.clone()
@@ -81,7 +82,8 @@ def compute_loss(reg_out,cls_out, y, attn_mask, fixation_len):
     # reshape the attn_mask and remove the start token
     attn_mask = attn_mask.unsqueeze(-1).expand(-1,-1,3)
     attn_mask = attn_mask[:,1:,:]
-    reg_loss = criterion_reg(reg_out[attn_mask_reg], y[attn_mask])
+    # reg_loss = criterion_reg(reg_out[attn_mask_reg], y[attn_mask])
+    reg_loss = torch.nn.functional.mse_loss(reg_out[attn_mask_reg], y[attn_mask])
     return cls_loss, reg_loss
 
 def move_data_to_device(batch, device):
