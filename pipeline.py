@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 import numpy as np
 import hydra
-from omegaconf import DictConfig, OmegaConf, open_dict
+from omegaconf import DictConfig, open_dict
 from src.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.model import PathModel
 from src.training_utils import compute_loss, validate, move_data_to_device
@@ -81,9 +81,9 @@ class Pipeline:
         val_size = int(self.config.data.val_per * total_size)
         test_size = total_size - train_size - val_size
         train_set, val_set, test_set = random_split(datasetv2, [train_size, val_size, test_size])
-        train_dataloader = DataLoader(train_set, batch_size=128, shuffle=True, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-        val_dataloader = DataLoader(val_set, batch_size=128, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-        test_dataloader = DataLoader(test_set, batch_size=128, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
+        train_dataloader = DataLoader(train_set, batch_size=self.config.training.batch_size, shuffle=True, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
+        val_dataloader = DataLoader(val_set, batch_size=self.config.training.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
+        test_dataloader = DataLoader(test_set, batch_size=self.config.training.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
         return train_dataloader, val_dataloader, test_dataloader
     
     def build_model(self) -> PathModel:
@@ -114,6 +114,21 @@ class Pipeline:
                                      lr = self.config.training.learning_rate)
         return optimizer
     
+    def build_scheduler(self, optimizer: torch.optim.Optimizer, train_dataloader: DataLoader):
+        sample_count = len(train_dataloader.dataset)
+        steps_per_epoch = int(np.ceil(sample_count / train_dataloader.batch_size))
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=self.config.scheduler.max_lr,
+            total_steps=None,
+            epochs=self.config.training.num_epochs,
+            steps_per_epoch= steps_per_epoch,
+            pct_start=self.config.scheduler.pct_start,
+            div_factor=self.config.scheduler.div_factor,
+            final_div_factor=self.config.scheduler.final_div_factor,
+        )
+        return scheduler
+
     def train(self):
         cls_weight = self.config.training.cls_weight    
         num_epochs = self.config.training.num_epochs
@@ -125,6 +140,7 @@ class Pipeline:
             model = torch.compile(model) 
         optimizer = self.build_optimizer(model)
         train_dataloader, val_dataloader, _ = self.build_dataloader()
+        scheduler = self.build_scheduler(optimizer, train_dataloader)
         first_time = True
         metrics_storage = MetricsStorage(filepath=self.config.training.metric_file, 
                                          decisive_metric=self.config.training.decisive_metric)
@@ -147,6 +163,7 @@ class Pipeline:
                 # BACKWARD PASS AND OPTIMIZATION
                 total_loss.backward()
                 optimizer.step()
+                scheduler.step()
                 metrics_storage.update_batch_loss(reg_loss, cls_loss)
             avg_reg_loss, avg_cls_loss = metrics_storage.finalize_epoch()
             print(f"Epoch {epoch+1}/{num_epochs}, Avg Regression Loss: {avg_reg_loss:.4f}, Avg Classification Loss: {avg_cls_loss:.4f}")
@@ -167,15 +184,17 @@ class Pipeline:
 
         print("Training finished!")
 
-
-@hydra.main(config_path="./configs", config_name="main", version_base=None)
-def main(config: DictConfig):
+def add_metric_and_checkpoint_paths(config: DictConfig):
     hydra_path = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
     metric_path = os.path.join(hydra_path, "metrics.json")
     checkpoint_path = os.path.join(hydra_path, "model.pth")
     with open_dict(config):
         config.training.metric_file = metric_path
         config.training.checkpoint_file = checkpoint_path
+
+@hydra.main(config_path="./configs", config_name="main", version_base=None)
+def main(config: DictConfig):
+    add_metric_and_checkpoint_paths(config)
     builder = Pipeline(config)
     builder.train()
 

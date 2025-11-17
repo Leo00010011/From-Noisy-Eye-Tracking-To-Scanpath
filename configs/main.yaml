@@ -1,3 +1,8 @@
+defaults:
+  - scheduler: one_cycle
+  - _self_
+
+
 data:
   sample_size:  13
   train_per:  0.3
