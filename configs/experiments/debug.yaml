@@ -1,0 +1,12 @@
+data:
+  train_per: 0.3
+training:
+  num_epochs: 10
+  val_interval: 2
+model:
+  n_encoder: 2
+  n_decoder: 2
+  model_dim: 256
+  n_heads: 4
+  ff_dim: 512
+  compilate: False
