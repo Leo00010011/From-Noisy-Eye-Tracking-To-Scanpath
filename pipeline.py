@@ -134,8 +134,16 @@ class Pipeline:
         num_epochs = self.config.training.num_epochs
         needs_validate = self.config.training.validate
         val_interval = self.config.training.val_interval
+        if self.config.training.log:
+            print(""" Traning Summary:
+            Number of epochs: {}
+            Classification Loss Weight: {}
+            Validation every {} epochs
+            """.format(num_epochs, cls_weight, val_interval))
         device = self.device
         model = self.build_model()
+        if self.config.training.log:
+            print(model.param_summary())
         if self.config.model.compilate:
             model = torch.compile(model) 
         optimizer = self.build_optimizer(model)

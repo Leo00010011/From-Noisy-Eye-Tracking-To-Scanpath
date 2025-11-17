@@ -240,6 +240,21 @@ class PathModel(nn.Module):
         self.regression_head = nn.Linear(model_dim, output_dim,**factory_mode)
         self.end_head = nn.Linear(model_dim,1,**factory_mode)
 
+    def param_summary(self):
+        return """PathModel Summary:
+        Number of Encoder Layers: {}
+        Number of Decoder Layers: {}
+        Model Dimension: {}
+        Number of Heads: {}
+        Feed Forward Dimension: {}
+        Dropout Probability: {}
+        """.format(self.n_encoder,
+                   self.n_decoder,
+                   self.model_dim,
+                   self.n_heads,
+                   self.ff_dim,
+                   self.dropout_p)
+
     def forward(self,src, tgt, src_mask = None, tgt_mask = None):
 
         # src, tgt shape (B,L,F)
