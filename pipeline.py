@@ -194,6 +194,7 @@ def add_metric_and_checkpoint_paths(config: DictConfig):
 
 @hydra.main(config_path="./configs", config_name="main", version_base=None)
 def main(config: DictConfig):
+    torch.set_float32_matmul_precision('high')
     add_metric_and_checkpoint_paths(config)
     builder = Pipeline(config)
     builder.train()

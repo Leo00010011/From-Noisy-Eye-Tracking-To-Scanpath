@@ -11,9 +11,9 @@ data:
   log:  False
 training:
   batch_size: 128
-  num_epochs: 10
+  num_epochs: 100
   validate: True
-  val_interval: 2
+  val_interval: 10
   cls_weight: 0.5
   learning_rate: 0.001
   decisive_metric: "reg_loss_val"
@@ -23,16 +23,16 @@ training:
 model:
   input_dim: 3
   output_dim: 3
-  n_encoder: 2
-  n_decoder: 2
-  model_dim: 256
-  total_dim: 256
-  n_heads: 4
-  ff_dim: 512
+  n_encoder: 8
+  n_decoder: 8
+  model_dim: 512
+  total_dim: 512
+  n_heads: 8
+  ff_dim: 2048
   max_pos_enc: 15
   max_pos_dec: 26
   norm_first: True
   dropout_p: 0
-  compilate: False
+  compilate: True
   activation:  "gelu"
   device: "cuda"
