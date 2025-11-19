@@ -180,18 +180,32 @@ class PositionalEncoding:
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
+
 class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim ,out_dim, device = 'cpu', dtype = torch.float32):
+    def __init__(self, input_dim, hidden_dims, out_dim, device='cpu', dtype=torch.float32):
         super().__init__()
         factory_kwargs = {'device': device, 'dtype': dtype}
-        self.head = nn.Sequential(
-                nn.Linear(input_dim, hidden_dim, **factory_kwargs),
-                nn.ReLU(),
-                nn.Linear(hidden_dim, out_dim, **factory_kwargs)
-            )
+        
+        # Convert single int to list for consistency
+        if isinstance(hidden_dims, int):
+            hidden_dims = [hidden_dims]
+        
+        layers = []
+        prev_dim = input_dim
+        
+        # Build hidden layers
+        for hidden_dim in hidden_dims:
+            layers.append(nn.Linear(prev_dim, hidden_dim, **factory_kwargs))
+            layers.append(nn.ReLU())
+            prev_dim = hidden_dim
+        
+        # Output layer
+        layers.append(nn.Linear(prev_dim, out_dim, **factory_kwargs))
+        
+        self.head = nn.Sequential(*layers)
     
     def forward(self, x):
-        return self.head(x) 
+        return self.head(x)
 
 class PathModel(nn.Module):
     def __init__(self, n_encoder,
@@ -269,6 +283,8 @@ class PathModel(nn.Module):
             raise ValueError(f"Unsupported head_type: {head_type}")
 
     def param_summary(self):
+        # When iterating, each element is automatically resolved
+        resolved_dims = [dim for dim in self.mlp_head_hidden_dim]
         summ = """PathModel Summary:
         Number of Encoder Layers: {}
         Number of Decoder Layers: {}
@@ -285,7 +301,7 @@ class PathModel(nn.Module):
                    self.dropout_p,
                    self.head_type)
         if self.head_type == 'mlp':
-            summ += f"    MLP Head Hidden Dimension: {self.mlp_head_hidden_dim}\n"
+            summ += f"    MLP Head Hidden Dimension: {resolved_dims}\n"
         return summ
 
     def forward(self,src, tgt, src_mask = None, tgt_mask = None):

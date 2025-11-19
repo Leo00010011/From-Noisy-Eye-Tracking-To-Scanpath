@@ -1,4 +1,4 @@
 # @package _global_
 model: 
   head_type: "mlp"
-  mlp_head_hidden_dim: ${half:${model.model_dim}}
+  mlp_head_hidden_dim: ["${double:${model.model_dim}}","${model.model_dim}"]
