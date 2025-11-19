@@ -34,5 +34,6 @@ model:
   norm_first: True
   dropout_p: 0
   compilate: True
+  head_type: "linear"
   activation:  "gelu"
   device: "cuda"

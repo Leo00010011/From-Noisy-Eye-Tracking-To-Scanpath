@@ -180,6 +180,19 @@ class PositionalEncoding:
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
+class MLP(nn.Module):
+    def __init__(self, input_dim, hidden_dim ,out_dim, device = 'cpu', dtype = torch.float32):
+        super().__init__()
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        self.head = nn.Sequential(
+                nn.Linear(input_dim, hidden_dim, **factory_kwargs),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, out_dim, **factory_kwargs)
+            )
+    
+    def forward(self, x):
+        return self.head(x) 
+
 class PathModel(nn.Module):
     def __init__(self, n_encoder,
                        n_decoder,
@@ -194,6 +207,8 @@ class PathModel(nn.Module):
                        max_pos_dec = 4,
                        activation = F.relu,
                        norm_first = False ,
+                       head_type = None,
+                       mlp_head_hidden_dim = None,
                        device = 'cpu',
                        dtype = torch.float32):
         super().__init__()
@@ -206,7 +221,8 @@ class PathModel(nn.Module):
         self.n_decoder = n_decoder
         self.factory_mode = factory_mode
         self.norm_first = norm_first
-
+        self.head_type = head_type
+        self.mlp_head_hidden_dim = mlp_head_hidden_dim
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         # input processing
@@ -237,23 +253,40 @@ class PathModel(nn.Module):
         if  norm_first:
             self.final_dec_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
             self.final_enc_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
-        self.regression_head = nn.Linear(model_dim, output_dim,**factory_mode)
-        self.end_head = nn.Linear(model_dim,1,**factory_mode)
+        if head_type == 'mlp':
+            self.regression_head = MLP(model_dim,
+                                           mlp_head_hidden_dim,
+                                           output_dim,
+                                           **factory_mode)
+            self.end_head = MLP(model_dim,
+                                     mlp_head_hidden_dim,
+                                     1,
+                                     **factory_mode)
+        elif head_type == 'linear':
+            self.regression_head = nn.Linear(model_dim, output_dim,**factory_mode)
+            self.end_head = nn.Linear(model_dim,1,**factory_mode)
+        else:
+            raise ValueError(f"Unsupported head_type: {head_type}")
 
     def param_summary(self):
-        return """PathModel Summary:
+        summ = """PathModel Summary:
         Number of Encoder Layers: {}
         Number of Decoder Layers: {}
         Model Dimension: {}
         Number of Heads: {}
         Feed Forward Dimension: {}
         Dropout Probability: {}
+        Head Type: {}
         """.format(self.n_encoder,
                    self.n_decoder,
                    self.model_dim,
                    self.n_heads,
                    self.ff_dim,
-                   self.dropout_p)
+                   self.dropout_p,
+                   self.head_type)
+        if self.head_type == 'mlp':
+            summ += f"    MLP Head Hidden Dimension: {self.mlp_head_hidden_dim}\n"
+        return summ
 
     def forward(self,src, tgt, src_mask = None, tgt_mask = None):
 

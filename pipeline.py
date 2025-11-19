@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 import numpy as np
 import hydra
-from omegaconf import DictConfig, open_dict
+from omegaconf import DictConfig, open_dict, OmegaConf
 from src.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.model import PathModel
 from src.training_utils import compute_loss, validate, move_data_to_device
@@ -105,6 +105,8 @@ class Pipeline:
                           max_pos_dec = self.config.model.max_pos_dec,
                           norm_first = self.config.model.norm_first,
                           dropout_p= self.config.model.dropout_p,
+                          head_type = self.config.model.head_type,
+                          mlp_head_hidden_dim = self.config.model.get('mlp_head_hidden_dim', None),
                           activation = activation,
                           device = self.device)
         return model
@@ -134,6 +136,19 @@ class Pipeline:
             raise ValueError(f"Scheduler type {self.config.scheduler.type} not supported.")
         return scheduler
 
+    def training_summary(self, n_samples):
+        print(""" Traning Summary:
+                Number of epochs: {}
+                Classification Loss Weight: {}
+                Validation every {} epochs
+                Training Percentage: {}
+                Training Samples: {}
+                """.format(self.config.training.num_epochs, 
+                           self.config.training.cls_weight, 
+                           self.config.training.val_interval, 
+                           self.config.data.train_per, 
+                           n_samples))
+
     def train(self):
         cls_weight = self.config.training.cls_weight    
         num_epochs = self.config.training.num_epochs
@@ -141,13 +156,7 @@ class Pipeline:
         val_interval = self.config.training.val_interval
         train_dataloader, val_dataloader, _ = self.build_dataloader()
         if self.config.training.log:
-            print(""" Traning Summary:
-            Number of epochs: {}
-            Classification Loss Weight: {}
-            Validation every {} epochs
-            Training Percentage: {}
-            Training Samples: {}
-            """.format(num_epochs, cls_weight, val_interval, self.config.data.train_per, len(train_dataloader.dataset)))
+            self.training_summary(len(train_dataloader.dataset))
         device = self.device
         model = self.build_model()
         if self.config.training.log:
@@ -206,6 +215,14 @@ def add_metric_and_checkpoint_paths(config: DictConfig):
     with open_dict(config):
         config.training.metric_file = metric_path
         config.training.checkpoint_file = checkpoint_path
+
+def half_dim(dim_value):
+    """Calculates half of the input dimension."""
+    # Ensure the result is an integer for layer dimensions
+    return int(dim_value / 2)
+
+# 2. Register the resolver
+OmegaConf.register_new_resolver("half", half_dim)
 
 @hydra.main(config_path="./configs", config_name="main", version_base=None)
 def main(config: DictConfig):
