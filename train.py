@@ -1,6 +1,7 @@
 import os
 import torch
-from src.pipeline import Pipeline
+from src.pipeline_builder import PipelineBuilder
+from src.pipeline import train
 import hydra
 from omegaconf import DictConfig, open_dict, OmegaConf
 
@@ -24,9 +25,8 @@ OmegaConf.register_new_resolver("half", half_dim)
 def main(config: DictConfig):
     torch.set_float32_matmul_precision('high')
     add_metric_and_checkpoint_paths(config)
-    builder = Pipeline(config)
-    builder.train()
-
+    builder = PipelineBuilder(config)
+    train(builder)
 # fixation_len
 if __name__ == "__main__":
     main()

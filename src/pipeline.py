@@ -1,132 +1,37 @@
 import torch
-from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
-import numpy as np
-from src.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
-from src.model import PathModel
 from src.training_utils import compute_loss, validate, move_data_to_device, MetricsStorage
 from src.model_io import save_checkpoint
 
-
-
-class Pipeline:
-    def __init__(self, config):
-        # dataset parameters
-        self.config = config
-        if self.config.model.device.startswith('cuda') and torch.cuda.is_available():
-            self.device = torch.device(self.config.model.device)
-        else:
-            if self.config.model.device.startswith('cuda'):
-                print("CUDA not available, using CPU.")
-            self.device = torch.device('cpu')
-
-    def build_dataloader(self) -> DataLoader:
-
-        datasetv2 = FreeViewInMemory(sample_size= self.config.data.sample_size,
-                                     log = self.config.data.log, 
-                                     start_index=self.config.data.start_index)
-        total_size = len(datasetv2)
-        train_size = int(self.config.data.train_per * total_size)
-        val_size = int(self.config.data.val_per * total_size)
-        test_size = total_size - train_size - val_size
-        train_set, val_set, test_set = random_split(datasetv2, [train_size, val_size, test_size])
-        train_dataloader = DataLoader(train_set, batch_size=self.config.training.batch_size, shuffle=True, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-        val_dataloader = DataLoader(val_set, batch_size=self.config.training.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-        test_dataloader = DataLoader(test_set, batch_size=self.config.training.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-        return train_dataloader, val_dataloader, test_dataloader
-    
-    def build_model(self) -> PathModel:
-        activation = None
-        if self.config.model.activation == "relu":
-            activation = torch.nn.ReLU()
-        elif self.config.model.activation == "gelu":
-            activation = torch.nn.GELU()
-
-        model = PathModel(input_dim = self.config.model.input_dim,
-                          output_dim = self.config.model.output_dim,
-                          n_encoder = self.config.model.n_encoder,
-                          n_decoder = self.config.model.n_decoder,
-                          model_dim = self.config.model.model_dim,
-                          total_dim = self.config.model.total_dim,
-                          n_heads = self.config.model.n_heads,
-                          ff_dim = self.config.model.ff_dim,
-                          max_pos_enc = self.config.model.max_pos_enc,
-                          max_pos_dec = self.config.model.max_pos_dec,
-                          norm_first = self.config.model.norm_first,
-                          dropout_p= self.config.model.dropout_p,
-                          head_type = self.config.model.head_type,
-                          mlp_head_hidden_dim = self.config.model.get('mlp_head_hidden_dim', None),
-                          activation = activation,
-                          device = self.device)
-        return model
-    
-    def build_optimizer(self, model: PathModel):
-        optimizer = torch.optim.Adam(model.parameters(), 
-                                     lr = self.config.training.learning_rate)
-        return optimizer
-    
-    def build_scheduler(self, optimizer: torch.optim.Optimizer, train_dataloader: DataLoader):
-        if self.config.scheduler.type == 'one_cycle':
-            if self.config.training.log:
-                print("Using One Cycle Learning Rate Scheduler")
-            sample_count = len(train_dataloader.dataset)
-            steps_per_epoch = int(np.ceil(sample_count / train_dataloader.batch_size))
-            scheduler = torch.optim.lr_scheduler.OneCycleLR(
-                optimizer,
-                max_lr=self.config.scheduler.max_lr,
-                total_steps=None,
-                epochs=self.config.training.num_epochs,
-                steps_per_epoch= steps_per_epoch,
-                pct_start=self.config.scheduler.pct_start,
-                div_factor=self.config.scheduler.div_factor,
-                final_div_factor=self.config.scheduler.final_div_factor,
-            )
-        else:
-            raise ValueError(f"Scheduler type {self.config.scheduler.type} not supported.")
-        return scheduler
-
-    def training_summary(self, n_samples):
-        print(""" Traning Summary:
-                Number of epochs: {}
-                Classification Loss Weight: {}
-                Validation every {} epochs
-                Training Percentage: {}
-                Training Samples: {}
-                """.format(self.config.training.num_epochs, 
-                           self.config.training.cls_weight, 
-                           self.config.training.val_interval, 
-                           self.config.data.train_per, 
-                           n_samples))
-
-    def train(self):
-        cls_weight = self.config.training.cls_weight    
-        num_epochs = self.config.training.num_epochs
-        needs_validate = self.config.training.validate
-        val_interval = self.config.training.val_interval
-        train_dataloader, val_dataloader, _ = self.build_dataloader()
-        if self.config.training.log:
-            self.training_summary(len(train_dataloader.dataset))
-        device = self.device
-        model = self.build_model()
-        if self.config.training.log:
+def train(builder):
+        cls_weight = builder.config.training.cls_weight    
+        num_epochs = builder.config.training.num_epochs
+        needs_validate = builder.config.training.validate
+        val_interval = builder.config.training.val_interval
+        train_dataloader, val_dataloader, _ = builder.build_dataloader()
+        if builder.config.training.log:
+            builder.training_summary(len(train_dataloader.dataset))
+        device = builder.device
+        model = builder.build_model()
+        if builder.config.training.log:
             print(model.param_summary())
-        if self.config.model.compilate:
+        if builder.config.model.compilate:
             model = torch.compile(model) 
-        optimizer = self.build_optimizer(model)
-        scheduler = self.build_scheduler(optimizer, train_dataloader)
+        optimizer = builder.build_optimizer(model)
+        scheduler = builder.build_scheduler(optimizer, train_dataloader)
         first_time = True
-        metrics_storage = MetricsStorage(filepath=self.config.training.metric_file, 
-                                         decisive_metric=self.config.training.decisive_metric)
+        metrics_storage = MetricsStorage(filepath=builder.config.training.metric_file, 
+                                         decisive_metric=builder.config.training.decisive_metric)
         for epoch in range(num_epochs):
             model.train()  # Set the model to training mode
             metrics_storage.init_epoch()
-            if first_time and self.config.training.log:
+            if first_time and builder.config.training.log:
                 print('starting data loading')
             for batch in tqdm(train_dataloader):#
                 # LOAD DATA TO DEVICE
                 x,x_mask,y, y_mask, fixation_len = move_data_to_device(batch, device)
                 optimizer.zero_grad()  # Zero the gradients
-                if first_time and self.config.training.log and self.config.model.compilate:
+                if first_time and builder.config.training.log and builder.config.model.compilate:
                     print('model compilation')
                     first_time = False
                 # FORWARD PASS AND LOSS COMPUTATION
@@ -142,17 +47,17 @@ class Pipeline:
             print(f"Epoch {epoch+1}/{num_epochs}, Avg Regression Loss: {avg_reg_loss:.4f}, Avg Classification Loss: {avg_cls_loss:.4f}")
 
             if needs_validate and ((epoch + 1) % val_interval == 0):
-                validate(model, val_dataloader, epoch, device, metrics_storage.metrics, log = self.config.training.log)
+                validate(model, val_dataloader, epoch, device, metrics_storage.metrics, log = builder.config.training.log)
                 metrics_storage.save_metrics()
                 is_best = metrics_storage.update_best()
                 if is_best:
                     save_checkpoint(
                         model=model,
                         optimizer=optimizer,
-                        filepath=self.config.training.checkpoint_file,
+                        filepath=builder.config.training.checkpoint_file,
                         epoch=epoch,
-                        log=self.config.training.log,
-                        save_full_state= self.config.training.save_full_state
+                        log=builder.config.training.log,
+                        save_full_state= builder.config.training.save_full_state
                     )
 
         print("Training finished!")

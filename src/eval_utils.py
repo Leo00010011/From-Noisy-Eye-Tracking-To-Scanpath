@@ -17,6 +17,7 @@ def plt_training_metrics(path):
                 axis[2].plot(metrics[k], label="cls_loss_train")
             elif k == 'cls_loss_val' or k == 'classification_loss':
                 axis[2].plot(metrics['epoch'],metrics[k], label="cls_loss_val")
+                axis[2].hlines([8000], xmin=0, xmax=metrics['epoch'][-1], colors='red', linestyles='dashed')
             else:
                 axis[0].plot(metrics['epoch'], metrics[k], label=k)
     fig.tight_layout()
@@ -24,7 +25,6 @@ def plt_training_metrics(path):
     axis[0].legend()
     axis[1].legend()
     axis[2].legend()
-    plt.show()
 
 
 def amplitude_array(gaze, ptoa=None):

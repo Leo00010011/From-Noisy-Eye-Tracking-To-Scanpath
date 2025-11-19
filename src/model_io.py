@@ -5,7 +5,7 @@ import torch.optim as optim
 from typing import Optional, Any, Dict
 from omegaconf import OmegaConf
 from src.model import PathModel
-from src.pipeline import Pipeline
+from src.pipeline_builder import PipelineBuilder
 
 def save_checkpoint(
     model: nn.Module,
@@ -94,7 +94,7 @@ def load_checkpoint(
 def load_model_for_eval(path):
     weight_path = os.path.join(path, 'model.pth')
     model_config = OmegaConf.load(os.path.join(path, '.hydra\\config.yaml'))
-    pipe = Pipeline(model_config)
+    pipe = PipelineBuilder(model_config)
     model = pipe.build_model()
     state_dict = torch.load(weight_path, map_location = 'cpu')
     model_state_dict = state_dict['model_state_dict']
