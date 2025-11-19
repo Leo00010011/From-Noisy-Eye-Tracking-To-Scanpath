@@ -78,6 +78,14 @@ class PipelineBuilder:
                 div_factor=self.config.scheduler.div_factor,
                 final_div_factor=self.config.scheduler.final_div_factor,
             )
+        elif self.config.scheduler.type == 'multistep_lr':
+            if self.config.training.log:
+                print("Using MultiStep Learning Rate Scheduler")
+            scheduler = torch.optim.lr_scheduler.MultiStepLR(
+                optimizer,
+                milestones=self.config.scheduler.milestones,
+                gamma=self.config.scheduler.gamma
+            )
         else:
             raise ValueError(f"Scheduler type {self.config.scheduler.type} not supported.")
         return scheduler

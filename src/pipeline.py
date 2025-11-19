@@ -41,11 +41,13 @@ def train(builder):
                 # BACKWARD PASS AND OPTIMIZATION
                 total_loss.backward()
                 optimizer.step()
-                scheduler.step()
+                if builder.config.scheduler.batch_lr:
+                    scheduler.step()
                 metrics_storage.update_batch_loss(reg_loss, cls_loss)
             avg_reg_loss, avg_cls_loss = metrics_storage.finalize_epoch()
-            print(f"Epoch {epoch+1}/{num_epochs}, Avg Regression Loss: {avg_reg_loss:.4f}, Avg Classification Loss: {avg_cls_loss:.4f}")
-
+            print(f"Epoch {epoch+1}/{num_epochs}, Reg Loss: {avg_reg_loss:.4f}, Cls Loss: {avg_cls_loss:.4f}, LR: {optimizer.param_groups[0]['lr']:.6f}")
+            if not builder.config.scheduler.batch_lr:
+                scheduler.step()
             if needs_validate and ((epoch + 1) % val_interval == 0):
                 validate(model, val_dataloader, epoch, device, metrics_storage.metrics, log = builder.config.training.log)
                 metrics_storage.save_metrics()

@@ -1,5 +1,6 @@
 # hydra group
 type: one_cycle
+batch_lr: True
 max_lr: 0.01
 pct_start: 0.3
 div_factor: 25.0
