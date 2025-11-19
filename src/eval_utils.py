@@ -9,13 +9,13 @@ def plt_training_metrics(path):
     fig, axis = plt.subplots(1,3,figsize=(20,5))
     for k in metrics.keys():
         if k != 'epoch':
-            if k == 'regression loss':
+            if k == 'reg_loss_train' or k == 'regression loss':
                 axis[1].plot(metrics[k], label= "reg_loss_train")
-            elif k == 'regression_loss':
+            elif k == 'reg_loss_val' or k == 'regression_loss':
                 axis[1].plot(metrics['epoch'], metrics[k], label="reg_loss_val")
-            elif k == 'classification loss':
+            elif k == 'cls_loss_train' or k == 'classification loss':
                 axis[2].plot(metrics[k], label="cls_loss_train")
-            elif k == 'classification_loss':
+            elif k == 'cls_loss_val' or k == 'classification_loss':
                 axis[2].plot(metrics['epoch'],metrics[k], label="cls_loss_val")
             else:
                 axis[0].plot(metrics['epoch'], metrics[k], label=k)

@@ -23,7 +23,7 @@ def validate(model, val_dataloader, epoch, device, metrics, log = True):
             fixation_len = fixation_len.to(device = device)
 
             reg_out, cls_out = model(x,y, src_mask = x_mask, tgt_mask = y_mask)
-            reg_loss, cls_loss = compute_loss(reg_out,cls_out, y, y_mask, fixation_len)
+            cls_loss, reg_loss = compute_loss(reg_out,cls_out, y, y_mask, fixation_len)
             reg_loss_acum += reg_loss.item()
             cls_loss_acum += cls_loss.item()
             cls_targets = create_cls_targets(cls_out, fixation_len)

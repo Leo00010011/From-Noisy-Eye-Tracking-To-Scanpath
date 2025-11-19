@@ -3,14 +3,18 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
-
-def draw_scanpath(img, x, y, color = (0,255,0), end_color = (255,0,0)): 
-    x = [int(coord) for coord in x]
-    y = [int(coord) for coord in y]
+def draw_scanpath_mpl(ax, x, y, color='green', end_color='red', linewidth=2, marker_size=50, label=None):
+    x = [float(coord) for coord in x]
+    y = [float(coord) for coord in y]
+    
+    # Draw lines connecting points
     for i in range(len(x)-1):
-        cv2.line(img,(x[i],y[i]),(x[i + 1],y[i + 1]),color,2)
-    cv2.circle(img,(x[0],y[0]), 3, end_color,-1)
-    return img
+        ax.plot([x[i], x[i+1]], [y[i], y[i+1]], color=color, linewidth=linewidth, label =label if i == 0 else "")
+    
+    # Draw start point
+    ax.scatter(x[0], y[0], s=marker_size, c=end_color, zorder=5)
+    
+    return ax
 
 
 def make_video_with_points(image, arrays, filename="output.mp4", fps=30, dot_color=(0,0,255), dot_radius=1, accumulate=True):
