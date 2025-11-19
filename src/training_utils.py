@@ -1,4 +1,6 @@
 import torch
+import numpy as np
+import json
 from src.cls_metrics import create_cls_targets, accuracy, precision, recall
 
 def validate(model, val_dataloader, epoch, device, metrics, log = True):
@@ -96,3 +98,52 @@ def move_data_to_device(batch, device):
         y_mask = y_mask.to(device = device)
     fixation_len = fixation_len.to(device = device)
     return x, x_mask, y, y_mask, fixation_len
+
+
+class MetricsStorage:
+    def __init__(self, filepath: str = None, decisive_metric: str = 'reg_loss_val'):
+        self.metrics = {
+            'epoch': [],
+            'reg_loss_train': [],
+            'reg_loss_val': [],
+            'cls_loss_train': [],
+            'cls_loss_val': [],
+            'accuracy': [],
+            'precision_pos': [],
+            'recall_pos': [],
+            'precision_neg': [],
+            'recall_neg': []
+        }
+        self.total_reg_loss = 0
+        self.total_cls_loss = 0
+        self.num_batches = 0
+        self.filepath = filepath
+        self.decisive_metric = decisive_metric
+        self.best_metric_value = np.inf
+    
+    def init_epoch(self):
+        self.total_reg_loss = 0
+        self.total_cls_loss = 0
+        self.num_batches = 0
+
+    def update_batch_loss(self, reg_loss, cls_loss):
+        self.total_reg_loss += reg_loss.item()
+        self.total_cls_loss += cls_loss.item()
+        self.num_batches += 1
+    
+    def finalize_epoch(self):
+        avg_reg_loss = self.total_reg_loss / self.num_batches
+        avg_cls_loss = self.total_cls_loss / self.num_batches
+        self.metrics['reg_loss_train'].append(avg_reg_loss)
+        self.metrics['cls_loss_train'].append(avg_cls_loss)
+        return avg_reg_loss, avg_cls_loss
+    
+    def update_best(self):
+        if self.metrics[self.decisive_metric][-1] < self.best_metric_value:
+            self.best_metric_value = self.metrics[self.decisive_metric][-1]
+            return True
+        return False
+
+    def save_metrics(self):
+        with open(self.filepath, 'w') as f:
+            json.dump(self.metrics, f)

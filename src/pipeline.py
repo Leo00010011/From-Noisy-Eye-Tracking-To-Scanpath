@@ -1,67 +1,16 @@
-import os
-import json
 import torch
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 import numpy as np
-import hydra
-from omegaconf import DictConfig, open_dict, OmegaConf
 from src.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.model import PathModel
-from src.training_utils import compute_loss, validate, move_data_to_device
+from src.training_utils import compute_loss, validate, move_data_to_device, MetricsStorage
 from src.model_io import save_checkpoint
 
-class MetricsStorage:
-    def __init__(self, filepath: str = None, decisive_metric: str = 'reg_loss_val'):
-        self.metrics = {
-            'epoch': [],
-            'reg_loss_train': [],
-            'reg_loss_val': [],
-            'cls_loss_train': [],
-            'cls_loss_val': [],
-            'accuracy': [],
-            'precision_pos': [],
-            'recall_pos': [],
-            'precision_neg': [],
-            'recall_neg': []
-        }
-        self.total_reg_loss = 0
-        self.total_cls_loss = 0
-        self.num_batches = 0
-        self.filepath = filepath
-        self.decisive_metric = decisive_metric
-        self.best_metric_value = np.inf
-    
-    def init_epoch(self):
-        self.total_reg_loss = 0
-        self.total_cls_loss = 0
-        self.num_batches = 0
-
-    def update_batch_loss(self, reg_loss, cls_loss):
-        self.total_reg_loss += reg_loss.item()
-        self.total_cls_loss += cls_loss.item()
-        self.num_batches += 1
-    
-    def finalize_epoch(self):
-        avg_reg_loss = self.total_reg_loss / self.num_batches
-        avg_cls_loss = self.total_cls_loss / self.num_batches
-        self.metrics['reg_loss_train'].append(avg_reg_loss)
-        self.metrics['cls_loss_train'].append(avg_cls_loss)
-        return avg_reg_loss, avg_cls_loss
-    
-    def update_best(self):
-        if self.metrics[self.decisive_metric][-1] < self.best_metric_value:
-            self.best_metric_value = self.metrics[self.decisive_metric][-1]
-            return True
-        return False
-
-    def save_metrics(self):
-        with open(self.filepath, 'w') as f:
-            json.dump(self.metrics, f)
 
 
 class Pipeline:
-    def __init__(self, config: DictConfig):
+    def __init__(self, config):
         # dataset parameters
         self.config = config
         if self.config.model.device.startswith('cuda') and torch.cuda.is_available():
@@ -207,31 +156,3 @@ class Pipeline:
                     )
 
         print("Training finished!")
-
-def add_metric_and_checkpoint_paths(config: DictConfig):
-    hydra_path = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-    metric_path = os.path.join(hydra_path, "metrics.json")
-    checkpoint_path = os.path.join(hydra_path, "model.pth")
-    with open_dict(config):
-        config.training.metric_file = metric_path
-        config.training.checkpoint_file = checkpoint_path
-
-def half_dim(dim_value):
-    """Calculates half of the input dimension."""
-    # Ensure the result is an integer for layer dimensions
-    return int(dim_value / 2)
-
-# 2. Register the resolver
-OmegaConf.register_new_resolver("half", half_dim)
-
-@hydra.main(config_path="./configs", config_name="main", version_base=None)
-def main(config: DictConfig):
-    torch.set_float32_matmul_precision('high')
-    add_metric_and_checkpoint_paths(config)
-    builder = Pipeline(config)
-    builder.train()
-
-# fixation_len
-if __name__ == "__main__":
-    main()
-

@@ -1,7 +1,11 @@
 import torch
+import os
 import torch.nn as nn
 import torch.optim as optim
 from typing import Optional, Any, Dict
+from omegaconf import OmegaConf
+from src.model import PathModel
+from src.pipeline import Pipeline
 
 def save_checkpoint(
     model: nn.Module,
@@ -85,3 +89,27 @@ def load_checkpoint(
         print(f"Checkpoint loaded successfully from: {filepath}\n")
 
     return checkpoint
+
+
+def load_model_for_eval(path):
+    weight_path = os.path.join(path, 'model.pth')
+    model_config = OmegaConf.load(os.path.join(path, '.hydra\\config.yaml'))
+    pipe = Pipeline(model_config)
+    model = pipe.build_model()
+    state_dict = torch.load(weight_path, map_location = 'cpu')
+    model_state_dict = state_dict['model_state_dict']
+    # remove the _orig_mod prefix from the state dict keys
+    new_state_dict = {}
+    for k, v in model_state_dict.items():
+        # Check if the key starts with the problematic prefix
+        if k.startswith('_orig_mod.'):
+            # Remove the prefix
+            new_key = k[len('_orig_mod.'):]
+            new_state_dict[new_key] = v
+        else:
+            # Keep other keys as they are
+            new_state_dict[k] = v
+
+    model.load_state_dict(new_state_dict)
+    return model
+
