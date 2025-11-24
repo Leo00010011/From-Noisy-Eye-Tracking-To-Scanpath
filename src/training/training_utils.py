@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import json
-from src.eval.eval_metrics import create_cls_targets, accuracy, precision, recall
+from src.eval.eval_metrics import create_cls_targets, accuracy, precision, recall, eval_reg
 
 def validate(model, val_dataloader, epoch, device, metrics, log = True):
     model.eval()
@@ -13,6 +13,8 @@ def validate(model, val_dataloader, epoch, device, metrics, log = True):
         rec_neg_acum = 0
         reg_loss_acum = 0
         cls_loss_acum = 0
+        reg_acc_acum = 0
+        dur_acum = 0
         cnt = 0
         for batch in val_dataloader:
             x,x_mask,y, y_mask, fixation_len = batch
@@ -34,8 +36,13 @@ def validate(model, val_dataloader, epoch, device, metrics, log = True):
             rec_pos_acum += recall(cls_out, y_mask, cls_targets)
             pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
             rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
+            reg_error, duration_error = eval_reg(reg_out, y, y_mask)
+            reg_acc_acum += reg_error
+            dur_acum += duration_error
             cnt += 1
         metrics['epoch'].append(epoch + 1)
+        metrics['reg_error_val'].append(reg_acc_acum / cnt)
+        metrics['duration_error_val'].append(dur_acum / cnt)
         metrics['reg_loss_val'].append(reg_loss_acum / cnt)
         metrics['cls_loss_val'].append(cls_loss_acum / cnt)
         metrics['accuracy'].append(acc_acum / cnt)
@@ -89,15 +96,13 @@ def compute_loss(reg_out,cls_out, y, attn_mask, fixation_len):
     return cls_loss, reg_loss
 
 def move_data_to_device(batch, device):
-    x, x_mask, y, y_mask, fixation_len = batch
-    x = x.to(device=device)
-    y = y.to(device=device)
-    if x_mask is not None:
-        x_mask = x_mask.to(device = device)
-    if y_mask is not None:
-        y_mask = y_mask.to(device = device)
-    fixation_len = fixation_len.to(device = device)
-    return x, x_mask, y, y_mask, fixation_len
+    device_batch = []
+    for item in batch:
+        if item is None:
+            continue
+        else:
+            device_batch.append(item.to(device=device))
+    return device_batch
 
 
 class MetricsStorage:

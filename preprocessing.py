@@ -1,7 +1,7 @@
     
 import h5py
 from src.preprocess.simulation import gen_gaze, downsample
-from src.parsers import CocoFreeView
+from src.data.parsers import CocoFreeView
 from tqdm import tqdm
 
 
