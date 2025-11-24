@@ -1,9 +1,10 @@
 import torch
 from tqdm import tqdm
 from src.training_utils import compute_loss, validate, move_data_to_device, MetricsStorage
+from src.pipeline_builder import PipelineBuilder
 from src.model_io import save_checkpoint
 
-def train(builder):
+def train(builder:PipelineBuilder):
         cls_weight = builder.config.training.cls_weight    
         num_epochs = builder.config.training.num_epochs
         needs_validate = builder.config.training.validate
