@@ -2,25 +2,34 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plt_training_metrics(path_list):
-    fig, axis = plt.subplots(1,3,figsize=(20,5))
-    for path in path_list:
-        metrics = None
+def plt_training_metrics(path_list, start_epoch=0):
+    metric_list = []
+    for idx, path in enumerate(path_list):
         with open(path, 'r') as f:
-            metrics = json.load(f)
+            metric_list.append(json.load(f))
+    
+    start_idx = []
+    for metrics in metric_list:
+        for j, e in enumerate(metrics['epoch']):
+            if e >= start_epoch:
+                start_idx.append(j)
+                break
+    
+    fig, axis = plt.subplots(1,3,figsize=(20,5))
+    for idx, (start_idx, metrics) in enumerate(zip(start_idx,metric_list)):
         for k in metrics.keys():
             if k != 'epoch':
                 if k == 'reg_loss_train' or k == 'regression loss':
-                    axis[1].plot(metrics[k], label= "reg_loss_train")
+                    axis[1].plot(list(range(len(metrics[k])))[start_epoch:],metrics[k][start_epoch:], label= f"{idx}reg_loss_train")
                 elif k == 'reg_loss_val' or k == 'regression_loss':
-                    axis[1].plot(metrics['epoch'], metrics[k], label="reg_loss_val")
+                    axis[1].plot(metrics['epoch'][start_idx:], metrics[k][start_idx:], label=f"{idx}reg_loss_val")
                 elif k == 'cls_loss_train' or k == 'classification loss':
-                    axis[2].plot(metrics[k], label="cls_loss_train")
+                    axis[2].plot(list(range(len(metrics[k])))[start_epoch:],metrics[k][start_epoch:], label=f"{idx}cls_loss_train")
                 elif k == 'cls_loss_val' or k == 'classification_loss':
-                    axis[2].plot(metrics['epoch'],metrics[k], label="cls_loss_val")
-                    axis[2].hlines([8000], xmin=0, xmax=metrics['epoch'][-1], colors='red', linestyles='dashed')
+                    axis[2].plot(metrics['epoch'][start_idx:],metrics[k][start_idx:], label=f"{idx}cls_loss_val")
                 else:
-                    axis[0].plot(metrics['epoch'], metrics[k], label=k)
+                    axis[0].plot(metrics['epoch'][start_idx:], metrics[k][start_idx:], label=f"{idx}{k}")
+    axis[1].hlines([8000], xmin=0, xmax=metrics['epoch'][-1], colors='red', linestyles='dashed')
     fig.tight_layout()
 
     axis[0].legend()

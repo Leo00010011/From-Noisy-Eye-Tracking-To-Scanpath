@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import json
-from src.cls_metrics import create_cls_targets, accuracy, precision, recall
+from src.eval_metrics import create_cls_targets, accuracy, precision, recall
 
 def validate(model, val_dataloader, epoch, device, metrics, log = True):
     model.eval()

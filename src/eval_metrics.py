@@ -33,5 +33,10 @@ def recall(cls_out, attn_mask, cls_targets, cls = 1):
     recall = true_positives / actual_positives if actual_positives > 0 else 0.0
     return recall
 
-
+def eval_reg(reg, y, y_mask):
+    diff = (reg[:,:-1,:] - y)* y_mask.unsqueeze(-1)[:,:-1,:]
+    diff_xy = diff[:,:,:2]
+    reg_error = torch.mean(torch.sqrt(torch.sum(diff_xy**2, dim=-1)))
+    dur_error = torch.mean(torch.abs(diff[:,:,2]))
+    return reg_error, dur_error
 
