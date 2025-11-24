@@ -1,11 +1,12 @@
 import torch
+from torch.utils.data import Subset
 import os
 import torch.nn as nn
 import torch.optim as optim
 from typing import Optional, Any, Dict
 from omegaconf import OmegaConf
-from src.model import PathModel
-from src.pipeline_builder import PipelineBuilder
+from src.model.model import PathModel
+from src.training.pipeline_builder import PipelineBuilder
 
 def save_checkpoint(
     model: nn.Module,
@@ -113,3 +114,18 @@ def load_model_for_eval(path):
     model.load_state_dict(new_state_dict)
     return model
 
+
+def save_splits(train_split, val_split, test_split, path):
+    # replace the subsets in the split dict with their indices
+    torch.save({
+        'train': train_split.indices,
+        'val': val_split.indices,
+        'test': test_split.indices
+    }, os.path.join(path, 'data_splits.pth'))
+
+def load_splits(path, dataset):
+    index_dict = torch.load(os.path.join(path, 'data_splits.pth'))
+    train_set = Subset(dataset,index_dict['train'])
+    val_set = Subset(dataset,index_dict['val'])
+    test_set = Subset(dataset,index_dict['test'])
+    return train_set, val_set, test_set

@@ -1,8 +1,8 @@
 import torch
 from torch.utils.data import DataLoader, random_split
 import numpy as np
-from src.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
-from src.model import PathModel
+from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
+from src.model.model import PathModel
 
 
 
