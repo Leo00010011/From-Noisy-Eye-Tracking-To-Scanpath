@@ -1,3 +1,4 @@
+from src.data.parsers import CocoFreeView
 from src.preprocess.noise import add_random_center_correlated_radial_noise, discretization_noise
 from torch.utils.data import Dataset
 import h5py
@@ -204,8 +205,6 @@ class FreeViewBatch(Dataset):
             self.shuffled_data = None
 
 
-# TODO Compute image embeddings just once
-# TODO Review the outputs in the validation and with some tests
 
 
 class FreeViewInMemory(Dataset):
@@ -283,7 +282,6 @@ class FreeViewInMemory(Dataset):
             test_segment_is_inside(index, x, start_fixation, end_fixation, gaze, fixation_mask)
         if self.location_test:
             location_test(index, start_fixation, end_fixation, gaze, fixation_mask, y)
-        
         
         return x, y
     
@@ -388,3 +386,36 @@ def location_test(index, si, ei, gaze, fixation_mask, fixations):
             return
     # print(f'✅ All fixation points are within acceptable distance from gaze points between indices {sidx} and {eidx}.')
     print(f'✅ Max distance between fixation and gaze points: {max_dist}')
+
+# TODO Compute image embeddings just once
+class FreeViewImgDataset(Dataset):
+    def __init__(self, data:CocoFreeView):
+        self.data = data
+    
+    def __getitem__(self, index):
+        img = self.data.get_img(index, downscale=True)
+        # convert from numpy to torch tensor
+        img_tensor = torch.from_numpy(img).float() / 255.0
+        return img_tensor, index
+    
+    def __len__(self):
+        return len(self.data)
+    
+
+
+class CoupledDataloader:
+    """
+    A data loader that allows to get eye-tracking data coupled with images. Useful to be able to use workers despite that freeviewinmemory is not thread-safe.
+    """
+    def __init__(self, path_dataset: FreeViewInMemory, dataset: FreeViewImgDataset, batch_size: int, shuffle: bool, num_workers: int):
+        self.path_dataset = path_dataset
+        self.dataset = dataset
+        self.dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, persistent_workers=True, prefetch_factor=2)
+
+    def __iter__(self):
+        for img_batch, idx_batch in self.dataloader:
+            et_data_batch = [self.path_dataset[i] for i in idx_batch]
+            et_data_batch = seq2seq_padded_collate_fn(et_data_batch)
+
+            yield img_batch, et_data_batch
+

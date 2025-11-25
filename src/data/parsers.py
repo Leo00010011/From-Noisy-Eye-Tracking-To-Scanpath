@@ -23,6 +23,7 @@ from src.utils import is_number
 # ------------------------------------
 class CocoFreeView:
     def __init__(self, data_path = 'data\\Coco FreeView'):
+        #TODO Add Coco Search to the Dataset
         json_path = os.path.join(data_path, 'COCOFreeView_fixations_trainval.json')
         with open(json_path, 'r') as f:
             data = json.load(f)
@@ -88,6 +89,28 @@ class CocoFreeView:
         if downscale:
             img = cv2.resize(img, dsize = (self.dest_res[1], self.dest_res[0]))
         return img
+    
+    def filter_by_idx(self, filtered_idx = []):
+        df = self.df
+        if len(filtered_idx) > 0:
+            df = df[~df.index.isin(filtered_idx)]
+            df = df.reset_index(drop=True)
+        self.df = df
+        
+    def get_all_subjects(self):
+        return self.df['subject'].unique()
+
+    def get_all_stimuli(self):
+        return self.df['name'].unique()
+    
+    def get_disjoint_splits(self, train_subjects, val_subjects, test_subjects,
+                            train_stimuli, val_stimuli, test_stimuli):
+        # TODO do the filtering at the begining to reuse the dataset indexes for the images
+        df = self.df
+        train_df = df[df['subject'].isin(train_subjects) & df['name'].isin(train_stimuli)]
+        val_df = df[df['subject'].isin(val_subjects) | df['name'].isin(val_stimuli)]
+        test_df = df[(df['subject'].isin(test_subjects) | df['name'].isin(test_stimuli)) & ~df.index.isin(val_df.index)]
+        return train_df.index, val_df.index, test_df.index
 
 
 

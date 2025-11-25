@@ -10,6 +10,7 @@ def preprocess(sampling_rate, downsample_int,min_scanpath_duration,sample_size,m
     data = CocoFreeView()
     gen_data = []
     original_data_count = len(data)
+    filtered_idx = []
     for index in tqdm(range(original_data_count), desc="Processing"):
         gaze, fixations, fixation_mask = gen_gaze(data,
                                                     index, sampling_rate,
@@ -19,6 +20,7 @@ def preprocess(sampling_rate, downsample_int,min_scanpath_duration,sample_size,m
         if (gaze[2,-1] < max(min_scanpath_duration, (sample_size - 1)*downsample_int) or
             fixations[2].max() > max_fixation_duration or
             fixations[2].min() < min_fixation_duration) :
+            filtered_idx.append(index)
             continue
         gen_data.append({'down_gaze': down_gaze,
                             'fixations': fixations,
@@ -28,16 +30,15 @@ def preprocess(sampling_rate, downsample_int,min_scanpath_duration,sample_size,m
         removed = original_data_count - len(gen_data)
         print(f'Removed: {removed} - {(removed/original_data_count)*100}% ')
     # save
-    return gen_data
+    return gen_data, filtered_idx
 
-def save_gen_data(save_path, gen_data, log):
+def save_gen_data(save_path, gen_data, filtered_idx, log):
     with h5py.File(save_path, 'w') as f:
         # Create datasets with shape (43000,) and the vlen dtype
         item = gen_data[0]
         k_dset = dict()
         for k in item.keys():
             k_dset[k] = f.create_dataset(k, len(gen_data), dtype= h5py.special_dtype(vlen= item[k].dtype))
-
 
         # Loop and store each item
         for i, item in enumerate(gen_data):
@@ -46,6 +47,8 @@ def save_gen_data(save_path, gen_data, log):
                     k_dset[k][i] = item[k].flatten()
                 else:
                     k_dset[k][i] = item[k]
+        # Save filtered indices
+        f.create_dataset('filtered_idx', data=filtered_idx)
     
     if log:
         print('generated items saved')
@@ -60,5 +63,6 @@ if __name__ == "__main__":
     max_fixation_duration = 1200
     save_path = 'data/Coco FreeView/dataset.hdf5'
     log = True
-    gen_data = preprocess(sampling_rate, downsample_int, min_scanpath_duration, sample_size,min_fixation_duration ,max_fixation_duration , log)
-    save_gen_data(save_path, gen_data, log=log)
+    gen_data, filtered_idx = preprocess(sampling_rate, downsample_int, min_scanpath_duration, sample_size,min_fixation_duration ,max_fixation_duration , log)
+
+    save_gen_data(save_path, gen_data,filtered_idx, log=log)

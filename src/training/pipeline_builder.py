@@ -1,7 +1,8 @@
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, Subset
 import numpy as np
 from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
+from src.data.parsers import CocoFreeView
 from src.model.model import PathModel
 
 
@@ -16,17 +17,63 @@ class PipelineBuilder:
             if self.config.model.device.startswith('cuda'):
                 print("CUDA not available, using CPU.")
             self.device = torch.device('cpu')
-
-    def build_dataloader(self) -> DataLoader:
-
-        datasetv2 = FreeViewInMemory(sample_size= self.config.data.sample_size,
+        self.PathDataset = FreeViewInMemory(sample_size= self.config.data.sample_size,
                                      log = self.config.data.log, 
                                      start_index=self.config.data.start_index)
-        total_size = len(datasetv2)
-        train_size = int(self.config.data.train_per * total_size)
-        val_size = int(self.config.data.val_per * total_size)
-        test_size = total_size - train_size - val_size
-        train_set, val_set, test_set = random_split(datasetv2, [train_size, val_size, test_size])
+        self.data = CocoFreeView()
+        self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
+
+    def split_data(array, ratios):
+        indices = np.arange(len(array))
+        sub_count = len(array)
+        np.random.shuffle(indices)
+        train_array = array[indices[:int(ratios[0]*sub_count)]]
+        val_array = array[indices[int(ratios[0]*sub_count):int((ratios[0]+ratios[1])*sub_count)]]
+        test_array = array[indices[int((ratios[0]+ratios[1])*sub_count):]]
+        return train_array, val_array, test_array
+    
+    def log_split(self,train_subjects,val_subjects,test_subjects,train_stimuli,
+                  val_stimuli,test_stimuli,train_idx,val_idx,test_idx,stimuli):
+        print(f""" 
+                Train subjects:  {train_subjects})
+                'Validation subjects:  {val_subjects}
+                'Test subjects:  {test_subjects}
+                'Stimuli Train set size:  {len(train_stimuli)}, ' percentage:  {len(train_stimuli)/len(stimuli)*100}
+                'Stimuli Validation set size:  {len(val_stimuli)}, ' percentage:  {len(val_stimuli)/len(stimuli)*100}
+                'Stimuli Test set size:  {len(test_stimuli)}, ' percentage:  {len(test_stimuli)/len(stimuli)*100}
+                'Scanpath Train set size:  {len(train_idx)}, ' percentage:  {len(train_idx)/len(self.PathDataset)*100}
+                'Scanpath Validation set size:  {len(val_idx)}, ' percentage:  {len(val_idx)/len(self.PathDataset)*100}
+                'Scanpath Test set size:  {len(test_idx)}, ' percentage:  {len(test_idx)/len(self.PathDataset)*100}
+                """)
+
+
+    def make_splits(self):
+        if self.config.data.split_strategy.name == "disjoint":
+            subjects = self.data.get_all_subjects()
+            train_subjects , val_subjects , test_subjects  = PipelineBuilder.split_data(subjects, 
+                                                                                      [self.config.data.split_strategy.train_subjects_per, 
+                                                                                       self.config.data.split_strategy.val_subjects_per])
+            stimuli = self.data.get_all_stimuli()
+            train_stimuli, val_stimuli, test_stimuli = PipelineBuilder.split_data(stimuli, 
+                                                                                  [self.config.data.split_strategy.train_stimuli_per, 
+                                                                                   self.config.data.split_strategy.val_stimuli_per])
+            train_idx, val_idx, test_idx = self.data.get_disjoint_splits(train_subjects, val_subjects, test_subjects,
+                                                                train_stimuli, val_stimuli, test_stimuli)
+            train_idx , val_idx , test_idx= torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx) 
+            if self.config.training.log:
+                self.log_split(train_subjects, val_subjects, test_subjects, train_stimuli, val_stimuli, 
+                               test_stimuli, train_idx, val_idx, test_idx, stimuli)
+        else:
+            total_size = len(self.PathDataset)
+            train_size = int(self.config.data.train_per * total_size)
+            val_size = int(self.config.data.val_per * total_size)
+            idx = torch.randperm(total_size)
+            train_idx = idx[:train_size]
+            val_idx = idx[train_size:train_size+val_size]
+            test_idx = idx[train_size+val_size:]
+        return train_idx, val_idx, test_idx
+
+    def build_dataloader(self, train_set, val_set, test_set) -> DataLoader:
         train_dataloader = DataLoader(train_set, batch_size=self.config.training.batch_size, shuffle=True, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
         val_dataloader = DataLoader(val_set, batch_size=self.config.training.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
         test_dataloader = DataLoader(test_set, batch_size=self.config.training.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
@@ -95,12 +142,10 @@ class PipelineBuilder:
                 Number of epochs: {}
                 Classification Loss Weight: {}
                 Validation every {} epochs
-                Training Percentage: {}
                 Training Samples: {}
                 """.format(self.config.training.num_epochs, 
                            self.config.training.cls_weight, 
                            self.config.training.val_interval, 
-                           self.config.data.train_per, 
                            n_samples))
 
     

@@ -115,13 +115,13 @@ def load_model_for_eval(path):
     return model
 
 
-def save_splits(train_split, val_split, test_split, path):
+def save_splits(train_split, val_split, test_split, file_path):
     # replace the subsets in the split dict with their indices
     torch.save({
         'train': train_split.indices,
         'val': val_split.indices,
         'test': test_split.indices
-    }, os.path.join(path, 'data_splits.pth'))
+    }, file_path)
 
 def load_splits(path, dataset):
     index_dict = torch.load(os.path.join(path, 'data_splits.pth'))

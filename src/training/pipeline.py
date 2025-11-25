@@ -9,7 +9,11 @@ def train(builder:PipelineBuilder):
         num_epochs = builder.config.training.num_epochs
         needs_validate = builder.config.training.validate
         val_interval = builder.config.training.val_interval
-        train_dataloader, val_dataloader, _ = builder.build_dataloader()
+        train_set, val_set, test_set = builder.make_splits()
+        save_splits(train_set, val_set, test_set, builder.config.training.splits_file)
+        if builder.config.training.log:
+            print(f"Split saved to {builder.config.training.splits_file}")
+        train_dataloader, val_dataloader, _ = builder.build_dataloader(train_set, val_set, test_set)
         if builder.config.training.log:
             builder.training_summary(len(train_dataloader.dataset))
         device = builder.device
@@ -62,5 +66,5 @@ def train(builder:PipelineBuilder):
                         log=builder.config.training.log,
                         save_full_state= builder.config.training.save_full_state
                     )
-
+        
         print("Training finished!")
