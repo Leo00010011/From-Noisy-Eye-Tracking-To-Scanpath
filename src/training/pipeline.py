@@ -9,24 +9,30 @@ def train(builder:PipelineBuilder):
         num_epochs = builder.config.training.num_epochs
         needs_validate = builder.config.training.validate
         val_interval = builder.config.training.val_interval
-        train_set, val_set, test_set = builder.make_splits()
-        save_splits(train_set, val_set, test_set, builder.config.training.splits_file)
+
+        train_idx, val_idx, test_idx = builder.make_splits()
+        save_splits(train_idx, val_idx, test_idx, builder.config.training.splits_file)
         if builder.config.training.log:
             print(f"Split saved to {builder.config.training.splits_file}")
-        train_dataloader, val_dataloader, _ = builder.build_dataloader(train_set, val_set, test_set)
+
+        train_dataloader, val_dataloader, _ = builder.build_dataloader(train_idx, val_idx, test_idx)
+
         if builder.config.training.log:
             builder.training_summary(len(train_dataloader.dataset))
+
         device = builder.device
         model = builder.build_model()
         if builder.config.training.log:
             print(model.param_summary())
         if builder.config.model.compilate:
             model = torch.compile(model) 
+        
         optimizer = builder.build_optimizer(model)
         scheduler = builder.build_scheduler(optimizer, train_dataloader)
         first_time = True
         metrics_storage = MetricsStorage(filepath=builder.config.training.metric_file, 
                                          decisive_metric=builder.config.training.decisive_metric)
+        
         for epoch in range(num_epochs):
             model.train()  # Set the model to training mode
             metrics_storage.init_epoch()
@@ -34,14 +40,14 @@ def train(builder:PipelineBuilder):
                 print('starting data loading')
             for batch in tqdm(train_dataloader):#
                 # LOAD DATA TO DEVICE
-                x,x_mask,y, y_mask, fixation_len = move_data_to_device(batch, device)
+                input = move_data_to_device(batch, device)
                 optimizer.zero_grad()  # Zero the gradients
                 if first_time and builder.config.training.log and builder.config.model.compilate:
                     print('model compilation')
                     first_time = False
                 # FORWARD PASS AND LOSS COMPUTATION
-                reg_out, cls_out = model(x,y, src_mask = x_mask, tgt_mask = y_mask)  # Forward pass
-                cls_loss, reg_loss = compute_loss(reg_out,cls_out, y, y_mask, fixation_len) # Compute loss
+                output = model(*input)  # Forward pass
+                cls_loss, reg_loss = compute_loss(input, output) # Compute loss
                 total_loss = (1-cls_weight)*reg_loss + cls_weight*cls_loss
                 # BACKWARD PASS AND OPTIMIZATION
                 total_loss.backward()

@@ -105,7 +105,6 @@ class CocoFreeView:
     
     def get_disjoint_splits(self, train_subjects, val_subjects, test_subjects,
                             train_stimuli, val_stimuli, test_stimuli):
-        # TODO do the filtering at the begining to reuse the dataset indexes for the images
         df = self.df
         train_df = df[df['subject'].isin(train_subjects) & df['name'].isin(train_stimuli)]
         val_df = df[df['subject'].isin(val_subjects) | df['name'].isin(val_stimuli)]

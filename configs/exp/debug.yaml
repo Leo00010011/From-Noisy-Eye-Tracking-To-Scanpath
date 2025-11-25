@@ -1,4 +1,8 @@
 # @package _global_
+defaults:
+  - _self_
+  - scheduler: multiste_lr
+
 data:
   split_strategy: 
     train_subjects_per: 0.2

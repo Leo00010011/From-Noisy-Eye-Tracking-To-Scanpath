@@ -6,6 +6,7 @@ import os
 import math
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
 
 
 def extract_random_period(start_index, size, noisy_samples, fixations, fixation_mask, sampling_rate, downsample):
@@ -320,7 +321,12 @@ def seq2seq_padded_collate_fn(batch):
         batch_first=True, 
         padding_value=PAD_TOKEN_ID
     )
-    return padded_inputs, input_mask, padded_targets, target_mask, fixation_len 
+    return {'src':padded_inputs,
+    'src_mask':input_mask,
+    'tgt':padded_targets,
+    'tgt_mask':target_mask,
+    'fixation_len':fixation_len}
+
 
 def seq2seq_jagged_collate_fn(batch):
     input_sequences = [torch.from_numpy(item[0].T).float() for item in batch]
@@ -407,15 +413,29 @@ class CoupledDataloader:
     """
     A data loader that allows to get eye-tracking data coupled with images. Useful to be able to use workers despite that freeviewinmemory is not thread-safe.
     """
-    def __init__(self, path_dataset: FreeViewInMemory, dataset: FreeViewImgDataset, batch_size: int, shuffle: bool, num_workers: int):
+    def __init__(self,
+                 path_dataset: FreeViewInMemory,
+                 dataset: FreeViewImgDataset,
+                 batch_size: int,
+                 shuffle: bool,
+                 num_workers: int,
+                 prefetch_factor: int = 2,
+                 pin_memory: bool = True,
+                 persistent_workers: bool = True):
         self.path_dataset = path_dataset
         self.dataset = dataset
-        self.dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, persistent_workers=True, prefetch_factor=2)
+        self.dataloader = DataLoader(dataset,
+                                     batch_size=batch_size,
+                                     shuffle=shuffle,
+                                     num_workers=num_workers,
+                                     persistent_workers=persistent_workers,
+                                     prefetch_factor=prefetch_factor,
+                                     pin_memory=pin_memory)
 
     def __iter__(self):
         for img_batch, idx_batch in self.dataloader:
             et_data_batch = [self.path_dataset[i] for i in idx_batch]
             et_data_batch = seq2seq_padded_collate_fn(et_data_batch)
-
-            yield img_batch, et_data_batch
+            et_data_batch['img_batch'] = img_batch
+            yield et_data_batch
 

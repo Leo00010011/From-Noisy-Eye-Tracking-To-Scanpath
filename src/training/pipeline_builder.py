@@ -73,11 +73,43 @@ class PipelineBuilder:
             test_idx = idx[train_size+val_size:]
         return train_idx, val_idx, test_idx
 
-    def build_dataloader(self, train_set, val_set, test_set) -> DataLoader:
-        train_dataloader = DataLoader(train_set, batch_size=self.config.training.batch_size, shuffle=True, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-        val_dataloader = DataLoader(val_set, batch_size=self.config.training.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-        test_dataloader = DataLoader(test_set, batch_size=self.config.training.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-        return train_dataloader, val_dataloader, test_dataloader
+    def build_dataloader(self, train_idx, val_idx, test_idx) -> DataLoader:
+        if not self.config.data.use_img_dataset:
+            train_set = Subset(self.PathDataset, train_idx)
+            val_set = Subset(self.PathDataset, val_idx)
+            test_set = Subset(self.PathDataset, test_idx)
+            train_dataloader = DataLoader(train_set, batch_size=self.config.data.batch_size, shuffle=True, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
+            val_dataloader = DataLoader(val_set, batch_size=self.config.data.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
+            test_dataloader = DataLoader(test_set, batch_size=self.config.data.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
+            return train_dataloader, val_dataloader, test_dataloader
+        else:
+            from src.data.datasets import FreeViewImgDataset, CoupledDataloader
+            dataset = FreeViewImgDataset(self.data)
+            train_set = Subset(dataset, train_idx)
+            val_set = Subset(dataset, val_idx)
+            test_set = Subset(dataset, test_idx)
+            train_dataloader = CoupledDataloader(self.PathDataset,
+                                                 train_set,
+                                                 batch_size=self.config.data.batch_size,
+                                                 num_workers = self.config.data.num_workers,
+                                                 persistent_workers = self.config.data.persistent_workers,
+                                                 prefetch_factor = self.config.data.prefetch_factor,
+                                                 pin_memory = self.config.data.pin_memory)
+            val_dataloader = CoupledDataloader(self.PathDataset,
+                                                 val_set,
+                                                 batch_size=self.config.data.batch_size,
+                                                 num_workers = self.config.data.num_workers,
+                                                 persistent_workers = self.config.data.persistent_workers,
+                                                 prefetch_factor = self.config.data.prefetch_factor,
+                                                 pin_memory = self.config.data.pin_memory)
+            test_dataloader = CoupledDataloader(self.PathDataset,
+                                                 test_set,
+                                                 batch_size=self.config.data.batch_size,
+                                                 num_workers = self.config.data.num_workers,
+                                                 persistent_workers = self.config.data.persistent_workers,
+                                                 prefetch_factor = self.config.data.prefetch_factor,
+                                                 pin_memory = self.config.data.pin_memory)
+            return train_dataloader, val_dataloader, test_dataloader
     
     def build_model(self) -> PathModel:
         activation = None
@@ -136,6 +168,13 @@ class PipelineBuilder:
         else:
             raise ValueError(f"Scheduler type {self.config.scheduler.type} not supported.")
         return scheduler
+
+    def build_loss_fn(self):
+        # TODO allow to configurate different loss functions
+        # The duration, coordinates and end_token losses should have independent losses
+        pass
+        
+
 
     def training_summary(self, n_samples):
         print(""" Traning Summary:

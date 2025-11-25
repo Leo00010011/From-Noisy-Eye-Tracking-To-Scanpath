@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from src.data.datasets import FreeViewImgDataset, FreeViewInMemory
+from src.data.datasets import FreeViewImgDataset, FreeViewInMemory, CoupledDataloader
 from src.data.parsers import CocoFreeView
 from torch.utils.data import Subset, DataLoader
 from src.data.datasets import seq2seq_padded_collate_fn

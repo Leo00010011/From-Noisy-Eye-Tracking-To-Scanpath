@@ -333,5 +333,5 @@ class PathModel(nn.Module):
         # output heads
         reg_out = self.regression_head(output)
         cls_out = self.end_head(output)
-        return reg_out, cls_out
+        return {'reg': reg_out, 'cls': cls_out}
     

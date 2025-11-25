@@ -1,6 +1,13 @@
 defaults:
   - split_strategy: disjoint
+  - _self_
 
 sample_size:  13
 start_index:  2
+batch_size: 128
+use_img_dataset: True
+num_workers: 4
+persistent_workers: True
+prefetch_factor: 2
+pin_memory: True
 log:  False

@@ -4,7 +4,6 @@ defaults:
   - _self_
 
 training:
-  batch_size: 128
   num_epochs: 100
   validate: True
   val_interval: 10

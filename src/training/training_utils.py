@@ -17,19 +17,17 @@ def validate(model, val_dataloader, epoch, device, metrics, log = True):
         dur_acum = 0
         cnt = 0
         for batch in val_dataloader:
-            x,x_mask,y, y_mask, fixation_len = batch
-            x = x.to(device=device)
-            y = y.to(device=device)
-            if x_mask is not None:
-                x_mask = x_mask.to(device = device)
-            if y_mask is not None:
-                y_mask = y_mask.to(device = device)
-            fixation_len = fixation_len.to(device = device)
+            input = move_data_to_device(batch, device)
 
-            reg_out, cls_out = model(x,y, src_mask = x_mask, tgt_mask = y_mask)
-            cls_loss, reg_loss = compute_loss(reg_out,cls_out, y, y_mask, fixation_len)
+            output = model(*input)
+            cls_loss, reg_loss = compute_loss(input, output)
             reg_loss_acum += reg_loss.item()
             cls_loss_acum += cls_loss.item()
+            cls_out = output['cls']
+            reg_out = output['reg']
+            y = input['tgt']
+            y_mask = input['tgt_mask']
+            fixation_len = input['fixation_len']
             cls_targets = create_cls_targets(cls_out, fixation_len)
             acc_acum += accuracy(cls_out, y_mask, cls_targets)
             pre_pos_acum += precision(cls_out, y_mask, cls_targets)
@@ -61,12 +59,16 @@ def validate(model, val_dataloader, epoch, device, metrics, log = True):
             print('precision_neg: ',metrics['precision_neg'][-1])
             print('recall_neg: ',metrics['recall_neg'][-1])
             print('<<<<<<<<<<<<<<<<<<')
-        
     model.train()
 
 
-def compute_loss(reg_out,cls_out, y, attn_mask, fixation_len):
-    criterion_reg = torch.nn.MSELoss()
+def compute_loss(input, output):
+    # TODO Warning on natural exponential in MSE
+    reg_out = output['reg']
+    cls_out = output['cls']
+    y = input['tgt']
+    attn_mask = input['tgt_mask']
+    fixation_len = input['fixation_len']
     
     criterion_cls = torch.nn.BCEWithLogitsLoss()
     # the end token should not have a regression
@@ -96,12 +98,12 @@ def compute_loss(reg_out,cls_out, y, attn_mask, fixation_len):
     return cls_loss, reg_loss
 
 def move_data_to_device(batch, device):
-    device_batch = []
-    for item in batch:
+    device_batch = {}
+    for key, item in batch.items():
         if item is None:
-            device_batch.append(None)
+            device_batch[key] = None
         else:
-            device_batch.append(item.to(device=device))
+            device_batch[key] = item.to(device=device)
     return device_batch
 
 
