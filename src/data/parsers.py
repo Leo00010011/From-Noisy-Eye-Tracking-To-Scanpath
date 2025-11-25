@@ -82,6 +82,10 @@ class CocoFreeView:
             t = row['T'].apply(np.array)
         return x,y,t   
     
+    def get_img_path(self, idx):
+        row = self.df.iloc[idx]
+        return row['img_path']
+
     def get_img(self, idx, downscale = True):
         row = self.df.iloc[idx]
         img = cv2.imread(row['img_path'])

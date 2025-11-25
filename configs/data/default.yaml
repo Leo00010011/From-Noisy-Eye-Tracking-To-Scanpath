@@ -9,5 +9,6 @@ use_img_dataset: True
 num_workers: 4
 persistent_workers: True
 prefetch_factor: 2
+img_size: 256
 pin_memory: True
 log:  False

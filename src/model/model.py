@@ -304,7 +304,7 @@ class PathModel(nn.Module):
             summ += f"    MLP Head Hidden Dimension: {resolved_dims}\n"
         return summ
 
-    def forward(self,src, tgt, src_mask = None, tgt_mask = None):
+    def forward(self,src, tgt, src_mask = None, tgt_mask = None, **kwargs):
 
         # src, tgt shape (B,L,F)
         src = self.enc_input_proj(src)

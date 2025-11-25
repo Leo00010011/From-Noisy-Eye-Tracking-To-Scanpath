@@ -16,6 +16,7 @@ def train(builder:PipelineBuilder):
             print(f"Split saved to {builder.config.training.splits_file}")
 
         train_dataloader, val_dataloader, _ = builder.build_dataloader(train_idx, val_idx, test_idx)
+        builder.clear_dataframe()
 
         if builder.config.training.log:
             builder.training_summary(len(train_dataloader.dataset))
@@ -46,7 +47,7 @@ def train(builder:PipelineBuilder):
                     print('model compilation')
                     first_time = False
                 # FORWARD PASS AND LOSS COMPUTATION
-                output = model(*input)  # Forward pass
+                output = model(**input)  # Forward pass
                 cls_loss, reg_loss = compute_loss(input, output) # Compute loss
                 total_loss = (1-cls_weight)*reg_loss + cls_weight*cls_loss
                 # BACKWARD PASS AND OPTIMIZATION

@@ -1,9 +1,11 @@
 import torch
 from torch.utils.data import DataLoader, random_split, Subset
+from  torchvision.transforms import v2
 import numpy as np
 from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.data.parsers import CocoFreeView
 from src.model.model import PathModel
+from src.data.datasets import FreeViewImgDataset, CoupledDataloader
 
 
 
@@ -73,6 +75,16 @@ class PipelineBuilder:
             test_idx = idx[train_size+val_size:]
         return train_idx, val_idx, test_idx
 
+    def make_transform(resize_size: int = 256):
+        to_tensor = v2.ToImage()
+        resize = v2.Resize((resize_size, resize_size), antialias=True)
+        to_float = v2.ToDtype(torch.float32, scale=True)
+        normalize = v2.Normalize(
+            mean=(0.485, 0.456, 0.406),
+            std=(0.229, 0.224, 0.225),
+        )
+        return v2.Compose([to_tensor, resize, to_float, normalize])
+
     def build_dataloader(self, train_idx, val_idx, test_idx) -> DataLoader:
         if not self.config.data.use_img_dataset:
             train_set = Subset(self.PathDataset, train_idx)
@@ -83,13 +95,14 @@ class PipelineBuilder:
             test_dataloader = DataLoader(test_set, batch_size=self.config.data.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
             return train_dataloader, val_dataloader, test_dataloader
         else:
-            from src.data.datasets import FreeViewImgDataset, CoupledDataloader
-            dataset = FreeViewImgDataset(self.data)
+            transform = PipelineBuilder.make_transform(resize_size= self.config.data.get('img_size', 256))
+            dataset = FreeViewImgDataset(self.data, transform=transform)
             train_set = Subset(dataset, train_idx)
             val_set = Subset(dataset, val_idx)
             test_set = Subset(dataset, test_idx)
             train_dataloader = CoupledDataloader(self.PathDataset,
                                                  train_set,
+                                                 shuffle = True,
                                                  batch_size=self.config.data.batch_size,
                                                  num_workers = self.config.data.num_workers,
                                                  persistent_workers = self.config.data.persistent_workers,
@@ -97,6 +110,7 @@ class PipelineBuilder:
                                                  pin_memory = self.config.data.pin_memory)
             val_dataloader = CoupledDataloader(self.PathDataset,
                                                  val_set,
+                                                 shuffle = False,
                                                  batch_size=self.config.data.batch_size,
                                                  num_workers = self.config.data.num_workers,
                                                  persistent_workers = self.config.data.persistent_workers,
@@ -104,6 +118,7 @@ class PipelineBuilder:
                                                  pin_memory = self.config.data.pin_memory)
             test_dataloader = CoupledDataloader(self.PathDataset,
                                                  test_set,
+                                                 shuffle = False,
                                                  batch_size=self.config.data.batch_size,
                                                  num_workers = self.config.data.num_workers,
                                                  persistent_workers = self.config.data.persistent_workers,
@@ -111,6 +126,9 @@ class PipelineBuilder:
                                                  pin_memory = self.config.data.pin_memory)
             return train_dataloader, val_dataloader, test_dataloader
     
+    def clear_dataframe(self):
+        del self.data
+
     def build_model(self) -> PathModel:
         activation = None
         if self.config.model.activation == "relu":

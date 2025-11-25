@@ -5,6 +5,7 @@ import h5py
 import os
 import math
 import numpy as np
+from PIL import Image
 import torch
 from torch.utils.data import DataLoader
 
@@ -395,17 +396,19 @@ def location_test(index, si, ei, gaze, fixation_mask, fixations):
 
 # TODO Compute image embeddings just once
 class FreeViewImgDataset(Dataset):
-    def __init__(self, data:CocoFreeView):
-        self.data = data
+    def __init__(self, data:CocoFreeView, transform = None):
+        self.img_path = [data.get_img_path(idx) for idx in range(len(data))]
+        self.transform = transform
     
-    def __getitem__(self, index):
-        img = self.data.get_img(index, downscale=True)
-        # convert from numpy to torch tensor
-        img_tensor = torch.from_numpy(img).float() / 255.0
-        return img_tensor, index
+    def __getitem__(self, idx):       
+        path = self.img_path[idx]
+        image = Image.open(path).convert("RGB")
+        if self.transform:
+            image = self.transform(image)
+        return image, idx
     
     def __len__(self):
-        return len(self.data)
+        return len(self.img_path)
     
 
 
@@ -439,3 +442,5 @@ class CoupledDataloader:
             et_data_batch['img_batch'] = img_batch
             yield et_data_batch
 
+    def __len__(self):
+        return len(self.dataloader)
