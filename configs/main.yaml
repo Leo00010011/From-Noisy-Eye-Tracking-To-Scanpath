@@ -1,14 +1,8 @@
 defaults:
-  - scheduler: one_cycle
+  - scheduler: multistep_lr
+  - data: default
   - _self_
 
-
-data:
-  sample_size:  13
-  train_per:  0.7
-  val_per:  0.1
-  start_index:  2
-  log:  False
 training:
   batch_size: 128
   num_epochs: 100

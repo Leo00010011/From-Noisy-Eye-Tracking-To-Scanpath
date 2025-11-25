@@ -99,7 +99,7 @@ def move_data_to_device(batch, device):
     device_batch = []
     for item in batch:
         if item is None:
-            continue
+            device_batch.append(None)
         else:
             device_batch.append(item.to(device=device))
     return device_batch

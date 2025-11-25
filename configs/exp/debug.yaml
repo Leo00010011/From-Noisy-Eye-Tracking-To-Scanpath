@@ -1,6 +1,7 @@
 # @package _global_
 data:
-  train_per: 0.3
+  split_strategy: 
+    train_subjects_per: 0.2
 training:
   num_epochs: 10
   val_interval: 2

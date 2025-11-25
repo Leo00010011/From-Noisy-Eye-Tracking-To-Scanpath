@@ -1,0 +1,5 @@
+name: "disjoint"
+train_subjects_per: 0.6
+val_subjects_per: 0.2
+train_stimuli_per: 0.85
+val_stimuli_per: 0.05

@@ -1,0 +1,4 @@
+# hydra group
+name: "random"
+train_per:  0.7
+val_per:  0.1

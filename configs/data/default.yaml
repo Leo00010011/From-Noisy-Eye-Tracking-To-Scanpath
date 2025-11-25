@@ -1,0 +1,6 @@
+defaults:
+  - split_strategy: disjoint
+
+sample_size:  13
+start_index:  2
+log:  False
