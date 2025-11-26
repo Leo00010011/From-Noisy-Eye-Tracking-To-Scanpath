@@ -4,7 +4,7 @@ from  torchvision.transforms import v2
 import numpy as np
 from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.data.parsers import CocoFreeView
-from src.model.model import PathModel
+from src.model.path_model import PathModel
 from src.data.datasets import FreeViewImgDataset, CoupledDataloader
 
 

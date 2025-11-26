@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from typing import Optional, Any, Dict
 from omegaconf import OmegaConf
-from src.model.model import PathModel
+from src.model.path_model import PathModel
 from src.training.pipeline_builder import PipelineBuilder
 
 def save_checkpoint(
@@ -48,6 +48,7 @@ def save_checkpoint(
     else:
         checkpoint = {
             'model_state_dict': model.state_dict(),
+            'model_name': model.name,
             'save_full_state': False, 
         }
     torch.save(checkpoint, filepath)
