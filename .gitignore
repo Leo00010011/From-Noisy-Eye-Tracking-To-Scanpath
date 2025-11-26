@@ -7,3 +7,5 @@ count_lines.py
 *.pth
 outputs/*
 hydralance/
+*.pt
+*.pth

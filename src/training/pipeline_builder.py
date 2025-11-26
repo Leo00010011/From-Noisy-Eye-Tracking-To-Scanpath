@@ -19,11 +19,14 @@ class PipelineBuilder:
             if self.config.model.device.startswith('cuda'):
                 print("CUDA not available, using CPU.")
             self.device = torch.device('cpu')
+            
+    def load_dataset(self):
         self.PathDataset = FreeViewInMemory(sample_size= self.config.data.sample_size,
                                      log = self.config.data.log, 
                                      start_index=self.config.data.start_index)
-        self.data = CocoFreeView()
-        self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
+        if self.config.data.use_img_dataset:
+            self.data = CocoFreeView()
+            self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
 
     def split_data(array, ratios):
         indices = np.arange(len(array))

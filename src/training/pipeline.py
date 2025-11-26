@@ -9,7 +9,7 @@ def train(builder:PipelineBuilder):
         num_epochs = builder.config.training.num_epochs
         needs_validate = builder.config.training.validate
         val_interval = builder.config.training.val_interval
-
+        builder.load_dataset()
         train_idx, val_idx, test_idx = builder.make_splits()
         save_splits(train_idx, val_idx, test_idx, builder.config.training.splits_file)
         if builder.config.training.log:
