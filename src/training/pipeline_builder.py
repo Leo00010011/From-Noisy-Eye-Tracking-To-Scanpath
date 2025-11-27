@@ -7,7 +7,7 @@ from src.data.parsers import CocoFreeView
 from src.model.path_model import PathModel
 from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
-from src.data.datasets import FreeViewImgDataset, CoupledDataloader
+from src.data.datasets import FreeViewImgDataset, CoupledDataloader, DeduplicatedMemoryDataset
 
 
 
@@ -102,7 +102,10 @@ class PipelineBuilder:
             return train_dataloader, val_dataloader, test_dataloader
         else:
             transform = PipelineBuilder.make_transform(resize_size= self.config.data.get('img_size', 256))
-            dataset = FreeViewImgDataset(self.data, transform=transform)
+            if self.config.data.use_cached_img_dataset:
+                dataset = DeduplicatedMemoryDataset(self.data, resize_size= self.config.data.get('img_size', 256), transform=transform)
+            else:
+                dataset = FreeViewImgDataset(self.data, transform=transform)
             train_set = Subset(dataset, train_idx)
             val_set = Subset(dataset, val_idx)
             test_set = Subset(dataset, test_idx)

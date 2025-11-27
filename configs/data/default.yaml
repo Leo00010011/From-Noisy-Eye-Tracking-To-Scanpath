@@ -11,4 +11,5 @@ persistent_workers: True
 prefetch_factor: 2
 img_size: 256
 pin_memory: True
+use_cached_img_dataset: True
 log:  False

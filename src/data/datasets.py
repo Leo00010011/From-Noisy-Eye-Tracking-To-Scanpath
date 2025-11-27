@@ -1,13 +1,15 @@
 from src.data.parsers import CocoFreeView
 from src.preprocess.noise import add_random_center_correlated_radial_noise, discretization_noise
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
+from torchvision.transforms import v2
+import torch
 import h5py
 import os
 import math
 import numpy as np
 from PIL import Image
-import torch
-from torch.utils.data import DataLoader
+from tqdm import tqdm
+
 
 
 def extract_random_period(start_index, size, noisy_samples, fixations, fixation_mask, sampling_rate, downsample):
@@ -411,7 +413,72 @@ class FreeViewImgDataset(Dataset):
     
     def __len__(self):
         return len(self.img_path)
-    
+
+
+class DeduplicatedMemoryDataset(Dataset):
+    def __init__(self, data:CocoFreeView, resize_size=256, transform=None):
+        """
+        Args:
+            data: Source data object with .get_img_path(i)
+            resize_size: Target size for caching
+        """
+        self.data = data
+        total_len = len(data)
+
+        self.ingest_transform = v2.Compose([
+            v2.ToImage(),
+            v2.Resize((resize_size, resize_size), antialias=True),
+            v2.ToDtype(torch.uint8, scale=False)
+        ])
+
+        self.runtime_transform = transform
+
+        # --- 2. BUILD THE INDEX MAP ---
+        print("Scanning dataset for duplicate images...")
+        
+        path_to_id = {}      # Maps file_path -> unique_id
+        unique_paths = []    # List of unique paths to load later
+        indices = []         # List of indices for the dataset length
+
+        # We iterate once to build the map
+        for i in range(total_len):
+            path = data.get_img_path(i)
+            
+            if path not in path_to_id:
+                # Found a new unique image
+                unique_id = len(unique_paths)
+                path_to_id[path] = unique_id
+                unique_paths.append(path)
+            
+            # Record which unique image this sample points to
+            indices.append(path_to_id[path])
+
+        # Store indices as a Tensor (int64) for shared memory efficiency
+        self.indices = torch.tensor(indices, dtype=torch.long)
+        
+        num_unique = len(unique_paths)
+        print(f"Found {total_len} samples, but only {num_unique} unique images.")
+        
+        # --- 3. ALLOCATE & LOAD UNIQUE IMAGES ---
+        print(f"Allocating RAM for {num_unique} unique images...")
+        self.image_bank = torch.empty(
+            (num_unique, 3, resize_size, resize_size), 
+            dtype=torch.uint8
+        )
+
+        print("Hydrating unique image bank...")
+        for i, path in tqdm(enumerate(unique_paths), total=num_unique):
+            img = Image.open(path).convert("RGB")
+            self.image_bank[i] = self.ingest_transform(img)
+
+    def __getitem__(self, idx):
+        unique_idx = self.indices[idx]
+        img = self.image_bank[unique_idx]
+        img = self.runtime_transform(img)
+        return img, idx
+
+    def __len__(self):
+        return len(self.indices)
 
 
 class CoupledDataloader:
