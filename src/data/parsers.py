@@ -22,8 +22,10 @@ from src.utils import is_number
 # said previously. Can I now compute the visual angle #
 # ------------------------------------
 class CocoFreeView:
-    def __init__(self, data_path = 'data\\Coco FreeView'):
+    def __init__(self, data_path = None):
         #TODO Add Coco Search to the Dataset
+        if data_path is None:
+            data_path = os.path.join('data', 'Coco FreeView')
         json_path = os.path.join(data_path, 'COCOFreeView_fixations_trainval.json')
         with open(json_path, 'r') as f:
             data = json.load(f)
