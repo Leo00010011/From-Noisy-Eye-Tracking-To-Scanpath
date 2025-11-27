@@ -15,7 +15,7 @@ dropout_p: 0
 compilate: True
 head_type: "linear"
 activation:  "gelu"
-device: "cpu"
+device: "cuda"
 image_encoder:
   enabled: True
   repo_path: "C:\\Users\\ulloa\\OneDrive\\Desktop\\Practicas\\projectes\\dinov3"
