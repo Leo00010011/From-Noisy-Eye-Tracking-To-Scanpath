@@ -19,7 +19,7 @@ def validate(model, val_dataloader, epoch, device, metrics, log = True):
         for batch in val_dataloader:
             input = move_data_to_device(batch, device)
 
-            output = model(*input)
+            output = model(**input)
             cls_loss, reg_loss = compute_loss(input, output)
             reg_loss_acum += reg_loss.item()
             cls_loss_acum += cls_loss.item()
