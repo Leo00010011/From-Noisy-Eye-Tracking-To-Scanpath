@@ -4,10 +4,13 @@ import torch.nn.functional as F
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dims, out_dim, device='cpu', dtype=torch.float32):
+    def __init__(self, input_dim, hidden_dims, out_dim,hidden_dropout_p = None, output_dropout_p = None, device='cpu', dtype=torch.float32):
         super().__init__()
         factory_kwargs = {'device': device, 'dtype': dtype}
-        
+        if hidden_dropout_p is None:
+            hidden_dropout_p = 0
+        if output_dropout_p is None:
+            output_dropout_p = 0
         # Convert single int to list for consistency
         if isinstance(hidden_dims, int):
             hidden_dims = [hidden_dims]
@@ -19,11 +22,12 @@ class MLP(nn.Module):
         for hidden_dim in hidden_dims:
             layers.append(nn.Linear(prev_dim, hidden_dim, **factory_kwargs))
             layers.append(nn.ReLU())
+            layers.append(nn.Dropout(hidden_dropout_p))
             prev_dim = hidden_dim
         
         # Output layer
         layers.append(nn.Linear(prev_dim, out_dim, **factory_kwargs))
-        
+        layers.append(nn.Dropout(output_dropout_p))
         self.head = nn.Sequential(*layers)
     
     def forward(self, x):
@@ -189,3 +193,165 @@ class TransformerDecoder(nn.Module):
             x = self.norm3(x + self.__feed_forward(x))
         
         return x
+    
+
+class DoubleInputDecoder(nn.Module):
+    def __init__(self,model_dim = 1024, total_dim = 1024, n_heads = 8, ff_dim = 2048,dropout_p = .1,activation = F.relu,eps = 1e-5,norm_first = False, device = 'cpu', dtype = torch.float32):
+        super().__init__()
+        self.model_dim = model_dim
+        self.total_dim = total_dim
+        self.n_heads = n_heads
+        self.ff_dim = ff_dim
+        self.dropout_p = dropout_p
+        self.eps = eps
+        self.activation = activation
+        self.norm_first = norm_first
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        # sa
+        self.self_attn = MultiHeadedAttention(model_dim,
+                                            total_dim,
+                                            n_heads,
+                                            is_self_attention=True,
+                                            is_causal= True,
+                                            **factory_kwargs)
+        self.self_attn_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
+        self.self_attn_dropout = nn.Dropout(dropout_p)
+        # ca1
+        self.first_cross_attn = MultiHeadedAttention(model_dim,
+                                            total_dim,
+                                            n_heads,
+                                            is_self_attention=False,
+                                            is_causal= False,
+                                            **factory_kwargs)
+        self.first_cross_attn_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
+        self.first_cross_attn_dropout = nn.Dropout(dropout_p)
+        # ca2
+        self.second_cross_attn = MultiHeadedAttention(model_dim,
+                                            total_dim,
+                                            n_heads,
+                                            is_self_attention=False,
+                                            is_causal= False,
+                                            **factory_kwargs)
+        self.second_cross_attn_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
+        self.second_cross_attn_dropout = nn.Dropout(dropout_p)
+        # ff
+        self.linear_up = nn.Linear(model_dim, ff_dim, **factory_kwargs)
+        self.linear_up_dropout = nn.Dropout(dropout_p)
+        self.linear_down = nn.Linear(ff_dim, model_dim, **factory_kwargs)
+        self.linear_down_dropout = nn.Dropout(dropout_p)
+        self.linear_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
+
+    def __self_attention(self, x, attn_mask = None):
+        return self.self_attn_dropout(self.self_attn(x, attn_mask=attn_mask))
+
+    def __cross_attention1(self, src, mem, attn_mask = None):
+        return self.first_cross_attn_dropout(self.first_cross_attn(src, mem, attn_mask=attn_mask))
+
+    def __cross_attention2(self, src, mem, attn_mask = None):
+        return self.second_cross_attn_dropout(self.second_cross_attn(src, mem, attn_mask=attn_mask))
+
+    def __feed_forward(self, x):
+        return self.linear_down_dropout(self.linear_down(self.linear_up_dropout(self.activation(self.linear_up(x)))))
+
+    
+    def forward(self, src, mem1, mem2, tgt_mask = None, mem1_mask = None, mem2_mask = None):
+        x = src
+        if self.norm_first:
+            x = x + self.__self_attention(self.self_attn_norm(x), attn_mask=tgt_mask)
+            x = x + self.__cross_attention1(self.first_cross_attn_norm(x), mem1, attn_mask=mem1_mask)
+            x = x + self.__cross_attention2(self.second_cross_attn_norm(x), mem2, attn_mask=mem2_mask)
+            x = x + self.__feed_forward(self.linear_norm(x))
+        else:
+            x = self.self_attn_norm(x + self.__self_attention(x, attn_mask=tgt_mask))
+            x = self.first_cross_attn_norm(x + self.__cross_attention1(x, mem1, attn_mask=mem1_mask))
+            x = self.second_cross_attn_norm(x + self.__cross_attention2(x, mem2, attn_mask=mem2_mask))
+            x = self.linear_norm(x + self.__feed_forward(x))
+        
+        return x
+    
+class FeatureEnhancer(nn.Module):
+    def __init__(self,model_dim = 1024, total_dim = 1024, n_heads = 8, ff_dim = 2048,dropout_p = .1,activation = F.relu,eps = 1e-5,norm_first = False, device = 'cpu', dtype = torch.float32):
+        super().__init__()
+        self.model_dim = model_dim
+        self.total_dim = total_dim
+        self.n_heads = n_heads
+        self.ff_dim = ff_dim
+        self.dropout_p = dropout_p
+        self.eps = eps
+        self.activation = activation
+        self.norm_first = norm_first
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        # sa
+        self.first_self_attn = MultiHeadedAttention(model_dim,
+                                            total_dim,
+                                            n_heads,
+                                            is_self_attention=True,
+                                            is_causal= True,
+                                            **factory_kwargs)
+        self.first_attn_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
+        self.first_attn_dropout = nn.Dropout(dropout_p)
+        
+        self.second_self_attn = MultiHeadedAttention(model_dim,
+                                            total_dim,
+                                            n_heads,
+                                            is_self_attention=True,
+                                            is_causal= True,
+                                            **factory_kwargs)
+        self.second_attn_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
+        self.second_attn_dropout = nn.Dropout(dropout_p)
+        # ca1
+        self.f2s_cross_attn = MultiHeadedAttention(model_dim,
+                                            total_dim,
+                                            n_heads,
+                                            is_self_attention=False,
+                                            is_causal= False,
+                                            **factory_kwargs)
+        self.f2s_cross_attn_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
+        self.f2s_cross_attn_dropout = nn.Dropout(dropout_p)
+        # ca2
+        self.s2f_cross_attn = MultiHeadedAttention(model_dim,
+                                            total_dim,
+                                            n_heads,
+                                            is_self_attention=False,
+                                            is_causal= False,
+                                            **factory_kwargs)
+        self.s2f_cross_attn_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
+        self.s2f_cross_attn_dropout = nn.Dropout(dropout_p)
+        # first ff
+        self.first_ff = MLP(model_dim, ff_dim, hidden_dropout_p = dropout_p, 
+                            output_dropout_p = dropout_p, out_dim = model_dim, **factory_kwargs)
+        self.first_ff_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
+        # second ff
+        self.second_ff = MLP(model_dim, ff_dim, hidden_dropout_p = dropout_p, 
+                             output_dropout_p = dropout_p, out_dim = model_dim, **factory_kwargs)
+        self.second_ff_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
+
+    def __self_attention(self, x , attn_dropout, self_attn, attn_mask = None):
+        return attn_dropout(self_attn(x, attn_mask=attn_mask))
+    
+
+    def __cross_attention(self, first, second, cross_attn_dropout, cross_attn, attn_mask = None):
+        return cross_attn_dropout(cross_attn(first, second, attn_mask=attn_mask))
+
+    def forward(self, src1, src2, src1_mask = None, src2_mask = None):
+        x1 = src1
+        x2 = src2
+    
+        if self.norm_first:
+            x1 = x1 + self.__self_attention(self.first_attn_norm(x1),self.first_attn_dropout, self.first_self_attn, attn_mask=src1_mask)
+            x2 = x2 + self.__self_attention(self.second_attn_norm(x2),self.second_attn_dropout, self.second_self_attn, attn_mask=src2_mask)
+            x1 = x1 + self.__cross_attention(self.f2s_cross_attn_norm(x1), x2, self.f2s_cross_attn_dropout, self.f2s_cross_attn, attn_mask=src2_mask)
+            x2 = x2 + self.__cross_attention(self.s2f_cross_attn_norm(x2), x1, self.s2f_cross_attn_dropout, self.s2f_cross_attn,attn_mask=src2_mask)
+            x1 = x1 + self.first_ff(self.first_ff_norm(x1))
+            x2 = x2 + self.second_ff(self.second_ff_norm(x2))
+        else:
+            x1 = self.first_attn_norm(x1 + self.__self_attention(x1,self.first_attn_dropout, self.first_self_attn, attn_mask=src1_mask))
+            x2 = self.first_attn_norm(x2 + self.__self_attention(x2,self.second_attn_dropout, self.second_self_attn, attn_mask=src2_mask))
+            x1 = self.f2s_cross_attn_norm(x1 + self.__cross_attention(x1, x2, self.f2s_cross_attn_dropout, self.f2s_cross_attn, attn_mask=src2_mask))
+            x2 = self.s2f_cross_attn_norm(x2 + self.__cross_attention(x2, x1, self.s2f_cross_attn_dropout, self.s2f_cross_attn,attn_mask=src2_mask))
+            x1 = self.first_ff_norm(x1 + self.first_ff(x1))
+            x2 = self.second_ff_norm(x2 + self.second_ff(x2))
+        
+        return x1, x2
+
+    

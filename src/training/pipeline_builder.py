@@ -5,6 +5,8 @@ import numpy as np
 from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.data.parsers import CocoFreeView
 from src.model.path_model import PathModel
+from src.model.mixer_model import MixerModel
+from src.model.dino_wrapper import DinoV3Wrapper
 from src.data.datasets import FreeViewImgDataset, CoupledDataloader
 
 
@@ -78,6 +80,7 @@ class PipelineBuilder:
             test_idx = idx[train_size+val_size:]
         return train_idx, val_idx, test_idx
 
+    @staticmethod
     def make_transform(resize_size: int = 256):
         to_tensor = v2.ToImage()
         resize = v2.Resize((resize_size, resize_size), antialias=True)
@@ -132,29 +135,65 @@ class PipelineBuilder:
     def clear_dataframe(self):
         del self.data
 
-    def build_model(self) -> PathModel:
+    def build_model(self) -> torch.nn.Module:
         activation = None
         if self.config.model.activation == "relu":
             activation = torch.nn.ReLU()
         elif self.config.model.activation == "gelu":
             activation = torch.nn.GELU()
 
-        model = PathModel(input_dim = self.config.model.input_dim,
-                          output_dim = self.config.model.output_dim,
-                          n_encoder = self.config.model.n_encoder,
-                          n_decoder = self.config.model.n_decoder,
-                          model_dim = self.config.model.model_dim,
-                          total_dim = self.config.model.total_dim,
-                          n_heads = self.config.model.n_heads,
-                          ff_dim = self.config.model.ff_dim,
-                          max_pos_enc = self.config.model.max_pos_enc,
-                          max_pos_dec = self.config.model.max_pos_dec,
-                          norm_first = self.config.model.norm_first,
-                          dropout_p= self.config.model.dropout_p,
-                          head_type = self.config.model.get('head_type', 'linear'),
-                          mlp_head_hidden_dim = self.config.model.get('mlp_head_hidden_dim', None),
-                          activation = activation,
-                          device = self.device)
+        model_name = self.config.model.get('name', 'PathModel')
+
+        if model_name == 'MixerModel':
+            image_encoder = None
+            image_dim = None
+            if hasattr(self.config.model, 'image_encoder') and self.config.model.image_encoder.enabled:
+                image_encoder = DinoV3Wrapper(
+                    repo_path=self.config.model.image_encoder.repo_path,
+                    model_name=self.config.model.image_encoder.name,
+                    freeze=self.config.model.image_encoder.freeze,
+                    device=self.device
+                )
+                image_dim = self.config.model.image_encoder.image_dim
+
+            model = MixerModel(input_dim = self.config.model.input_dim,
+                              output_dim = self.config.model.output_dim,
+                              n_encoder = self.config.model.n_encoder,
+                              n_decoder = self.config.model.n_decoder,
+                              model_dim = self.config.model.model_dim,
+                              total_dim = self.config.model.total_dim,
+                              n_heads = self.config.model.n_heads,
+                              ff_dim = self.config.model.ff_dim,
+                              max_pos_enc = self.config.model.max_pos_enc,
+                              max_pos_dec = self.config.model.max_pos_dec,
+                              norm_first = self.config.model.norm_first,
+                              dropout_p= self.config.model.dropout_p,
+                              head_type = self.config.model.get('head_type', 'linear'),
+                              mlp_head_hidden_dim = self.config.model.get('mlp_head_hidden_dim', None),
+                              activation = activation,
+                              device = self.device,
+                              image_encoder = image_encoder,
+                              n_feature_enhancer = self.config.model.n_feature_enhancer,
+                              image_dim = image_dim)
+        elif model_name == 'PathModel':
+            model = PathModel(input_dim = self.config.model.input_dim,
+                              output_dim = self.config.model.output_dim,
+                              n_encoder = self.config.model.n_encoder,
+                              n_decoder = self.config.model.n_decoder,
+                              model_dim = self.config.model.model_dim,
+                              total_dim = self.config.model.total_dim,
+                              n_heads = self.config.model.n_heads,
+                              ff_dim = self.config.model.ff_dim,
+                              max_pos_enc = self.config.model.max_pos_enc,
+                              max_pos_dec = self.config.model.max_pos_dec,
+                              norm_first = self.config.model.norm_first,
+                              dropout_p= self.config.model.dropout_p,
+                              head_type = self.config.model.get('head_type', 'linear'),
+                              mlp_head_hidden_dim = self.config.model.get('mlp_head_hidden_dim', None),
+                              activation = activation,
+                              device = self.device)
+        else:
+            raise ValueError(f"Model name {model_name} not supported.")
         return model
     
     def build_optimizer(self, model: PathModel):

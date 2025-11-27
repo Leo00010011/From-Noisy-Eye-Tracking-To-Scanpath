@@ -1,0 +1,25 @@
+name: "MixerModel"
+input_dim: 3
+output_dim: 3
+n_encoder: 8
+n_decoder: 8
+n_feature_enhancer: 3
+model_dim: 512
+total_dim: 512
+n_heads: 8
+ff_dim: 2048
+max_pos_enc: 15
+max_pos_dec: 26
+norm_first: True
+dropout_p: 0
+compilate: True
+head_type: "linear"
+activation:  "gelu"
+device: "cuda"
+image_encoder:
+  enabled: True
+  repo_path: "C:\\Users\\ulloa\\OneDrive\\Desktop\\Practicas\\projectes\\dinov3"
+  name: "dinov3_vits16"
+  freeze: True
+  image_dim: 384
+

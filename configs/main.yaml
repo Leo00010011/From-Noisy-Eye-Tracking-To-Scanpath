@@ -1,6 +1,7 @@
 defaults:
   - scheduler: multistep_lr
   - data: default
+  - model: mixer_model
   - _self_
 
 training:
@@ -13,20 +14,3 @@ training:
   save_best_only: True
   save_full_state: True
   log: True
-model:
-  input_dim: 3
-  output_dim: 3
-  n_encoder: 8
-  n_decoder: 8
-  model_dim: 512
-  total_dim: 512
-  n_heads: 8
-  ff_dim: 2048
-  max_pos_enc: 15
-  max_pos_dec: 26
-  norm_first: True
-  dropout_p: 0
-  compilate: True
-  head_type: "linear"
-  activation:  "gelu"
-  device: "cuda"

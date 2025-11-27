@@ -439,7 +439,7 @@ class CoupledDataloader:
         for img_batch, idx_batch in self.dataloader:
             et_data_batch = [self.path_dataset[i] for i in idx_batch]
             et_data_batch = seq2seq_padded_collate_fn(et_data_batch)
-            et_data_batch['img_batch'] = img_batch
+            et_data_batch['image_src'] = img_batch
             yield et_data_batch
 
     def __len__(self):
