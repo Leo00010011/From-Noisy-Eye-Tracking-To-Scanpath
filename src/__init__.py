@@ -2,8 +2,9 @@ import os
 from omegaconf import OmegaConf
 
 if not os.path.exists('data'):
-    new_directory_path = "..\\..\\"
-    os.chdir(new_directory_path)
+    # Change directory up two levels, compatible with Linux and Windows
+    new_directory_path = os.path.join(os.path.dirname(os.getcwd()), os.pardir)
+    os.chdir(os.path.abspath(new_directory_path))
 
 
 def half_dim(dim_value):

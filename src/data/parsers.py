@@ -39,7 +39,7 @@ class CocoFreeView:
         for scan_path in data:
             path = ntop[scan_path['name']]
             scan_path['img_path'] = path
-            scan_path['class'] = path.split('\\')[-2]
+            scan_path['class'] = path.split(os.path.sep)[-2]
         self.df = pd.DataFrame.from_dict(data)
         row = self.df.iloc[0]
         
@@ -127,7 +127,11 @@ class CocoFreeView:
 ######################################################
 # TODO Check if we can add video information to improve stats
 class OurDataset:
-    def __init__(self, data_path = 'data\\Ours\\result_total_data_prosegur.csv', img_path = 'data\\Ours\\prosegur_img.jpg'):
+    def __init__(self, data_path = None, img_path = None):
+        if data_path is None:
+            data_path = os.path.join('data', 'Ours', 'result_total_data_prosegur.csv')
+        if img_path is None:
+            img_path = os.path.join('data', 'Ours', 'prosegur_img.jpg')
         data = pd.read_csv(data_path)
         data = data[data['Module'].str.contains('BI')]
         data_small = data[['User','TimeBlock','XEyeTracking','YEyeTracking']]

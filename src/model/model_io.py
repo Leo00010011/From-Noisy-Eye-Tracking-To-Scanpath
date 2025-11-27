@@ -95,7 +95,7 @@ def load_checkpoint(
 
 def load_model_for_eval(path):
     weight_path = os.path.join(path, 'model.pth')
-    model_config = OmegaConf.load(os.path.join(path, '.hydra\\config.yaml'))
+    model_config = OmegaConf.load(os.path.join(path, '.hydra', 'config.yaml'))
     pipe = PipelineBuilder(model_config)
     model = pipe.build_model()
     state_dict = torch.load(weight_path, map_location = 'cpu')

@@ -59,7 +59,7 @@ class FreeViewBatch(Dataset):
     The noisy and downsampled simulated eye-tracking and the section of the scanpath that fits entirely in that part
     '''
     def __init__(self,
-                 data_path = 'data\\Coco FreeView',
+                 data_path = None,
                  sample_size=-1,
                  sampling_rate=60,
                  downsample_int=200,
@@ -69,6 +69,8 @@ class FreeViewBatch(Dataset):
                  log = False,
                  debug = False):
         super().__init__()
+        if data_path is None:
+            data_path = os.path.join('data', 'Coco FreeView')
         self.sampling_rate = sampling_rate
         self.sample_size = sample_size # 90% larger than 20 at downsample 200
         self.downsample = downsample_int
