@@ -35,7 +35,7 @@ class CocoFreeView:
 
         stimulus_paths = list(ta_folder.rglob('*.jpg')) + list(tp_folder.rglob('*.jpg'))
 
-        ntop = {str(path).split('\\')[-1]: str(path) for path in stimulus_paths }
+        ntop = {str(path).split(os.path.sep)[-1]: str(path) for path in stimulus_paths }
         for scan_path in data:
             path = ntop[scan_path['name']]
             scan_path['img_path'] = path
