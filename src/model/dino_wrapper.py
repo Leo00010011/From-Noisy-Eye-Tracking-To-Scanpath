@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+import os
+
 class DinoV3Wrapper(nn.Module):
     def __init__(self, repo_path, model_name, freeze=True, device='cpu', weights=None):
         super().__init__()
@@ -8,14 +10,19 @@ class DinoV3Wrapper(nn.Module):
         self.model_name = model_name
         self.freeze = freeze
         self.device = device
-        
-        # Load model from local hub
-        # The script used: torch.hub.load(DINO_REPO_PATH, 'dinov3_vits16', source='local', weights=name)
-        kwargs = {'source': 'local'}
+
+        # Check if repo_path exists. If not, use github repo.
+        if os.path.exists(repo_path):
+            kwargs = {'source': 'local'}
+            repo = repo_path
+        else:
+            kwargs = {'source': 'github'}
+            repo = 'facebookresearch/dinov3'  # Default public repo for DINOv3
+
         if weights:
             kwargs['weights'] = weights
-            
-        self.model = torch.hub.load(repo_path, model_name, **kwargs)
+
+        self.model = torch.hub.load(repo, model_name, **kwargs)
         self.model.to(device)
         self.embed_dim = self.model.embed_dim
         if freeze:
