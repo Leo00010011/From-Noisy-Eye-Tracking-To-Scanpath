@@ -1,5 +1,4 @@
 # @package _global_
-
 data:
   split_strategy: 
     train_subjects_per: 0.2
@@ -12,5 +11,6 @@ model:
   model_dim: 256
   total_dim: 256
   n_heads: 4
-  ff_dim: 512
+  ff_dim: 1024
+  n_feature_enhancer: 2
   compilate: False

@@ -17,7 +17,7 @@ class DinoV3Wrapper(nn.Module):
             
         self.model = torch.hub.load(repo_path, model_name, **kwargs)
         self.model.to(device)
-        
+        self.embed_dim = self.model.embed_dim
         if freeze:
             for param in self.model.parameters():
                 param.requires_grad = False

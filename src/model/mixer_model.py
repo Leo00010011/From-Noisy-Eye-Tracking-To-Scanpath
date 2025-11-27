@@ -51,12 +51,11 @@ class MixerModel(nn.Module):
         self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
         self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
         if image_encoder is not None:
-            if image_dim is None:
-                raise ValueError("image_dim must be provided if image_encoder is used")
-            if image_dim == model_dim:
+            img_embed_dim = image_encoder.embed_dim
+            if img_embed_dim == model_dim:
                 self.img_input_proj = nn.Identity()
             else:
-                self.img_input_proj = nn.Linear(image_dim, model_dim, **factory_mode)
+                self.img_input_proj = nn.Linear(img_embed_dim, model_dim, **factory_mode)
         
         self.enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
         self.dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)

@@ -152,7 +152,8 @@ class PipelineBuilder:
                     repo_path=self.config.model.image_encoder.repo_path,
                     model_name=self.config.model.image_encoder.name,
                     freeze=self.config.model.image_encoder.freeze,
-                    device=self.device
+                    device=self.device,
+                    weights=self.config.model.image_encoder.weights
                 )
                 image_dim = self.config.model.image_encoder.image_dim
 

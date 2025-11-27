@@ -15,11 +15,12 @@ dropout_p: 0
 compilate: True
 head_type: "linear"
 activation:  "gelu"
-device: "cuda"
+device: "cpu"
 image_encoder:
   enabled: True
   repo_path: "C:\\Users\\ulloa\\OneDrive\\Desktop\\Practicas\\projectes\\dinov3"
   name: "dinov3_vits16"
+  weights: "dinov3_vits16_weights.pth"
   freeze: True
-  image_dim: 384
+  image_dim: 256
 
