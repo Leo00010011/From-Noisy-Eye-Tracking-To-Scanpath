@@ -26,16 +26,22 @@ class DinoV3Wrapper(nn.Module):
         self.model.to(device)
         self.embed_dim = self.model.embed_dim
         if freeze:
+            self.model.eval()
             for param in self.model.parameters():
                 param.requires_grad = False
                 
     def forward(self, x):
-        
-        with torch.set_grad_enabled(not self.freeze):
-            # We assume x is already properly normalized/transformed by the pipeline
-            out = self.model.get_intermediate_layers(x, n=1, reshape=True, norm=True, return_class_token=True)
-            feats, cls_token = out[0]
-            cls_token = cls_token.unsqueeze(1)
-            feats = feats.flatten(2,3).permute(0,2,1) # (B, H*W, F)
-            return torch.cat([feats, cls_token], dim=1)
+        if self.freeze:
+            self.model.eval()
+            with torch.inference_mode():
+                # We assume x is already properly normalized/transformed by the pipeline
+                out = self.model.get_intermediate_layers(x, n=1, reshape=True, norm=True, return_class_token=True)
+        else:
+            self.model.train()
+            with torch.set_grad_enabled(True):
+                out = self.model.get_intermediate_layers(x, n=1, reshape=True, norm=True, return_class_token=True)
+        feats, cls_token = out[0]
+        cls_token = cls_token.unsqueeze(1)
+        feats = feats.flatten(2,3).permute(0,2,1) # (B, H*W, F)
+        return torch.cat([feats, cls_token], dim=1)
 
