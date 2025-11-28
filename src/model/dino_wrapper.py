@@ -30,6 +30,7 @@ class DinoV3Wrapper(nn.Module):
             for param in self.model.parameters():
                 param.requires_grad = False
                 
+    @torch.compiler.disable
     def forward(self, x):
         if self.freeze:
             self.model.eval()
