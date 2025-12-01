@@ -1,6 +1,7 @@
 import json
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 def plt_training_metrics(path_list, start_epoch=0):
     metric_list = []
@@ -15,26 +16,62 @@ def plt_training_metrics(path_list, start_epoch=0):
                 start_idx.append(j)
                 break
     
-    fig, axis = plt.subplots(1,3,figsize=(20,5))
+    fig, axis = plt.subplots(2,2,figsize=(20,10))
     for idx, (start_idx, metrics) in enumerate(zip(start_idx,metric_list)):
         for k in metrics.keys():
             if k != 'epoch':
                 if k == 'reg_loss_train' or k == 'regression loss':
-                    axis[1].plot(list(range(len(metrics[k])))[start_epoch:],metrics[k][start_epoch:], label= f"{idx}reg_loss_train")
+                    axis[0,0].plot(list(range(len(metrics[k])))[start_epoch:],metrics[k][start_epoch:], label= f"{idx}reg_loss_train")
                 elif k == 'reg_loss_val' or k == 'regression_loss':
-                    axis[1].plot(metrics['epoch'][start_idx:], metrics[k][start_idx:], label=f"{idx}reg_loss_val")
+                    axis[0,0].plot(metrics['epoch'][start_idx:], metrics[k][start_idx:], label=f"{idx}reg_loss_val")
                 elif k == 'cls_loss_train' or k == 'classification loss':
-                    axis[2].plot(list(range(len(metrics[k])))[start_epoch:],metrics[k][start_epoch:], label=f"{idx}cls_loss_train")
+                    axis[0,1].plot(list(range(len(metrics[k])))[start_epoch:],metrics[k][start_epoch:], label=f"{idx}cls_loss_train")
                 elif k == 'cls_loss_val' or k == 'classification_loss':
-                    axis[2].plot(metrics['epoch'][start_idx:],metrics[k][start_idx:], label=f"{idx}cls_loss_val")
+                    axis[0,1].plot(metrics['epoch'][start_idx:],metrics[k][start_idx:], label=f"{idx}cls_loss_val")
+                elif k == 'reg_error_val' or k == 'duration_error_val':
+                    axis[1,0].plot(metrics['epoch'][start_idx:],metrics[k][start_idx:], label=f"{idx}{k}")
                 else:
-                    axis[0].plot(metrics['epoch'][start_idx:], metrics[k][start_idx:], label=f"{idx}{k}")
-    axis[1].hlines([8000], xmin=0, xmax=metrics['epoch'][-1], colors='red', linestyles='dashed')
+                    axis[1,1].plot(metrics['epoch'][start_idx:], metrics[k][start_idx:], label=f"{idx}{k}")
+    axis[0,0].hlines([8000], xmin=0, xmax=metrics['epoch'][-1], colors='red', linestyles='dashed')
+    axis[0,0].legend()
+    axis[0,1].legend()
+    axis[1,0].legend()
+    axis[1,1].legend()
     fig.tight_layout()
-
-    axis[0].legend()
-    axis[1].legend()
-    axis[2].legend()
+    
+    
+def gather_best_metrics(path_list):
+    metric_list = []
+    for path in path_list:
+        with open(path, 'r') as f:
+            metric_list.append(json.load(f))
+    
+    best_metrics_list = []
+    for metrics in metric_list:
+        best_metrics = {}
+        # obtain the epoch where the best regression loss in the validation set is achieved
+        if 'reg_loss_val' in metrics.keys():
+            best_reg_loss_val = min(metrics['reg_loss_val'])
+            best_reg_loss_val_epoch = metrics['reg_loss_val'].index(best_reg_loss_val)
+            
+        else:
+            best_reg_loss_val = min(metrics['regression_loss'])
+            best_reg_loss_val_epoch = metrics['regression_loss'].index(best_reg_loss_val)
+        for k in metrics.keys():
+            if k == 'reg_loss_train' or k == 'regression loss':
+                best_metrics['reg_loss_train'] = metrics[k][metrics['epoch'][best_reg_loss_val_epoch] - 1]
+            elif k == 'reg_loss_val' or k == 'regression_loss':
+                best_metrics['reg_loss_val'] = metrics[k][best_reg_loss_val_epoch]
+            elif k == 'cls_loss_train' or k == 'classification loss':
+                best_metrics['cls_loss_train'] = metrics[k][metrics['epoch'][best_reg_loss_val_epoch] - 1]
+            elif k == 'cls_loss_val' or k == 'classification_loss':
+                best_metrics['cls_loss_val'] = metrics[k][best_reg_loss_val_epoch]
+            elif k == 'reg_error_val' or k == 'duration_error_val':
+                best_metrics[k] = min(metrics[k])
+            else:
+                best_metrics[k] = max(metrics[k])
+        best_metrics_list.append(best_metrics)
+    return pd.DataFrame(best_metrics_list)
 
 
 def amplitude_array(gaze, ptoa=None):
