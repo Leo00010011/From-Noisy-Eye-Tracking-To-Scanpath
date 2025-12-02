@@ -11,12 +11,14 @@ from PIL import Image
 from tqdm import tqdm
 
 
-
-def extract_random_period(start_index, size, noisy_samples, fixations, fixation_mask, sampling_rate, downsample):
-    down_idx = np.random.randint(start_index, noisy_samples.shape[1] - size + 1, 1, dtype = int)[0]
+#TODO We need a configurable max_time to normalize the time step (After BERT and Entire Path improvements diferent sizes are going to be included)
+def extract_random_period(start_index, period_duration, noisy_samples, fixations, fixation_mask, sampling_rate, downsample_period):
+    size = math.ceil(period_duration/downsample_period)
+    down_offset = np.random.randint(start_index, noisy_samples.shape[1] - size + 1, 1, dtype = int)[0]
     # get the values in the original sampling rate
-    conversion_factor = downsample/(1000/sampling_rate)
-    ori_idx = math.floor(down_idx*conversion_factor)
+    ori_period = 1000/sampling_rate
+    conversion_factor = downsample_period/ori_period
+    ori_idx = math.floor(down_offset*conversion_factor)
     ori_size = math.ceil((size - 1)*conversion_factor)
     last_idx = ori_idx + ori_size
     # TEST
@@ -33,9 +35,8 @@ def extract_random_period(start_index, size, noisy_samples, fixations, fixation_
             current_idx += 1
         if current_idx == (ori_idx + ori_size):
             # if there is not a fixation return an empty array
-            return noisy_samples[:, down_idx:down_idx + size],np.array([]), -1,-1
+            return noisy_samples[:, down_offset:down_offset + size],np.array([]), -1,-1
         else:
-            # TEST
             start_fixation = fixation_mask[current_idx]
     # search the last fixation
     if fixation_mask[last_idx] > 0:
@@ -51,7 +52,7 @@ def extract_random_period(start_index, size, noisy_samples, fixations, fixation_
     # the mask are saved shifted in order to assign 0 to the saccade samples
     start_fixation -= 1
     end_fixation -= 1
-    x = noisy_samples[:, down_idx:down_idx + size]
+    x = noisy_samples[:, down_offset:down_offset + size]
     y = fixations[:, start_fixation: end_fixation + 1]
     return x, y, start_fixation, end_fixation
 
@@ -62,7 +63,7 @@ class FreeViewBatch(Dataset):
     '''
     def __init__(self,
                  data_path = None,
-                 sample_size=-1,
+                 sample_duration=-1,
                  sampling_rate=60,
                  downsample_int=200,
                  batch_size=128,
@@ -74,7 +75,7 @@ class FreeViewBatch(Dataset):
         if data_path is None:
             data_path = os.path.join('data', 'Coco FreeView')
         self.sampling_rate = sampling_rate
-        self.sample_size = sample_size # 90% larger than 20 at downsample 200
+        self.sample_duration = sample_duration # 90% larger than 20 at downsample 200
         self.downsample = downsample_int
         self.min_scanpath_duration = min_scanpath_duration
         self.max_fixation_duration = max_fixation_duration
@@ -104,15 +105,13 @@ class FreeViewBatch(Dataset):
         # reading is inefficient because is reading from memory one by one
         if self.ori_data is None:
             self.ori_data = h5py.File(self.ori_path,'r')
-        down_gaze = self.ori_data['down_gaze'][index].reshape((3,-1))
-        fixations = self.ori_data['fixations'][index].reshape((3,-1))
-        x = down_gaze
-        y = fixations
-        if self.sample_size != -1:
+        x = self.ori_data['down_gaze'][index].reshape((3,-1))
+        y = self.ori_data['fixations'][index].reshape((3,-1))
+        if self.sample_duration != -1:
             fixation_mask = self.ori_data['fixation_mask'][index]
-            x, y, start_fixation, end_fixation = extract_random_period(self.sample_size,
+            x, y, start_fixation, end_fixation = extract_random_period(self.sample_duration,
                                                 x,
-                                                fixations,
+                                                y,
                                                 fixation_mask,
                                                 self.sampling_rate,
                                                 self.downsample)
@@ -139,7 +138,7 @@ class FreeViewBatch(Dataset):
         down_gaze = self.shuffled_data['down_gaze'][index*batch_size:(index + 1)*batch_size]
         fixations = self.shuffled_data['fixations'][index*batch_size:(index + 1)*batch_size]
         vals = None
-        if self.sample_size != -1:
+        if self.sample_duration != -1:
             fixation_mask = self.shuffled_data['fixation_mask'][index*batch_size:(index + 1)*batch_size]
             # gaze = self.data['gaze'][index]
             # vals = (down_gaze,fixations,fixation_mask, gaze)
@@ -151,9 +150,9 @@ class FreeViewBatch(Dataset):
         for value in zip(*vals):
             x = value[0].reshape((3,-1))        
             y = value[1].reshape((3,-1))
-            if self.sample_size != -1:
+            if self.sample_duration != -1:
                 fixation_mask = value[2]
-                x, y, start_fixation, end_fixation = extract_random_period(self.sample_size,
+                x, y, start_fixation, end_fixation = extract_random_period(self.sample_duration,
                                                     x,
                                                     y,
                                                     fixation_mask)
@@ -217,7 +216,7 @@ class FreeViewInMemory(Dataset):
     def __init__(self,
                  data_path = None,
                  start_index=2,
-                 sample_size=-1,
+                 sample_duration=-1,
                  log = False,
                  location_test = False,
                  segment_test = False,
@@ -228,7 +227,7 @@ class FreeViewInMemory(Dataset):
         self.location_test = location_test
         self.segment_test = segment_test
         self.downsample = downsample_int
-        self.sample_size = sample_size
+        self.sample_duration = sample_duration
         self.log = log
         self.data_store = {}
         if data_path is None:
@@ -256,11 +255,11 @@ class FreeViewInMemory(Dataset):
         if self.location_test or self.segment_test:
             gaze = self.data_store['gaze'][index].reshape((3, -1))
 
-        if self.sample_size != -1:
+        if self.sample_duration != -1:
             fixation_mask = self.data_store['fixation_mask'][index]
             x, y, start_fixation, end_fixation = extract_random_period(
                 self.start_index,
-                self.sample_size,
+                self.sample_duration,
                 x,
                 y,
                 fixation_mask,

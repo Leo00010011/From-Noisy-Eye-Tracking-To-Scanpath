@@ -23,7 +23,7 @@ class PipelineBuilder:
             self.device = torch.device('cpu')
             
     def load_dataset(self):
-        self.PathDataset = FreeViewInMemory(sample_size= self.config.data.sample_size,
+        self.PathDataset = FreeViewInMemory(sample_duration= self.config.data.sample_duration,
                                      log = self.config.data.log, 
                                      start_index=self.config.data.start_index)
         if self.config.data.use_img_dataset:

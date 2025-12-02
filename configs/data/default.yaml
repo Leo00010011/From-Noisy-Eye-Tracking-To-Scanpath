@@ -2,7 +2,7 @@ defaults:
   - split_strategy: disjoint
   - _self_
 
-sample_size:  13
+sample_duration:  2600
 start_index:  2
 batch_size: 128
 use_img_dataset: True
