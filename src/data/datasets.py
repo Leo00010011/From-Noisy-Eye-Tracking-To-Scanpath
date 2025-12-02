@@ -11,7 +11,6 @@ from PIL import Image
 from tqdm import tqdm
 
 
-#TODO We need a configurable max_time to normalize the time step (After BERT and Entire Path improvements diferent sizes are going to be included)
 def extract_random_period(start_index, period_duration, noisy_samples, fixations, fixation_mask, sampling_rate, downsample_period):
     size = math.ceil(period_duration/downsample_period)
     down_offset = np.random.randint(start_index, noisy_samples.shape[1] - size + 1, 1, dtype = int)[0]
@@ -55,6 +54,38 @@ def extract_random_period(start_index, period_duration, noisy_samples, fixations
     x = noisy_samples[:, down_offset:down_offset + size]
     y = fixations[:, start_fixation: end_fixation + 1]
     return x, y, start_fixation, end_fixation
+
+
+class ExtractRandomPeriod:
+    def __init__(self, start_index, period_duration, sampling_rate, downsample_period):
+        self.start_index = start_index
+        self.period_duration = period_duration
+        self.sampling_rate = sampling_rate
+        self.downsample_period = downsample_period
+
+    def __call__(self,input):
+        x, y, _, _ = extract_random_period(
+            self.start_index, 
+            self.period_duration, 
+            input['x'], 
+            input['y'], 
+            input['fixation_mask'], 
+            self.sampling_rate, 
+            self.downsample_period
+        )
+        input['x'] = x
+        input['y'] = y
+        
+        
+    def __repr__(self):
+        return f'ExtractRandomPeriod'
+
+    def __str__(self):
+        return f'''+ ExtractRandomPeriod
+        start_index={self.start_index}, 
+        period_duration={self.period_duration}, 
+        sampling_rate={self.sampling_rate}, 
+        downsample_period={self.downsample_period}'''
 
 
 class FreeViewBatch(Dataset):
@@ -215,21 +246,13 @@ class FreeViewBatch(Dataset):
 class FreeViewInMemory(Dataset):
     def __init__(self,
                  data_path = None,
-                 start_index=2,
-                 sample_duration=-1,
-                 log = False,
-                 location_test = False,
-                 segment_test = False,
-                 sampling_rate=60,
-                 downsample_int=200):
-        self.start_index = start_index
-        self.sampling_rate = sampling_rate
-        self.location_test = location_test
-        self.segment_test = segment_test
-        self.downsample = downsample_int
-        self.sample_duration = sample_duration
+                 transforms = [],
+                 log = False):
+        self.data_path = data_path
         self.log = log
+        self.transforms = transforms
         self.data_store = {}
+        
         if data_path is None:
             data_path = os.path.join('data','Coco FreeView')
         self.data_path = data_path
@@ -240,6 +263,12 @@ class FreeViewInMemory(Dataset):
                 self.data_store[key] = f[key][:] # [:] reads all data
         if self.log:
             print('Data loaded in memory')
+            if not transforms:
+                print('No transforms provided')
+            else:
+                print('Transforms:')
+                for transform in transforms:
+                    print(transform)
         self.length = self.data_store['down_gaze'].shape[0]
 
     def __len__(self):
@@ -252,43 +281,11 @@ class FreeViewInMemory(Dataset):
         # Get the pre-loaded data for this index
         x = self.data_store['down_gaze'][index].reshape((3, -1)).copy()
         y = self.data_store['fixations'][index].reshape((3, -1)).copy()
-        if self.location_test or self.segment_test:
-            gaze = self.data_store['gaze'][index].reshape((3, -1))
-
-        if self.sample_duration != -1:
-            fixation_mask = self.data_store['fixation_mask'][index]
-            x, y, start_fixation, end_fixation = extract_random_period(
-                self.start_index,
-                self.sample_duration,
-                x,
-                y,
-                fixation_mask,
-                self.sampling_rate,
-                self.downsample
-            )
-            
-        # Apply noise augmentation
-        # (Assuming your noise function can process a single [3, N] array)
-        x, _ = add_random_center_correlated_radial_noise(x,
-                                                         [320//2,512//2],1/16,
-                                                         radial_corr = .5,
-                                                         radial_avg_norm= 4.13,
-                                                         radial_std=5.5,
-                                                         center_noise_std=300,
-                                                         center_corr=.9,
-                                                         center_delta_norm=800,
-                                                         center_delta_r=.2)
-        
-        x = discretization_noise((320,512), x)
-        # normalize time
-        x[2,:] = x[2,:] - x[2,0]
-
-        if self.segment_test:
-            test_segment_is_inside(index, x, start_fixation, end_fixation, gaze, fixation_mask)
-        if self.location_test:
-            location_test(index, start_fixation, end_fixation, gaze, fixation_mask, y)
-        
-        return x, y
+        fixation_mask = self.data_store['fixation_mask'][index]
+        input = {'x': x, 'y': y, 'fixation_mask': fixation_mask}
+        for transform in self.transforms:
+            input = transform(input)
+        return input['x'], input['y']
     
 
 def build_attn_mask(input_lengths, allow_start = False):

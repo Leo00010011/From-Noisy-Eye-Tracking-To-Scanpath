@@ -2,14 +2,36 @@ defaults:
   - split_strategy: disjoint
   - _self_
 
-sample_duration:  2600
-start_index:  2
-batch_size: 128
-use_img_dataset: True
-num_workers: 4
-persistent_workers: True
-prefetch_factor: 2
-img_size: 256
-pin_memory: True
-use_cached_img_dataset: True
-log:  False
+load:
+  batch_size: 128
+  use_img_dataset: True
+  num_workers: 4
+  persistent_workers: True
+  prefetch_factor: 2
+  pin_memory: True
+  use_cached_img_dataset: True
+  img_size: 256
+  coord_height: 320
+  coord_width: 512
+  log: True
+transforms:
+  transform_list: ['ExtractRandomPeriod', 'AddRandomCenterCorrelatedRadialNoise', 'DiscretizationNoise']
+  ExtractRandomPeriod:
+    start_index: 2
+    period_duration: 2600
+    sampling_rate: 60
+    downsample_period: 200
+  AddRandomCenterCorrelatedRadialNoise:
+    initial_center_i: "${half:${data.load.coord_height}}"
+    initial_center_j: "${half:${data.load.coord_width}}"
+    angle_to_pixels: 16
+    radial_corr: 0.5
+    radial_avg_norm: 4.13
+    radial_std: 5.5
+    center_noise_std: 300
+    center_corr: 0.9
+    center_delta_norm: 800
+    center_delta_r: 0.2
+  DiscretizationNoise:
+    image_H: "${data.load.coord_height}"
+    image_W: "${data.load.coord_width}"

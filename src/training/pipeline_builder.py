@@ -2,13 +2,40 @@ import torch
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
 import numpy as np
-from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
+from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn, ExtractRandomPeriod
 from src.data.parsers import CocoFreeView
+from src.preprocess.noise import  AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise
 from src.model.path_model import PathModel
 from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
 from src.data.datasets import FreeViewImgDataset, CoupledDataloader, DeduplicatedMemoryDataset
 
+
+
+def build_extract_random_period(config):
+    return  ExtractRandomPeriod(
+            start_index=config.start_index,
+            period_duration=config.period_duration,
+            sampling_rate=config.sampling_rate,
+            downsample_period=config.downsample_period
+        )
+def build_add_random_center_correlated_radial_noise(config):
+    return AddRandomCenterCorrelatedRadialNoise(
+            initial_center=[config.initial_center_i, 
+                            config.initial_center_j],
+            ptoa=1/config.angle_to_pixels,
+            radial_corr=config.radial_corr,
+            radial_avg_norm=config.radial_avg_norm,
+            radial_std=config.radial_std,
+            center_noise_std=config.center_noise_std,
+            center_corr=config.center_corr,
+            center_delta_norm=config.center_delta_norm,
+            center_delta_r=config.center_delta_r
+        )
+
+def build_discretization_noise(config):
+    return DiscretizationNoise((config.image_H,
+                                config.image_W))
 
 
 class PipelineBuilder:
@@ -23,10 +50,17 @@ class PipelineBuilder:
             self.device = torch.device('cpu')
             
     def load_dataset(self):
-        self.PathDataset = FreeViewInMemory(sample_duration= self.config.data.sample_duration,
-                                     log = self.config.data.log, 
-                                     start_index=self.config.data.start_index)
-        if self.config.data.use_img_dataset:
+        transforms = []
+        for transform_str in self.config.data.transforms.transform_list:
+            transform_config = self.config.data.transforms.get(transform_str)
+            if transform_str == 'ExtractRandomPeriod':
+                transforms.append(build_extract_random_period(transform_config))
+            elif transform_str == 'AddRandomCenterCorrelatedRadialNoise':
+                transforms.append(build_add_random_center_correlated_radial_noise(transform_config))
+            elif transform_str == 'DiscretizationNoise':
+                transforms.append(build_discretization_noise(transform_config))
+        self.PathDataset = FreeViewInMemory(transforms=transforms, log=self.config.data.load.log)
+        if self.config.data.load.use_img_dataset:
             self.data = CocoFreeView()
             self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
 
@@ -92,18 +126,18 @@ class PipelineBuilder:
         return v2.Compose([to_tensor, resize, to_float, normalize])
 
     def build_dataloader(self, train_idx, val_idx, test_idx) -> DataLoader:
-        if not self.config.data.use_img_dataset:
+        if not self.config.data.load.use_img_dataset:
             train_set = Subset(self.PathDataset, train_idx)
             val_set = Subset(self.PathDataset, val_idx)
             test_set = Subset(self.PathDataset, test_idx)
-            train_dataloader = DataLoader(train_set, batch_size=self.config.data.batch_size, shuffle=True, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-            val_dataloader = DataLoader(val_set, batch_size=self.config.data.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-            test_dataloader = DataLoader(test_set, batch_size=self.config.data.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
+            train_dataloader = DataLoader(train_set, batch_size=self.config.data.load.batch_size, shuffle=True, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
+            val_dataloader = DataLoader(val_set, batch_size=self.config.data.load.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
+            test_dataloader = DataLoader(test_set, batch_size=self.config.data.load.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
             return train_dataloader, val_dataloader, test_dataloader
         else:
-            transform = PipelineBuilder.make_transform(resize_size= self.config.data.get('img_size', 256))
-            if self.config.data.use_cached_img_dataset:
-                dataset = DeduplicatedMemoryDataset(self.data, resize_size= self.config.data.get('img_size', 256), transform=transform)
+            transform = PipelineBuilder.make_transform(resize_size= self.config.data.load.img_size)
+            if self.config.data.load.use_cached_img_dataset:
+                dataset = DeduplicatedMemoryDataset(self.data, resize_size= self.config.data.load.img_size, transform=transform)
             else:
                 dataset = FreeViewImgDataset(self.data, transform=transform)
             train_set = Subset(dataset, train_idx)
@@ -112,27 +146,27 @@ class PipelineBuilder:
             train_dataloader = CoupledDataloader(self.PathDataset,
                                                  train_set,
                                                  shuffle = True,
-                                                 batch_size=self.config.data.batch_size,
-                                                 num_workers = self.config.data.num_workers,
-                                                 persistent_workers = self.config.data.persistent_workers,
-                                                 prefetch_factor = self.config.data.prefetch_factor,
-                                                 pin_memory = self.config.data.pin_memory)
+                                                 batch_size=self.config.data.load.batch_size,
+                                                 num_workers = self.config.data.load.num_workers,
+                                                 persistent_workers = self.config.data.load.persistent_workers,
+                                                 prefetch_factor = self.config.data.load.prefetch_factor,
+                                                 pin_memory = self.config.data.load.pin_memory)
             val_dataloader = CoupledDataloader(self.PathDataset,
                                                  val_set,
                                                  shuffle = False,
-                                                 batch_size=self.config.data.batch_size,
+                                                 batch_size=self.config.data.load.batch_size,
                                                  num_workers = self.config.data.num_workers,
-                                                 persistent_workers = self.config.data.persistent_workers,
-                                                 prefetch_factor = self.config.data.prefetch_factor,
-                                                 pin_memory = self.config.data.pin_memory)
+                                                 persistent_workers = self.config.data.load.persistent_workers,
+                                                 prefetch_factor = self.config.data.load.prefetch_factor,
+                                                 pin_memory = self.config.data.load.pin_memory)
             test_dataloader = CoupledDataloader(self.PathDataset,
                                                  test_set,
                                                  shuffle = False,
-                                                 batch_size=self.config.data.batch_size,
-                                                 num_workers = self.config.data.num_workers,
-                                                 persistent_workers = self.config.data.persistent_workers,
-                                                 prefetch_factor = self.config.data.prefetch_factor,
-                                                 pin_memory = self.config.data.pin_memory)
+                                                 batch_size=self.config.data.load.batch_size,
+                                                 num_workers = self.config.data.load.num_workers,
+                                                 persistent_workers = self.config.data.load.persistent_workers,
+                                                 prefetch_factor = self.config.data.load.prefetch_factor,
+                                                 pin_memory = self.config.data.load.pin_memory)
             return train_dataloader, val_dataloader, test_dataloader
     
     def clear_dataframe(self):

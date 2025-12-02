@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import copy
 import numpy as np
 from src.model.blocks import TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer
-from src.model.pos_encoders import PositionalEncoding
+from src.model.pos_encoders import PositionalEncoding, FourierPosEncoder
 
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
@@ -12,6 +12,7 @@ def _get_clones(module, N):
 class MixerModel(nn.Module):
     def __init__(self, n_encoder,
                        n_decoder,
+                       img_size = 256,
                        input_dim = 3,
                        output_dim = 3,
                        model_dim = 1024,
@@ -19,8 +20,11 @@ class MixerModel(nn.Module):
                        n_heads = 8,
                        ff_dim = 2048,
                        dropout_p = 0.1,
+                       input_encoder = None,
                        max_pos_enc = 8,
                        max_pos_dec = 4,
+                       num_freq_bands = 15,
+                       pos_enc_hidden_dim = None,
                        activation = F.relu,
                        norm_first = False ,
                        head_type = None,
@@ -45,6 +49,7 @@ class MixerModel(nn.Module):
         self.mlp_head_hidden_dim = mlp_head_hidden_dim
         self.image_encoder = image_encoder
         self.n_feature_enhancer = n_feature_enhancer
+        self.img_size = img_size
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         # input processing
@@ -56,9 +61,14 @@ class MixerModel(nn.Module):
                 self.img_input_proj = nn.Identity()
             else:
                 self.img_input_proj = nn.Linear(img_embed_dim, model_dim, **factory_mode)
-        
-        self.enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
-        self.dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
+        if input_encoder is None:
+            self.enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
+            self.dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
+        elif input_encoder == 'Fourier':
+            self.enc_coords_pe = FourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
+            self.enc_time_pe = FourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
+            self.dec_coords_pe = FourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
+            self.dec_time_pe = FourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
         # encoding
         path_layer = TransformerEncoder(model_dim = model_dim,
                                            total_dim = total_dim,
@@ -131,8 +141,21 @@ class MixerModel(nn.Module):
 
     def forward(self, src, image_src, tgt, src_mask=None, tgt_mask=None, **kwargs):
         # src, tgt shape (B,L,F)
-        src = self.enc_input_proj(src)
-        tgt = self.dec_input_proj(tgt)
+        if self.input_encoder == 'Fourier':
+            enc_coords = src[:,:,:2]
+            enc_time = src[:,:,2:3]
+            dec_coords = tgt[:,:,:2]
+            dec_time = tgt[:,:,2:3]
+            enc_coords = self.enc_coords_pe(enc_coords)
+            enc_time = self.enc_time_pe(enc_time)
+            dec_coords = self.dec_coords_pe(dec_coords)
+            dec_time = self.dec_time_pe(dec_time)
+            # add the time and coords 
+            src = enc_coords + enc_time
+            tgt = dec_coords + dec_time
+        else:
+            src = self.enc_input_proj(src)
+            tgt = self.dec_input_proj(tgt)
         # sum up the positional encodings (max_pos, model_dim) -> (L, model_dim)
         enc_pe = self.enc_pe.pe.unsqueeze(0)
         dec_pe = self.dec_pe.pe.unsqueeze(0)

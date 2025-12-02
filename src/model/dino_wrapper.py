@@ -35,7 +35,6 @@ class DinoV3Wrapper(nn.Module):
         if self.freeze:
             self.model.eval()
             with torch.inference_mode():
-                # We assume x is already properly normalized/transformed by the pipeline
                 out = self.model.get_intermediate_layers(x, n=1, reshape=True, norm=True, return_class_token=True)
         else:
             self.model.train()
