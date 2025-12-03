@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import copy
 import numpy as np
 from src.model.blocks import TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer
-from src.model.pos_encoders import PositionalEncoding, FourierPosEncoder
+from src.model.pos_encoders import PositionalEncoding, GaussianFourierPosEncoder
 
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
@@ -29,11 +29,12 @@ class MixerModel(nn.Module):
                        norm_first = False ,
                        head_type = None,
                        mlp_head_hidden_dim = None,
-                       device = 'cpu',
                        image_encoder = None,
                        n_feature_enhancer = 1,
                        image_dim = None,
-                       dtype = torch.float32):
+                       pos_enc_sigma = 1.0,
+                       dtype = torch.float32,
+                       device = 'cpu'):
         super().__init__()
         factory_mode = {'device':device, 'dtype': dtype}
         self.name = 'MixerModel'
@@ -53,6 +54,7 @@ class MixerModel(nn.Module):
         self.num_freq_bands = num_freq_bands
         self.pos_enc_hidden_dim = pos_enc_hidden_dim
         self.input_encoder = input_encoder
+        self.pos_enc_sigma = pos_enc_sigma
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         # input processing
@@ -62,10 +64,10 @@ class MixerModel(nn.Module):
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
             self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
         elif input_encoder == 'Fourier':
-            self.enc_coords_pe = FourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
-            self.enc_time_pe = FourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
-            self.dec_coords_pe = FourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
-            self.dec_time_pe = FourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
+            self.enc_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, sigma, **factory_mode)
+            self.enc_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, sigma, **factory_mode)
+            self.dec_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, sigma, **factory_mode)
+            self.dec_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, sigma, **factory_mode)
         else:
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         if image_encoder is not None:

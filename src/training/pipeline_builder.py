@@ -231,6 +231,7 @@ class PipelineBuilder:
                               device = self.device,
                               image_encoder = image_encoder,
                               n_feature_enhancer = self.config.model.n_feature_enhancer,
+                              pos_enc_sigma = self.config.model.pos_enc_sigma,
                               image_dim = image_dim)
         elif model_name == 'PathModel':
             model = PathModel(input_dim = self.config.model.input_dim,
