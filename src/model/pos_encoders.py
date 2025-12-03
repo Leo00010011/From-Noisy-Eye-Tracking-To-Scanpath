@@ -45,11 +45,15 @@ class FourierPosEncoder(nn.Module):
         )
 
     def forward(self, x):
+        # (B,L,F) or (B,L)
+        if self.input_dim == 1:
+            x = x.unsqueeze(-1)
         x = x * torch.pi
-
+        # (B,L,F) -> (B,L,F,freqs)
         x_expanded = x.unsqueeze(-1) * self.freqs 
-        
+        # (B,L,F,freqs) -> (B,L,F,freqs*2)
         x_cat = torch.cat([torch.sin(x_expanded) ,torch.cos(x_expanded)], dim=-1)
+        # (B,L,F,freqs*2) -> (B,L,F*freqs*2)
         x_flat = x_cat.flatten(start_dim=-2)
         
         return self.mlp(x_flat)

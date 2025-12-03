@@ -75,7 +75,7 @@ class ExtractRandomPeriod:
         )
         input['x'] = x
         input['y'] = y
-        
+        return input
         
     def __repr__(self):
         return f'ExtractRandomPeriod'
@@ -86,7 +86,42 @@ class ExtractRandomPeriod:
         period_duration={self.period_duration}, 
         sampling_rate={self.sampling_rate}, 
         downsample_period={self.downsample_period}'''
+        
+class Normalize:
+    def __init__(self,key, max_value):
+        self.key = key
+        self.max_value = max_value
 
+    def __call__(self,input):
+        x = input['x']
+        if self.key == 'coords':
+            x[:2] = x[:2] / self.max_value.unsqueeze(-1)
+        elif self.key == 'time':
+            x[2] = x[2] / self.max_value
+        input['x'] = x
+        return input
+
+    def __repr__(self):
+        return f'Normalize'
+    
+    def __str__(self):
+        return f'''+ Normalize
+        key={self.key}, 
+        max_value={self.max_value}'''
+    
+class StandarizeTime:
+    def __call__(self,input):
+        x = input['x']
+        x[2] = x[2] - x[2,0]
+        input['x'] = x
+        return input
+
+    def __repr__(self):
+        return f'StandarizeTime'
+    
+    def __str__(self):
+        return f'''+ StandarizeTime'''
+    
 
 class FreeViewBatch(Dataset):
     '''

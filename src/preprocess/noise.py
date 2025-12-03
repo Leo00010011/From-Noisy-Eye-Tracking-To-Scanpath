@@ -396,7 +396,7 @@ class AddRandomCenterCorrelatedRadialNoise:
 
     def __call__(self, input):
 
-        x = add_random_center_correlated_radial_noise(
+        x, _ = add_random_center_correlated_radial_noise(
             input['x'], 
             self.initial_center, 
             self.ptoa, 

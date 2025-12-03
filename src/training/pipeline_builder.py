@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
 import numpy as np
-from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn, ExtractRandomPeriod
+from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn, ExtractRandomPeriod, Normalize, StandarizeTime
 from src.data.parsers import CocoFreeView
 from src.preprocess.noise import  AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise
 from src.model.path_model import PathModel
@@ -37,6 +37,12 @@ def build_discretization_noise(config):
     return DiscretizationNoise((config.image_H,
                                 config.image_W))
 
+def build_normalize_coords(config):
+    max_value = torch.tensor([config.image_W,config.image_H])
+    return Normalize(key=config.key, max_value=max_value)
+
+def build_normalize_time(config):
+    return Normalize(key=config.key, max_value=config.period_duration)
 
 class PipelineBuilder:
     def __init__(self, config):
@@ -59,6 +65,12 @@ class PipelineBuilder:
                 transforms.append(build_add_random_center_correlated_radial_noise(transform_config))
             elif transform_str == 'DiscretizationNoise':
                 transforms.append(build_discretization_noise(transform_config))
+            elif transform_str == 'NormalizeCoords':
+                transforms.append(build_normalize_coords(transform_config))
+            elif transform_str == 'NormalizeTime':
+                transforms.append(build_normalize_time(transform_config))
+            elif transform_str == 'StandarizeTime':
+                transforms.append(StandarizeTime())
         self.PathDataset = FreeViewInMemory(transforms=transforms, log=self.config.data.load.log)
         if self.config.data.load.use_img_dataset:
             self.data = CocoFreeView()
@@ -155,7 +167,7 @@ class PipelineBuilder:
                                                  val_set,
                                                  shuffle = False,
                                                  batch_size=self.config.data.load.batch_size,
-                                                 num_workers = self.config.data.num_workers,
+                                                 num_workers = self.config.data.load.num_workers,
                                                  persistent_workers = self.config.data.load.persistent_workers,
                                                  prefetch_factor = self.config.data.load.prefetch_factor,
                                                  pin_memory = self.config.data.load.pin_memory)
@@ -204,6 +216,9 @@ class PipelineBuilder:
                               ff_dim = self.config.model.ff_dim,
                               max_pos_enc = self.config.model.max_pos_enc,
                               max_pos_dec = self.config.model.max_pos_dec,
+                              input_encoder = self.config.model.input_encoder,
+                              num_freq_bands = self.config.model.num_freq_bands,
+                              pos_enc_hidden_dim = self.config.model.pos_enc_hidden_dim,
                               norm_first = self.config.model.norm_first,
                               dropout_p= self.config.model.dropout_p,
                               head_type = self.config.model.get('head_type', 'linear'),

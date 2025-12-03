@@ -50,25 +50,30 @@ class MixerModel(nn.Module):
         self.image_encoder = image_encoder
         self.n_feature_enhancer = n_feature_enhancer
         self.img_size = img_size
+        self.num_freq_bands = num_freq_bands
+        self.pos_enc_hidden_dim = pos_enc_hidden_dim
+        self.input_encoder = input_encoder
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         # input processing
-        self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
-        self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
+        self.time_dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
+        self.time_enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
+        if input_encoder is 'Original':
+            self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
+            self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
+        elif input_encoder == 'Fourier':
+            self.enc_coords_pe = FourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
+            self.enc_time_pe = FourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
+            self.dec_coords_pe = FourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
+            self.dec_time_pe = FourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
+        else:
+            raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         if image_encoder is not None:
             img_embed_dim = image_encoder.embed_dim
             if img_embed_dim == model_dim:
                 self.img_input_proj = nn.Identity()
             else:
                 self.img_input_proj = nn.Linear(img_embed_dim, model_dim, **factory_mode)
-        if input_encoder is None:
-            self.enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
-            self.dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
-        elif input_encoder == 'Fourier':
-            self.enc_coords_pe = FourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
-            self.enc_time_pe = FourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
-            self.dec_coords_pe = FourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
-            self.dec_time_pe = FourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
         # encoding
         path_layer = TransformerEncoder(model_dim = model_dim,
                                            total_dim = total_dim,
@@ -142,26 +147,28 @@ class MixerModel(nn.Module):
     def forward(self, src, image_src, tgt, src_mask=None, tgt_mask=None, **kwargs):
         # src, tgt shape (B,L,F)
         if self.input_encoder == 'Fourier':
+            # separate the coordinates and time or duration
             enc_coords = src[:,:,:2]
-            enc_time = src[:,:,2:3]
+            enc_time = src[:,:,2]
             dec_coords = tgt[:,:,:2]
-            dec_time = tgt[:,:,2:3]
+            dec_dur = tgt[:,:,2]
+            # apply the fourier encodings
             enc_coords = self.enc_coords_pe(enc_coords)
             enc_time = self.enc_time_pe(enc_time)
             dec_coords = self.dec_coords_pe(dec_coords)
-            dec_time = self.dec_time_pe(dec_time)
+            dec_dur = self.dec_time_pe(dec_dur)
             # add the time and coords 
             src = enc_coords + enc_time
-            tgt = dec_coords + dec_time
+            tgt = dec_coords + dec_dur
         else:
+            # apply the linear projections
             src = self.enc_input_proj(src)
             tgt = self.dec_input_proj(tgt)
-        # sum up the positional encodings (max_pos, model_dim) -> (L, model_dim)
-        enc_pe = self.enc_pe.pe.unsqueeze(0)
-        dec_pe = self.dec_pe.pe.unsqueeze(0)
-        start = self.start_token.expand(tgt.size(0),-1,-1)
+        # apply the order positional encodings
+        enc_pe = self.time_enc_pe.pe.unsqueeze(0)
         src = src + enc_pe[:,:src.size()[1],:]
-        # add the start to tgt
+        dec_pe = self.time_dec_pe.pe.unsqueeze(0)
+        start = self.start_token.expand(tgt.size(0),-1,-1)
         tgt = torch.cat([start, tgt], dim = 1)
         tgt = tgt + dec_pe[:,:tgt.size()[1],:]
         # encoding path
