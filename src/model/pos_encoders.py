@@ -43,6 +43,7 @@ class FourierPosEncoder(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, output_dim)
         )
+        self.mlp.to(device = device, dtype = dtype)
 
     def forward(self, x):
         # (B,L,F) or (B,L)
