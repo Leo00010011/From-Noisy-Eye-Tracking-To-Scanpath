@@ -18,11 +18,10 @@ class GaussianFourierPosEncoder(nn.Module):
     def __init__(self, input_dim, mapping_size, hidden_dim, output_dim, sigma=1.0, device='cpu', dtype=torch.float32):
         """
         Args:
-            mapping_size: Number of random Fourier features (output will be mapping_size * 2).
+            mapping_size: Number of random Fourier features (output will be input_dim * mapping_size * 2).
                           Replaces 'num_freq_bands'.
             sigma: Bandwidth parameter. 
                    LOW sigma (e.g., 1.0) = smooth functions (prevents overfitting).
-                   HIGH sigma (e.g., 10.0) = sharp high-freq details (causes overfitting).
         """
         super().__init__()
         self.input_dim = input_dim

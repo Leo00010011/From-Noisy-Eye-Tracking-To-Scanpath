@@ -170,7 +170,7 @@ class PipelineBuilder:
                                                  persistent_workers = self.config.data.load.persistent_workers,
                                                  prefetch_factor = self.config.data.load.prefetch_factor,
                                                  pin_memory = self.config.data.load.pin_memory,
-                                                 drop_last_batch = True)
+                                                 drop_last_batch = False)
             val_dataloader = CoupledDataloader(self.PathDataset,
                                                  val_set,
                                                  shuffle = False,
@@ -179,7 +179,7 @@ class PipelineBuilder:
                                                  persistent_workers = self.config.data.load.persistent_workers,
                                                  prefetch_factor = self.config.data.load.prefetch_factor,
                                                  pin_memory = self.config.data.load.pin_memory,
-                                                 drop_last_batch = True)
+                                                 drop_last_batch = False)
             test_dataloader = CoupledDataloader(self.PathDataset,
                                                  test_set,
                                                  shuffle = False,
@@ -188,7 +188,7 @@ class PipelineBuilder:
                                                  persistent_workers = self.config.data.load.persistent_workers,
                                                  prefetch_factor = self.config.data.load.prefetch_factor,
                                                  pin_memory = self.config.data.load.pin_memory,
-                                                 drop_last_batch = True)
+                                                 drop_last_batch = False)
             return train_dataloader, val_dataloader, test_dataloader
     
     def clear_dataframe(self):

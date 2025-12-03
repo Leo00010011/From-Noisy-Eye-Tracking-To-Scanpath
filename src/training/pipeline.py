@@ -26,7 +26,7 @@ def train(builder:PipelineBuilder):
         if builder.config.training.log:
             print(model.param_summary())
         if builder.config.model.compilate:
-            model = torch.compile(model) 
+            model = torch.compile(model, dynamic=True) 
         
         optimizer = builder.build_optimizer(model)
         scheduler = builder.build_scheduler(optimizer, train_dataloader)
