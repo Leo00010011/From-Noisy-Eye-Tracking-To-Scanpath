@@ -454,8 +454,8 @@ class DeduplicatedMemoryDataset(Dataset):
             resize_size: Target size for caching
         """
         self.data = data
-        total_len = len(data)
-
+        self.resize_size = resize_size
+        self.data_path = data.data_path
         self.ingest_transform = v2.Compose([
             v2.ToImage(),
             v2.Resize((resize_size, resize_size), antialias=True),
@@ -463,14 +463,26 @@ class DeduplicatedMemoryDataset(Dataset):
         ])
 
         self.runtime_transform = transform
+        self.all_image_path = os.path.join(self.data_path, f'all_images_{resize_size}.pth')
+        unique_paths, indices = self.build_index()
+        self.unique_paths = unique_paths
+        self.indices = indices
+        if os.path.exists(self.all_image_path):
+            print('Image Bank found starting load')
+            self.image_bank = torch.load(self.all_image_path)
+        else:
+            print('Image Bank not found starting build')
+            image_bank = self.build_image_bank()
+            torch.save(image_bank, self.all_image_path)
+            self.image_bank = image_bank
 
-        # --- 2. BUILD THE INDEX MAP ---
+    def build_index(self):
         print("Scanning dataset for duplicate images...")
-        
+        data = self.data
+        total_len = len(data)
         path_to_id = {}      # Maps file_path -> unique_id
         unique_paths = []    # List of unique paths to load later
-        indices = []         # List of indices for the dataset length
-
+        indices = []  
         # We iterate once to build the map
         for i in range(total_len):
             path = data.get_img_path(i)
@@ -489,10 +501,16 @@ class DeduplicatedMemoryDataset(Dataset):
         
         num_unique = len(unique_paths)
         print(f"Found {total_len} samples, but only {num_unique} unique images.")
+        return unique_paths, indices
+
+    def build_image_bank(self):
+        resize_size = self.resize_size
+        unique_paths = self.unique_paths
+        num_unique = len(unique_paths)
         
         # --- 3. ALLOCATE & LOAD UNIQUE IMAGES ---
         print(f"Allocating RAM for {num_unique} unique images...")
-        self.image_bank = torch.empty(
+        image_bank = torch.empty(
             (num_unique, 3, resize_size, resize_size), 
             dtype=torch.uint8
         )
@@ -500,7 +518,8 @@ class DeduplicatedMemoryDataset(Dataset):
         print("Hydrating unique image bank...")
         for i, path in tqdm(enumerate(unique_paths), total=num_unique):
             img = Image.open(path).convert("RGB")
-            self.image_bank[i] = self.ingest_transform(img)
+            image_bank[i] = self.ingest_transform(img)
+        return image_bank
 
     def __getitem__(self, idx):
         unique_idx = self.indices[idx]

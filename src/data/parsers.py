@@ -26,6 +26,7 @@ class CocoFreeView:
         #TODO Add Coco Search to the Dataset
         if data_path is None:
             data_path = os.path.join('data', 'Coco FreeView')
+        self.data_path = data_path
         json_path = os.path.join(data_path, 'COCOFreeView_fixations_trainval.json')
         with open(json_path, 'r') as f:
             data = json.load(f)

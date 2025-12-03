@@ -38,4 +38,9 @@ class DinoV3Wrapper(nn.Module):
             self.model.eval()
         with torch.inference_mode():
             out = self.model.get_intermediate_layers(x, n=1, reshape=True, norm=True, return_class_token=True)
-        return out
+        
+        feats, cls_token = out[0]
+        cls_token = cls_token.unsqueeze(1)
+        feats = feats.flatten(2,3).permute(0,2,1) # (B, H*W, F)
+        return torch.cat([feats, cls_token], dim=1)
+
