@@ -27,15 +27,20 @@ class DinoV3Wrapper(nn.Module):
         self.model.to(device)
         self.embed_dim = self.model.embed_dim
         if freeze:
-            if not self.regularization:
+            if self.regularization:
+                self.model.train()
+            else:
                 self.model.eval()
             for param in self.model.parameters():
                 param.requires_grad = False
                 
     @torch.compiler.disable
     def forward(self, x):
-        if not self.regularization:
+        if self.regularization:
+            self.model.train()
+        else:
             self.model.eval()
+        
         with torch.inference_mode():
             out = self.model.get_intermediate_layers(x, n=1, reshape=True, norm=True, return_class_token=True)
         
