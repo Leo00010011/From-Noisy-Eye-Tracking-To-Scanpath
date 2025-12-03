@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
 import numpy as np
-from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn, ExtractRandomPeriod, Normalize, StandarizeTime
+from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn, ExtractRandomPeriod, Normalize, StandarizeTime, LogNormalizeDuration
 from src.data.parsers import CocoFreeView
 from src.preprocess.noise import  AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise
 from src.model.path_model import PathModel
@@ -44,6 +44,9 @@ def build_normalize_coords(config):
 def build_normalize_time(config):
     return Normalize(key=config.key, mode=config.mode, max_value=config.period_duration)
 
+def build_log_normalize_duration(config):
+    return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale)
+
 class PipelineBuilder:
     def __init__(self, config):
         # dataset parameters
@@ -71,6 +74,10 @@ class PipelineBuilder:
                 transforms.append(build_normalize_time(transform_config))
             elif transform_str == 'StandarizeTime':
                 transforms.append(StandarizeTime())
+            elif transform_str == 'LogNormalizeDuration':
+                transforms.append(build_log_normalize_duration(transform_config))
+            else:
+                raise ValueError(f"Transform {transform_str} not supported.")
         self.PathDataset = FreeViewInMemory(transforms=transforms, log=self.config.data.load.log)
         if self.config.data.load.use_img_dataset:
             self.data = CocoFreeView()

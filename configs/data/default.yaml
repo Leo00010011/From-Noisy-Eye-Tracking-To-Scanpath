@@ -16,7 +16,7 @@ load:
   log: True
 transforms:
   transform_list: ['ExtractRandomPeriod', 'StandarizeTime', 'AddRandomCenterCorrelatedRadialNoise', 
-                   'DiscretizationNoise', 'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords']
+                   'DiscretizationNoise', 'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration']
   ExtractRandomPeriod:
     start_index: 2
     period_duration: 2600
@@ -50,3 +50,7 @@ transforms:
     mode: "coords"
     image_H: "${data.load.coord_height}"
     image_W: "${data.load.coord_width}"
+  LogNormalizeDuration:
+    mean: 5.4481
+    std: 0.5076
+    scale: 0.5

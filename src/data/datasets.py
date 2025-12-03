@@ -109,7 +109,29 @@ class Normalize:
         return f'''+ Normalize
         key={self.key}, 
         max_value={self.max_value}'''
+        
+class LogNormalizeDuration:
+    def __init__(self, mean, std, scale):
+        self.mean = mean
+        self.std = std
+        self.scale = scale
+        
+    def __call__(self,input):
+        d = input['y'][2]
+        d = (torch.log1p(d) - self.mean) / self.std
+        d = d * self.scale
+        input['y'][2] = d
+        return input
     
+    def __repr__(self):
+        return f'LogNormalizeDuration'
+    
+    def __str__(self):
+        return f'''+ LogNormalizeDuration
+        mean={self.mean}, 
+        std={self.std}, 
+        scale={self.scale}'''
+        
 class StandarizeTime:
     def __call__(self,input):
         x = input['x']
