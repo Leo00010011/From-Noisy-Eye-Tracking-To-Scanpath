@@ -88,17 +88,18 @@ class ExtractRandomPeriod:
         downsample_period={self.downsample_period}'''
         
 class Normalize:
-    def __init__(self,key, max_value):
+    def __init__(self,key, mode, max_value):
         self.key = key
         self.max_value = max_value
+        self.mode = mode
 
     def __call__(self,input):
-        x = input['x']
-        if self.key == 'coords':
+        x = input[self.key]
+        if self.mode == 'coords':
             x[:2] = x[:2] / self.max_value.unsqueeze(-1)
-        elif self.key == 'time':
+        elif self.mode == 'time':
             x[2] = x[2] / self.max_value
-        input['x'] = x
+        input[self.key] = x
         return input
 
     def __repr__(self):

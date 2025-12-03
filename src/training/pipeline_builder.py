@@ -39,10 +39,10 @@ def build_discretization_noise(config):
 
 def build_normalize_coords(config):
     max_value = torch.tensor([config.image_W,config.image_H])
-    return Normalize(key=config.key, max_value=max_value)
+    return Normalize(key=config.key, mode=config.mode, max_value=max_value)
 
 def build_normalize_time(config):
-    return Normalize(key=config.key, max_value=config.period_duration)
+    return Normalize(key=config.key, mode=config.mode, max_value=config.period_duration)
 
 class PipelineBuilder:
     def __init__(self, config):
@@ -65,7 +65,7 @@ class PipelineBuilder:
                 transforms.append(build_add_random_center_correlated_radial_noise(transform_config))
             elif transform_str == 'DiscretizationNoise':
                 transforms.append(build_discretization_noise(transform_config))
-            elif transform_str == 'NormalizeCoords':
+            elif transform_str == 'NormalizeCoords' or transform_str == 'NormalizeFixationCoords':
                 transforms.append(build_normalize_coords(transform_config))
             elif transform_str == 'NormalizeTime':
                 transforms.append(build_normalize_time(transform_config))

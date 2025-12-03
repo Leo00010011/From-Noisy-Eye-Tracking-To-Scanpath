@@ -29,6 +29,7 @@ class DinoV3Wrapper(nn.Module):
         if freeze:
             if self.regularization:
                 self.model.train()
+                print('model is training')
             else:
                 self.model.eval()
             for param in self.model.parameters():
