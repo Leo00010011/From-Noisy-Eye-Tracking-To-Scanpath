@@ -162,7 +162,8 @@ class PipelineBuilder:
                                                  num_workers = self.config.data.load.num_workers,
                                                  persistent_workers = self.config.data.load.persistent_workers,
                                                  prefetch_factor = self.config.data.load.prefetch_factor,
-                                                 pin_memory = self.config.data.load.pin_memory)
+                                                 pin_memory = self.config.data.load.pin_memory,
+                                                 drop_last_batch = True)
             val_dataloader = CoupledDataloader(self.PathDataset,
                                                  val_set,
                                                  shuffle = False,
@@ -170,7 +171,8 @@ class PipelineBuilder:
                                                  num_workers = self.config.data.load.num_workers,
                                                  persistent_workers = self.config.data.load.persistent_workers,
                                                  prefetch_factor = self.config.data.load.prefetch_factor,
-                                                 pin_memory = self.config.data.load.pin_memory)
+                                                 pin_memory = self.config.data.load.pin_memory,
+                                                 drop_last_batch = True)
             test_dataloader = CoupledDataloader(self.PathDataset,
                                                  test_set,
                                                  shuffle = False,
@@ -178,7 +180,8 @@ class PipelineBuilder:
                                                  num_workers = self.config.data.load.num_workers,
                                                  persistent_workers = self.config.data.load.persistent_workers,
                                                  prefetch_factor = self.config.data.load.prefetch_factor,
-                                                 pin_memory = self.config.data.load.pin_memory)
+                                                 pin_memory = self.config.data.load.pin_memory,
+                                                 drop_last_batch = True)
             return train_dataloader, val_dataloader, test_dataloader
     
     def clear_dataframe(self):

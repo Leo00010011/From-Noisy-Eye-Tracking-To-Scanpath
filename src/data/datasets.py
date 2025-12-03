@@ -543,7 +543,8 @@ class CoupledDataloader:
                  num_workers: int,
                  prefetch_factor: int = 2,
                  pin_memory: bool = True,
-                 persistent_workers: bool = True):
+                 persistent_workers: bool = True,
+                 drop_last_batch: bool = True):
         self.path_dataset = path_dataset
         self.dataset = dataset
         self.dataloader = DataLoader(dataset,
@@ -552,7 +553,8 @@ class CoupledDataloader:
                                      num_workers=num_workers,
                                      persistent_workers=persistent_workers,
                                      prefetch_factor=prefetch_factor,
-                                     pin_memory=pin_memory)
+                                     pin_memory=pin_memory,
+                                     drop_last=drop_last_batch)
 
     def __iter__(self):
         for img_batch, idx_batch in self.dataloader:
