@@ -118,7 +118,7 @@ class LogNormalizeDuration:
         
     def __call__(self,input):
         d = input['y'][2]
-        d = (torch.log1p(d) - self.mean) / self.std
+        d = (np.log1p(d) - self.mean) / self.std
         d = d * self.scale
         input['y'][2] = d
         return input

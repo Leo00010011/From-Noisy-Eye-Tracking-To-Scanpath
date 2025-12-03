@@ -64,10 +64,10 @@ class MixerModel(nn.Module):
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
             self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
         elif input_encoder == 'Fourier':
-            self.enc_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, sigma, **factory_mode)
-            self.enc_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, sigma, **factory_mode)
-            self.dec_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, sigma, **factory_mode)
-            self.dec_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, sigma, **factory_mode)
+            self.enc_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
+            self.enc_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
+            self.dec_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
+            self.dec_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
         else:
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         if image_encoder is not None:

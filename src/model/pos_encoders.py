@@ -30,13 +30,16 @@ class GaussianFourierPosEncoder(nn.Module):
         # 1. Create the random matrix B *once*
         # We sample from a Normal distribution N(0, sigma^2)
         # Size: [input_dim, mapping_size]
-        B = torch.randn((input_dim, mapping_size), device=device, dtype=dtype) * sigma
+        if input_dim == 1:
+            B = torch.randn((mapping_size), device=device, dtype=dtype) * sigma
+        else:
+            B = torch.randn((input_dim, mapping_size), device=device, dtype=dtype) * sigma
         
         # 2. Register it as a buffer. 
         # It is NOT a parameter (no gradients), but it IS part of state_dict.
         self.register_buffer('B', B)
         
-        self.embed_dim = mapping_size * 2 # sin + cos
+        self.embed_dim = input_dim * mapping_size * 2 # sin + cos
         
         self.mlp = nn.Sequential(
             nn.Linear(self.embed_dim, hidden_dim),
@@ -47,15 +50,14 @@ class GaussianFourierPosEncoder(nn.Module):
 
     def forward(self, x):
         # x shape: (Batch, Seq_Len, Input_Dim)
-        
-        # SAFETY CHECK: Warn if coordinates look unnormalized
-        if x.max() > 1.5 or x.min() < -1.5:
-             # Just printing once to debug, remove in production
-            print(f"WARNING: Input x range is [{x.min():.2f}, {x.max():.2f}]. Fourier features fail without normalization!")
-
         # 1. Project input: (2*pi*x) @ B
         # (B, L, input_dim) @ (input_dim, mapping_size) -> (B, L, mapping_size)
-        projected = (2 * torch.pi * x) @ self.B
+        x = x.unsqueeze(-1)
+        if self.input_dim == 1:
+            projected = (2 * torch.pi * x) * self.B
+        else:
+            projected = (2 * torch.pi * x) * self.B
+            projected = projected.flatten(start_dim=-2)
         
         # 2. Fourier features: [sin, cos]
         # -> (B, L, mapping_size * 2)
