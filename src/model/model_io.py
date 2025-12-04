@@ -144,6 +144,7 @@ def load_model_for_eval(pipe, path):
 
     model.load_state_dict(new_state_dict)
     if hasattr(model, 'image_encoder'):
+        print("Disabling image encoder regularization")
         model.image_encoder.regularization = False
     return model
 
