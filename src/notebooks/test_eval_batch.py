@@ -85,7 +85,7 @@ def invert_transforms(inputs, outputs, dataloader):
     if hasattr(dataloader, 'path_dataset'):
         transforms = dataloader.path_dataset.transforms
     else:
-        transforms = dataloader.dataset.transforms
+        transforms = dataloader.dataset.dataset.transforms
     # reverse the transforms
     for transform in reversed(transforms):
         if transform.modify_y:
