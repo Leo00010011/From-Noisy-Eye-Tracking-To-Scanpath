@@ -82,7 +82,10 @@ def plot_classification_scores(cls_out,fixation_len, title="Classification Score
 def invert_transforms(inputs, outputs, dataloader):
     pred_reg = outputs['reg']
     gt_reg = inputs['tgt']
-    transforms = dataloader.path_dataset.transforms
+    if hasattr(dataloader, 'path_dataset'):
+        transforms = dataloader.path_dataset.transforms
+    else:
+        transforms = dataloader.dataset.transforms
     # reverse the transforms
     for transform in reversed(transforms):
         if transform.modify_y:
