@@ -157,8 +157,8 @@ for i, (model, _, _, test_dataloader) in enumerate(models_and_data):
             pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
             rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
             coord_error, dur_error = eval_reg(reg_out, y, y_mask)
-            coord_error_acum += coord_error.item()
-            dur_error_acum += dur_error.item()
+            coord_error_acum += coord_error
+            dur_error_acum += dur_error
             count += 1
     output = {
         'y_results': (y_results),
