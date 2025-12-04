@@ -43,6 +43,7 @@ class Normalize:
         self.modify_y = key == 'y'
 
     def __call__(self,input):
+        # shape (F,L)
         x = input[self.key]
         if self.mode == 'coords':
             x[:2] = x[:2] / self.max_value.unsqueeze(-1)
@@ -52,10 +53,11 @@ class Normalize:
         return input
     
     def inverse(self, y):
+        # shape (B,L,F)
         if self.mode == 'coords':
-            y[:2] = y[:2] * self.max_value.unsqueeze(-1)
+            y[:,:,:2] = y[:,:,:2] * self.max_value
         elif self.mode == 'time':
-            y[2] = y[2] * self.max_value
+            y[:,:,2] = y[:,:,2] * self.max_value
         return y
 
     def __repr__(self):
@@ -74,6 +76,7 @@ class LogNormalizeDuration:
         self.modify_y = True
         
     def __call__(self,input):
+        # shape (F,L)
         d = input['y'][2]
         d = (np.log1p(d) - self.mean) / self.std
         d = d * self.scale
@@ -81,9 +84,10 @@ class LogNormalizeDuration:
         return input
     
     def inverse(self, y):
-        d = y[2]
+        # shape (B,L,F)
+        d = y[:,:,2]
         d = torch.exp((d/self.scale*self.std) + self.mean) - 1
-        y[2] = d
+        y[:,:,2] = d
         return y
     
     def __repr__(self):
