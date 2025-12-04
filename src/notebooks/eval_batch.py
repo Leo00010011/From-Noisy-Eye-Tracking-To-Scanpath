@@ -104,9 +104,9 @@ def invert_transforms(inputs, outputs, dataloader):
 # ## Review Metrics
 
 # %%
-ckpt_path = [# os.path.join('outputs','2025-11-19','18-48-14'),
-             # os.path.join('outputs','2025-11-27','17-35-19'),
-             # os.path.join('outputs','2025-11-28','12-28-42'),
+ckpt_path = [os.path.join('outputs','2025-11-19','18-48-14'),
+             os.path.join('outputs','2025-11-27','17-35-19'),
+             os.path.join('outputs','2025-11-28','12-28-42'),
              os.path.join('outputs','2025-12-03','17-10-55'),]
 
 # %% [markdown]
@@ -127,10 +127,76 @@ for i, (model, _, _, test_dataloader) in enumerate(models_and_data):
         input = move_data_to_device(batch, device)
         with torch.no_grad():
             output = model(**input)
-            
+            inputs, outputs = invert_transforms(input, output, test_dataloader)
+            inputs_outputs.append((inputs, outputs))
+            cls_loss, reg_loss = compute_loss(inputs, outputs)
+            print(f'Cls Loss: {cls_loss:.4f}, Reg Loss: {reg_loss:.4f}')
+            reg_out, cls_out = outputs['reg'], outputs['cls']
+            y, y_mask, fixation_len = inputs['tgt'], inputs['tgt_mask'], inputs['fixation_len']
+            cls_targets = create_cls_targets(cls_out, fixation_len)
+            print('accuracy: ',accuracy(cls_out, y_mask, cls_targets))
+            print('precision_pos: ',precision(cls_out, y_mask, cls_targets))
+            print('recall_pos: ',recall(cls_out, y_mask, cls_targets))
+            print('precision_neg: ',precision(cls_out, y_mask, cls_targets, cls = 0))
+            print('recall_neg: ',recall(cls_out, y_mask, cls_targets, cls = 0))
+            reg_error, dur_error = eval_reg(reg_out, y, y_mask)
+            print(f'Regression error (pixels): {reg_error:.4f}, Duration error ({dur_error:.4f})')
         break
+    print(f'Model {i+1}')
     del model
     torch.cuda.empty_cache()
     gc.collect()
-    print(f'Model {i+1}')
 torch.save(inputs_outputs, f'inputs_outputs_{i+1}.pth')
+
+
+
+with torch.no_grad():
+    for i, (model, _, _, test_dataloader) in enumerate(models_and_data):  
+        print(f'Model {i} Evaluation')
+        model.eval()
+        acc_acum = 0
+        pre_pos_acum = 0
+        rec_pos_acum = 0
+        pre_neg_acum = 0
+        rec_neg_acum = 0
+        coord_error_acum = 0
+        dur_error_acum = 0
+        count = 0
+        reg_results = []
+        y_results = []
+        x_results = []
+        for batch in tqdm(test_dataloader):
+            input = move_data_to_device(batch, device)
+            with torch.no_grad():
+                output = model(**input)
+                inputs, outputs = invert_transforms(input, output, test_dataloader)
+                reg_results += batch_to_list(reg_out, fixation_len)
+                y_results += batch_to_list(y, fixation_len)
+                x_results += batch_to_list(x)
+                cls_targets = create_cls_targets(cls_out, fixation_len)
+                acc_acum += accuracy(cls_out, y_mask, cls_targets)
+                pre_pos_acum += precision(cls_out, y_mask, cls_targets)
+                rec_pos_acum += recall(cls_out, y_mask, cls_targets)
+                pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
+                rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
+                coord_error, dur_error = eval_reg(reg_out, y, y_mask)
+                coord_error_acum += coord_error.item()
+                dur_error_acum += dur_error.item()
+                count += 1
+        output = {
+            'y_results': (y_results),
+            'x_results': (x_results),
+            'reg_list': (reg_results),
+            'coord_error_list': (coord_error_acum/count),
+            'dur_error_list': (dur_error_acum/count),
+            'acc_list': (acc_acum/count),
+            'pre_pos_list': (pre_pos_acum/count),
+            'rec_pos_list': (rec_pos_acum/count),
+            'pre_neg_list': (pre_neg_acum/count),
+            'rec_neg_list': (rec_neg_acum/count),
+        }
+        torch.save(inputs_outputs, f'all_outputs_model_{i+1}.pth')
+        del model
+        torch.cuda.empty_cache()
+        gc.collect()
+
