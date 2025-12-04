@@ -32,7 +32,7 @@ def plt_training_metrics(path_list, start_epoch=0):
                     axis[1,0].plot(metrics['epoch'][start_idx:],metrics[k][start_idx:], label=f"{idx}{k}")
                 else:
                     axis[1,1].plot(metrics['epoch'][start_idx:], metrics[k][start_idx:], label=f"{idx}{k}")
-    axis[0,0].hlines([8000], xmin=0, xmax=metrics['epoch'][-1], colors='red', linestyles='dashed')
+    # axis[0,0].hlines([8000], xmin=0, xmax=metrics['epoch'][-1], colors='red', linestyles='dashed')
     axis[0,0].legend()
     axis[0,1].legend()
     axis[1,0].legend()

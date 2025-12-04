@@ -2,9 +2,9 @@ import torch
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
 import numpy as np
-from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn, ExtractRandomPeriod, Normalize, StandarizeTime, LogNormalizeDuration
+from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.data.parsers import CocoFreeView
-from src.preprocess.noise import  AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise
+from src.data.transforms import ExtractRandomPeriod, Normalize, StandarizeTime, LogNormalizeDuration, AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise
 from src.model.path_model import PathModel
 from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
@@ -14,28 +14,28 @@ from src.data.datasets import FreeViewImgDataset, CoupledDataloader, Deduplicate
 
 def build_extract_random_period(config):
     return  ExtractRandomPeriod(
-            start_index=config.start_index,
-            period_duration=config.period_duration,
-            sampling_rate=config.sampling_rate,
-            downsample_period=config.downsample_period
+            start_index=config.get('start_index', 2),
+            period_duration=config.get('period_duration', 2600),
+            sampling_rate=config.get('sampling_rate', 60),
+            downsample_period=config.get('downsample_period', 200)
         )
 def build_add_random_center_correlated_radial_noise(config):
     return AddRandomCenterCorrelatedRadialNoise(
-            initial_center=[config.initial_center_i, 
-                            config.initial_center_j],
-            ptoa=1/config.angle_to_pixels,
-            radial_corr=config.radial_corr,
-            radial_avg_norm=config.radial_avg_norm,
-            radial_std=config.radial_std,
-            center_noise_std=config.center_noise_std,
-            center_corr=config.center_corr,
-            center_delta_norm=config.center_delta_norm,
-            center_delta_r=config.center_delta_r
+            initial_center=[config.get('initial_center_i', 320//2), 
+                            config.get('initial_center_j', 512//2)],
+            ptoa=1/config.get('angle_to_pixels',16),
+            radial_corr=config.get('radial_corr',0.5),
+            radial_avg_norm=config.get('radial_avg_norm',4.13),
+            radial_std=config.get('radial_std',5.5),
+            center_noise_std=config.get('center_noise_std',300),
+            center_corr=config.get('center_corr',0.9),
+            center_delta_norm=config.get('center_delta_norm',800),
+            center_delta_r=config.get('center_delta_r',0.2)
         )
 
 def build_discretization_noise(config):
-    return DiscretizationNoise((config.image_H,
-                                config.image_W))
+    return DiscretizationNoise((config.get('image_H',320),
+                                config.get('image_W',512)))
 
 def build_normalize_coords(config):
     max_value = torch.tensor([config.image_W,config.image_H])
@@ -51,6 +51,9 @@ class PipelineBuilder:
     def __init__(self, config):
         # dataset parameters
         self.config = config
+        self.PathDataset = None
+        self.img_dataset = None
+        self.data = None
         if self.config.model.device.startswith('cuda') and torch.cuda.is_available():
             self.device = torch.device(self.config.model.device)
         else:
@@ -60,28 +63,61 @@ class PipelineBuilder:
             
     def load_dataset(self):
         transforms = []
-        for transform_str in self.config.data.transforms.transform_list:
-            transform_config = self.config.data.transforms.get(transform_str)
-            if transform_str == 'ExtractRandomPeriod':
-                transforms.append(build_extract_random_period(transform_config))
-            elif transform_str == 'AddRandomCenterCorrelatedRadialNoise':
-                transforms.append(build_add_random_center_correlated_radial_noise(transform_config))
-            elif transform_str == 'DiscretizationNoise':
-                transforms.append(build_discretization_noise(transform_config))
-            elif transform_str == 'NormalizeCoords' or transform_str == 'NormalizeFixationCoords':
-                transforms.append(build_normalize_coords(transform_config))
-            elif transform_str == 'NormalizeTime':
-                transforms.append(build_normalize_time(transform_config))
-            elif transform_str == 'StandarizeTime':
-                transforms.append(StandarizeTime())
-            elif transform_str == 'LogNormalizeDuration':
-                transforms.append(build_log_normalize_duration(transform_config))
+        # check if self.config.data.transforms exits
+        if hasattr(self.config.data, 'transforms'):
+            for transform_str in self.config.data.transforms.transform_list:
+                transform_config = self.config.data.transforms.get(transform_str)
+                if transform_str == 'ExtractRandomPeriod':
+                    transforms.append(build_extract_random_period(transform_config))
+                elif transform_str == 'AddRandomCenterCorrelatedRadialNoise':
+                    transforms.append(build_add_random_center_correlated_radial_noise(transform_config))
+                elif transform_str == 'DiscretizationNoise':
+                    transforms.append(build_discretization_noise(transform_config))
+                elif transform_str == 'NormalizeCoords' or transform_str == 'NormalizeFixationCoords':
+                    transforms.append(build_normalize_coords(transform_config))
+                elif transform_str == 'NormalizeTime':
+                    transforms.append(build_normalize_time(transform_config))
+                elif transform_str == 'StandarizeTime':
+                    transforms.append(StandarizeTime())
+                elif transform_str == 'LogNormalizeDuration':
+                    transforms.append(build_log_normalize_duration(transform_config))
+                else:
+                    raise ValueError(f"Transform {transform_str} not supported.")
+        else:
+            transforms = [build_extract_random_period(self.config.data),
+                          build_add_random_center_correlated_radial_noise(self.config.data),
+                          build_discretization_noise(self.config.data)]
+        if self.PathDataset is None:
+            
+            # Check if 'load' attribute exists in self.config.data; if not, use it directly from data
+            log = getattr(self.config.data, 'load', None)
+            if log is not None and hasattr(self.config.data.load, 'log'):
+                log_value = self.config.data.load.log
+            elif hasattr(self.config.data, 'log'):
+                log_value = self.config.data.log
             else:
-                raise ValueError(f"Transform {transform_str} not supported.")
-        self.PathDataset = FreeViewInMemory(transforms=transforms, log=self.config.data.load.log)
-        if self.config.data.load.use_img_dataset:
-            self.data = CocoFreeView()
-            self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
+                raise AttributeError("Neither 'load.log' nor 'log' is present in self.config.data")
+            self.PathDataset = FreeViewInMemory(transforms=transforms, log=log_value)
+        else:
+            self.PathDataset.transforms = transforms
+        # Check 'use_img_dataset' in 'load', if not, look in data directly
+        load_config = None
+        if hasattr(self.config.data, 'load'):
+            load_config = self.config.data.load
+        else:
+            load_config = self.config.data
+        if hasattr(load_config, 'use_img_dataset') and load_config.use_img_dataset:
+            if self.data is None:
+                self.data = CocoFreeView()
+                self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
+            transform = PipelineBuilder.make_transform(resize_size= load_config.img_size)
+            if self.img_dataset is None:
+                self.img_dataset = DeduplicatedMemoryDataset(self.data, resize_size= load_config.img_size, transform=transform)
+            else:
+                self.img_dataset.resize_size = load_config.img_size
+                self.img_dataset.runtime_transform = transform
+            #else:
+            #    self.img_dataset = FreeViewImgDataset(self.data, transform=transform)
 
     def split_data(array, ratios):
         indices = np.arange(len(array))
@@ -108,7 +144,7 @@ class PipelineBuilder:
 
 
     def make_splits(self):
-        if self.config.data.split_strategy.name == "disjoint":
+        if hasattr(self.config.data, 'split_strategy') and self.config.data.split_strategy.name == 'disjoint':
             subjects = self.data.get_all_subjects()
             train_subjects , val_subjects , test_subjects  = PipelineBuilder.split_data(subjects, 
                                                                                       [self.config.data.split_strategy.train_subjects_per, 
@@ -145,54 +181,60 @@ class PipelineBuilder:
         return v2.Compose([to_tensor, resize, to_float, normalize])
 
     def build_dataloader(self, train_idx, val_idx, test_idx) -> DataLoader:
-        if not self.config.data.load.use_img_dataset:
+        dataloader_coonfig = None
+        if hasattr(self.config.data, 'load'):
+            dataloader_config = self.config.data.load
+        else:
+            dataloader_config = self.config.data
+        if hasattr(dataloader_config, 'use_img_dataset') and dataloader_config.use_img_dataset:
+            train_set = Subset(self.img_dataset, train_idx)
+            val_set = Subset(self.img_dataset, val_idx)
+            test_set = Subset(self.img_dataset, test_idx)
+            train_dataloader = CoupledDataloader(self.PathDataset,
+                                                    train_set,
+                                                    shuffle = True,
+                                                    batch_size=dataloader_config.batch_size,
+                                                    num_workers = dataloader_config.num_workers,
+                                                    persistent_workers = dataloader_config.persistent_workers,
+                                                    prefetch_factor = dataloader_config.prefetch_factor,
+                                                    pin_memory = dataloader_config.pin_memory,
+                                                    drop_last_batch = False)
+            val_dataloader = CoupledDataloader(self.PathDataset,
+                                                    val_set,
+                                                    shuffle = False,
+                                                    batch_size=dataloader_config.batch_size,
+                                                    num_workers = dataloader_config.num_workers,
+                                                    persistent_workers = dataloader_config.persistent_workers,
+                                                    prefetch_factor = dataloader_config.prefetch_factor,
+                                                    pin_memory = dataloader_config.pin_memory,
+                                                    drop_last_batch = False)
+            test_dataloader = CoupledDataloader(self.PathDataset,
+                                                    test_set,
+                                                    shuffle = False,
+                                                    batch_size=dataloader_config.batch_size,
+                                                    num_workers = dataloader_config.num_workers,
+                                                    persistent_workers = dataloader_config.persistent_workers,
+                                                    prefetch_factor = dataloader_config.prefetch_factor,
+                                                    pin_memory = dataloader_config.pin_memory,
+                                                    drop_last_batch = False)
+            return train_dataloader, val_dataloader, test_dataloader
+        else:
+            batch_size = 128
+            if hasattr(dataloader_config, 'batch_size'):
+                batch_size = dataloader_config.batch_size
+            else:
+                batch_size = self.config.training.batch_size
             train_set = Subset(self.PathDataset, train_idx)
             val_set = Subset(self.PathDataset, val_idx)
             test_set = Subset(self.PathDataset, test_idx)
-            train_dataloader = DataLoader(train_set, batch_size=self.config.data.load.batch_size, shuffle=True, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-            val_dataloader = DataLoader(val_set, batch_size=self.config.data.load.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-            test_dataloader = DataLoader(test_set, batch_size=self.config.data.load.batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
-            return train_dataloader, val_dataloader, test_dataloader
-        else:
-            transform = PipelineBuilder.make_transform(resize_size= self.config.data.load.img_size)
-            if self.config.data.load.use_cached_img_dataset:
-                dataset = DeduplicatedMemoryDataset(self.data, resize_size= self.config.data.load.img_size, transform=transform)
-            else:
-                dataset = FreeViewImgDataset(self.data, transform=transform)
-            train_set = Subset(dataset, train_idx)
-            val_set = Subset(dataset, val_idx)
-            test_set = Subset(dataset, test_idx)
-            train_dataloader = CoupledDataloader(self.PathDataset,
-                                                 train_set,
-                                                 shuffle = True,
-                                                 batch_size=self.config.data.load.batch_size,
-                                                 num_workers = self.config.data.load.num_workers,
-                                                 persistent_workers = self.config.data.load.persistent_workers,
-                                                 prefetch_factor = self.config.data.load.prefetch_factor,
-                                                 pin_memory = self.config.data.load.pin_memory,
-                                                 drop_last_batch = False)
-            val_dataloader = CoupledDataloader(self.PathDataset,
-                                                 val_set,
-                                                 shuffle = False,
-                                                 batch_size=self.config.data.load.batch_size,
-                                                 num_workers = self.config.data.load.num_workers,
-                                                 persistent_workers = self.config.data.load.persistent_workers,
-                                                 prefetch_factor = self.config.data.load.prefetch_factor,
-                                                 pin_memory = self.config.data.load.pin_memory,
-                                                 drop_last_batch = False)
-            test_dataloader = CoupledDataloader(self.PathDataset,
-                                                 test_set,
-                                                 shuffle = False,
-                                                 batch_size=self.config.data.load.batch_size,
-                                                 num_workers = self.config.data.load.num_workers,
-                                                 persistent_workers = self.config.data.load.persistent_workers,
-                                                 prefetch_factor = self.config.data.load.prefetch_factor,
-                                                 pin_memory = self.config.data.load.pin_memory,
-                                                 drop_last_batch = False)
+            train_dataloader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
+            val_dataloader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
+            test_dataloader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
             return train_dataloader, val_dataloader, test_dataloader
     
     def clear_dataframe(self):
         del self.data
+        self.data = None
 
     def build_model(self) -> torch.nn.Module:
         activation = None
@@ -211,7 +253,7 @@ class PipelineBuilder:
                     repo_path=self.config.model.image_encoder.repo_path,
                     model_name=self.config.model.image_encoder.name,
                     freeze=self.config.model.image_encoder.freeze,
-                    regularization=self.config.model.image_encoder.regularization,
+                    regularization=self.config.model.image_encoder.get('regularization', False),
                     device=self.device,
                     weights=self.config.model.image_encoder.weights
                 )
@@ -227,18 +269,18 @@ class PipelineBuilder:
                               ff_dim = self.config.model.ff_dim,
                               max_pos_enc = self.config.model.max_pos_enc,
                               max_pos_dec = self.config.model.max_pos_dec,
-                              input_encoder = self.config.model.input_encoder,
-                              num_freq_bands = self.config.model.num_freq_bands,
-                              pos_enc_hidden_dim = self.config.model.pos_enc_hidden_dim,
+                              input_encoder = self.config.model.get('input_encoder', 'Linear'),
+                              num_freq_bands = self.config.model.get('num_freq_bands', None),
+                              pos_enc_hidden_dim = self.config.model.get('pos_enc_hidden_dim', None),
                               norm_first = self.config.model.norm_first,
                               dropout_p= self.config.model.dropout_p,
                               head_type = self.config.model.get('head_type', 'linear'),
                               mlp_head_hidden_dim = self.config.model.get('mlp_head_hidden_dim', None),
+                              pos_enc_sigma = self.config.model.get('pos_enc_sigma', None),
                               activation = activation,
                               device = self.device,
                               image_encoder = image_encoder,
                               n_feature_enhancer = self.config.model.n_feature_enhancer,
-                              pos_enc_sigma = self.config.model.pos_enc_sigma,
                               image_dim = image_dim)
         elif model_name == 'PathModel':
             model = PathModel(input_dim = self.config.model.input_dim,

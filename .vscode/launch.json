@@ -14,6 +14,13 @@
                 "+exp=debug_mixer",
                 "+head_type=mlp"
             ]
+        },
+        {
+            "name": "Debug This File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
         }
     ]
 }

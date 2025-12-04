@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dims, out_dim, hidden_dropout_p = None, output_dropout_p = None, device='cpu', dtype=torch.float32):
+    def __init__(self, input_dim, hidden_dims, out_dim, hidden_dropout_p = None, output_dropout_p = None,include_dropout = True, device='cpu', dtype=torch.float32):
         super().__init__()
         factory_kwargs = {'device': device, 'dtype': dtype}
         if hidden_dropout_p is None:
@@ -22,12 +22,14 @@ class MLP(nn.Module):
         for hidden_dim in hidden_dims:
             layers.append(nn.Linear(prev_dim, hidden_dim, **factory_kwargs))
             layers.append(nn.ReLU())
-            layers.append(nn.Dropout(hidden_dropout_p))
+            if include_dropout:
+                layers.append(nn.Dropout(hidden_dropout_p))
             prev_dim = hidden_dim
         
         # Output layer
         layers.append(nn.Linear(prev_dim, out_dim, **factory_kwargs))
-        layers.append(nn.Dropout(output_dropout_p))
+        if include_dropout:
+            layers.append(nn.Dropout(output_dropout_p))
         self.head = nn.Sequential(*layers)
     
     def forward(self, x):

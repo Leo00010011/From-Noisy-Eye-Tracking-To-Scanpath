@@ -74,10 +74,12 @@ class PathModel(nn.Module):
             self.regression_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
                                            output_dim,
+                                           include_dropout = False,
                                            **factory_mode)
             self.end_head = MLP(model_dim,
                                      mlp_head_hidden_dim,
                                      1,
+                                     include_dropout = False,
                                      **factory_mode)
         elif head_type == 'linear':
             self.regression_head = nn.Linear(model_dim, output_dim,**factory_mode)

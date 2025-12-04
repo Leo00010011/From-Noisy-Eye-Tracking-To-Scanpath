@@ -5,6 +5,7 @@ from src.data.datasets import FreeViewImgDataset, FreeViewInMemory, CoupledDatal
 from src.data.parsers import CocoFreeView
 from torch.utils.data import Subset, DataLoader
 from src.data.datasets import seq2seq_padded_collate_fn
+from src.model.model_io import load_models_with_data
 from time import time
 
 
@@ -41,6 +42,13 @@ def test_image_eye_tracking_pairing():
 
 
 def main():
-    test_image_eye_tracking_pairing()
+    # test_image_eye_tracking_pairing()
+    ckpt_path = ['outputs\\2025-11-19\\18-48-14',
+             'outputs\\2025-11-27\\17-35-19',
+             'outputs\\2025-11-28\\12-28-42',
+             'outputs\\2025-12-03\\17-10-55']
+
+    
+    models_and_data = load_models_with_data(ckpt_path)
 if __name__ == "__main__":
     main()

@@ -60,7 +60,7 @@ class MixerModel(nn.Module):
         # input processing
         self.time_dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
         self.time_enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
-        if input_encoder is 'Original':
+        if input_encoder == 'Linear':
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
             self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
         elif input_encoder == 'Fourier':

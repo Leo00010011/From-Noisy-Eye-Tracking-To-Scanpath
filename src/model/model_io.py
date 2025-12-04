@@ -92,11 +92,41 @@ def load_checkpoint(
 
     return checkpoint
 
+def load_models_with_data(path_list):
+    pipe = None
+    for path in path_list:
+        print(f"Loading pipeline from {path}")
+        pipe = load_pipeline(path, pipe)
+        pipe.load_dataset()
+        train, val, test = load_test_data(pipe, path)
+        model = load_model_for_eval(pipe, path)
+        yield (model, train, val, test)
 
-def load_model_for_eval(path):
-    weight_path = os.path.join(path, 'model.pth')
+def load_pipeline(path, pipe=None):
     model_config = OmegaConf.load(os.path.join(path, '.hydra', 'config.yaml'))
-    pipe = PipelineBuilder(model_config)
+    if pipe is None:
+        return PipelineBuilder(model_config)
+    else:
+        pipe.config = model_config
+        return pipe
+
+def load_test_data(pipe: PipelineBuilder, path: str):
+    path = os.path.join(path, 'split.pth')
+    index_dict = None
+    if os.path.exists(path):
+        index_dict = torch.load(path)
+    else:
+        train_idx, val_idx, test_idx = pipe.make_splits()
+        index_dict = {
+            'train': train_idx,
+            'val': val_idx,
+            'test': test_idx
+        }
+    train, val, test = pipe.build_dataloader(index_dict['train'], index_dict['val'], index_dict['test'])
+    return train, val, test
+
+def load_model_for_eval(pipe, path):
+    weight_path = os.path.join(path, 'model.pth')
     model = pipe.build_model()
     state_dict = torch.load(weight_path, map_location = 'cpu')
     model_state_dict = state_dict['model_state_dict']
@@ -113,6 +143,8 @@ def load_model_for_eval(path):
             new_state_dict[k] = v
 
     model.load_state_dict(new_state_dict)
+    if hasattr(model, 'image_encoder'):
+        model.image_encoder.regularization = False
     return model
 
 
@@ -125,7 +157,7 @@ def save_splits(train_idx, val_idx, test_idx, file_path):
     }, file_path)
 
 def load_splits(path, dataset):
-    index_dict = torch.load(os.path.join(path, 'data_splits.pth'))
+    index_dict = torch.load(os.path.join(path, 'split.pth'))
     train_set = Subset(dataset,index_dict['train'])
     val_set = Subset(dataset,index_dict['val'])
     test_set = Subset(dataset,index_dict['test'])
