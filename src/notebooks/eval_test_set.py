@@ -174,7 +174,7 @@ for i, (model, _, _, test_dataloader) in enumerate(models_and_data):
         'pre_neg_list': (pre_neg_acum/count),
         'rec_neg_list': (rec_neg_acum/count),
     }
-    torch.save(inputs_outputs, f'all_outputs_model_{i+1}.pth')
+    torch.save(output, f'all_outputs_model_{i+1}.pth')
     del model
     torch.cuda.empty_cache()
     gc.collect()
