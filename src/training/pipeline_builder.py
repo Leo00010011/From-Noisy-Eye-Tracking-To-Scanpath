@@ -86,7 +86,8 @@ class PipelineBuilder:
         else:
             transforms = [build_extract_random_period(self.config.data),
                           build_add_random_center_correlated_radial_noise(self.config.data),
-                          build_discretization_noise(self.config.data)]
+                          build_discretization_noise(self.config.data),
+                          StandarizeTime()]
         if self.PathDataset is None:
             
             # Check if 'load' attribute exists in self.config.data; if not, use it directly from data

@@ -128,7 +128,7 @@ for i, (model, _, _, test_dataloader) in enumerate(models_and_data):
         with torch.no_grad():
             output = model(**input)
             inputs, outputs = invert_transforms(input, output, test_dataloader)
-            cls_loss, reg_loss = compute_loss(input, output)
+            cls_loss, reg_loss = compute_loss(inputs, outputs)
             print(f'Cls Loss: {cls_loss:.4f}, Reg Loss: {reg_loss:.4f}')
             inputs_outputs.append((inputs, outputs))
             reg_out, cls_out = outputs['reg'], outputs['cls']
