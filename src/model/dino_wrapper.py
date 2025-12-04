@@ -32,9 +32,8 @@ class DinoV3Wrapper(nn.Module):
         if self.freeze:
             for param in self.model.parameters():
                 param.requires_grad = False
-        
-        # We set the mode initially, but the train() override below is what ensures it sticks
-        self._set_model_mode(train_mode=True) 
+    
+        self._set_model_mode(train_mode=regularization) 
 
     def _set_model_mode(self, train_mode):
         """Helper to enforce specific DINO mode based on config"""
