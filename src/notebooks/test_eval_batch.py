@@ -120,8 +120,8 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 inputs_outputs = []
 
 models_and_data = load_models_with_data(ckpt_path)
+print(f'Model {0}')
 for i, (model, _, _, test_dataloader) in enumerate(models_and_data):    
-    print(f'Model {i}')
     model.eval()
     for batch in tqdm(test_dataloader):
         input = move_data_to_device(batch, device)
@@ -145,5 +145,5 @@ for i, (model, _, _, test_dataloader) in enumerate(models_and_data):
     del model
     torch.cuda.empty_cache()
     gc.collect()
-    
-torch.save(inputs_outputs, 'inputs_outputs.pth')
+    print(f'Model {i+1}')
+torch.save(inputs_outputs, f'inputs_outputs_{i+1}.pth')
