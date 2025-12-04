@@ -18,7 +18,7 @@ transforms:
   transform_list: ['ExtractRandomPeriod', 'StandarizeTime', 'AddRandomCenterCorrelatedRadialNoise', 
                    'DiscretizationNoise', 'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration']
   ExtractRandomPeriod:
-    start_index: 5
+    start_index: 2
     period_duration: 2600
     sampling_rate: 60
     downsample_period: 200

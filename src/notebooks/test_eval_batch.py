@@ -107,6 +107,9 @@ def invert_transforms(inputs, outputs, dataloader):
 ckpt_path = [# os.path.join('outputs','2025-11-19','18-48-14'),
              # os.path.join('outputs','2025-11-27','17-35-19'),
              # os.path.join('outputs','2025-11-28','12-28-42'),
+             os.path.join('outputs','2025-12-03','17-10-55'),
+             os.path.join('outputs','2025-12-03','17-10-55'),
+             os.path.join('outputs','2025-12-03','17-10-55'),
              os.path.join('outputs','2025-12-03','17-10-55'),]
 
 # %% [markdown]
@@ -124,26 +127,25 @@ print(f'Model {0}')
 for i, (model, _, _, test_dataloader) in enumerate(models_and_data):    
     model.eval()
     for batch in tqdm(test_dataloader):
-        for i in range(3):
-            input = move_data_to_device(batch, device)
-            with torch.no_grad():
-                output = model(**input)
-                inputs, outputs = invert_transforms(input, output, test_dataloader)
-                inputs_outputs.append((inputs, outputs))
-                cls_loss, reg_loss = compute_loss(inputs, outputs)
-                print(f'Cls Loss: {cls_loss:.4f}, Reg Loss: {reg_loss:.4f}')
-                reg_out, cls_out = outputs['reg'], outputs['cls']
-                y, y_mask, fixation_len = inputs['tgt'], inputs['tgt_mask'], inputs['fixation_len']
-                cls_targets = create_cls_targets(cls_out, fixation_len)
-                print('accuracy: ',accuracy(cls_out, y_mask, cls_targets))
-                print('precision_pos: ',precision(cls_out, y_mask, cls_targets))
-                print('recall_pos: ',recall(cls_out, y_mask, cls_targets))
-                print('precision_neg: ',precision(cls_out, y_mask, cls_targets, cls = 0))
-                print('recall_neg: ',recall(cls_out, y_mask, cls_targets, cls = 0))
-                reg_error, dur_error = eval_reg(reg_out, y, y_mask)
-                print(f'Regression error (pixels): {reg_error:.4f}, Duration error ({dur_error:.4f})')
-            print(f'Model {i+1}')
+        input = move_data_to_device(batch, device)
+        with torch.no_grad():
+            output = model(**input)
+            inputs, outputs = invert_transforms(input, output, test_dataloader)
+            inputs_outputs.append((inputs, outputs))
+            cls_loss, reg_loss = compute_loss(inputs, outputs)
+            print(f'Cls Loss: {cls_loss:.4f}, Reg Loss: {reg_loss:.4f}')
+            reg_out, cls_out = outputs['reg'], outputs['cls']
+            y, y_mask, fixation_len = inputs['tgt'], inputs['tgt_mask'], inputs['fixation_len']
+            cls_targets = create_cls_targets(cls_out, fixation_len)
+            print('accuracy: ',accuracy(cls_out, y_mask, cls_targets))
+            print('precision_pos: ',precision(cls_out, y_mask, cls_targets))
+            print('recall_pos: ',recall(cls_out, y_mask, cls_targets))
+            print('precision_neg: ',precision(cls_out, y_mask, cls_targets, cls = 0))
+            print('recall_neg: ',recall(cls_out, y_mask, cls_targets, cls = 0))
+            reg_error, dur_error = eval_reg(reg_out, y, y_mask)
+            print(f'Regression error (pixels): {reg_error:.4f}, Duration error ({dur_error:.4f})')
         break
+    print(f'Model {i+1}')
     del model
     torch.cuda.empty_cache()
     gc.collect()
