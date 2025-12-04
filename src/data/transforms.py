@@ -1,3 +1,4 @@
+import torch
 from src.data.datasets import extract_random_period
 from src.preprocess.noise import add_random_center_correlated_radial_noise, discretization_noise
 import numpy as np
@@ -81,7 +82,7 @@ class LogNormalizeDuration:
     
     def inverse(self, y):
         d = y[2]
-        d = np.exp((d/self.scale*self.std) + self.mean) - 1
+        d = torch.exp((d/self.scale*self.std) + self.mean) - 1
         y[2] = d
         return y
     
