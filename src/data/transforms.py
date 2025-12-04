@@ -45,6 +45,11 @@ class Normalize:
     def __call__(self,input):
         # shape (F,L)
         x = input[self.key]
+        if isinstance(x, torch.Tensor):
+            if isinstance(self.max_value, torch.Tensor):
+                self.max_value = self.max_value.to(x.device)
+            else:
+                self.max_value = torch.tensor(self.max_value).to(x.device)
         if self.mode == 'coords':
             x[:2] = x[:2] / self.max_value.unsqueeze(-1)
         elif self.mode == 'time':
@@ -54,6 +59,11 @@ class Normalize:
     
     def inverse(self, y):
         # shape (B,L,F)
+        if isinstance(y, torch.Tensor):
+            if isinstance(self.max_value, torch.Tensor):
+                self.max_value = self.max_value.to(y.device)
+            else:
+                self.max_value = torch.tensor(self.max_value).to(y.device)
         if self.mode == 'coords':
             y[:,:,:2] = y[:,:,:2] * self.max_value
         elif self.mode == 'time':
