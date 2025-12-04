@@ -11,13 +11,11 @@ class DinoV3Wrapper(nn.Module):
         self.freeze = freeze
         self.regularization = regularization
         self.device = device
-        # Check if repo_path exists. If not, use github repo.
         if os.path.exists(repo_path):
             kwargs = {'source': 'local'}
             repo = repo_path
         else:
             kwargs = {'source': 'github'}
-            # Note: Ensure 'dinov3' exists, otherwise use 'dinov2'
             repo = 'facebookresearch/dinov3' 
 
         if weights:

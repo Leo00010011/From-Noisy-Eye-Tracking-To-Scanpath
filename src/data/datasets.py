@@ -11,9 +11,12 @@ from PIL import Image
 from tqdm import tqdm
 
 
-def extract_random_period(start_index, period_duration, noisy_samples, fixations, fixation_mask, sampling_rate, downsample_period):
+def extract_random_period(start_index, period_duration, noisy_samples, fixations, fixation_mask, sampling_rate, downsample_period, random_offset = True):
     size = math.ceil(period_duration/downsample_period)
-    down_offset = np.random.randint(start_index, noisy_samples.shape[1] - size + 1, 1, dtype = int)[0]
+    if random_offset:
+        down_offset = np.random.randint(start_index, noisy_samples.shape[1] - size + 1, 1, dtype = int)[0]
+    else:
+        down_offset = start_index
     # get the values in the original sampling rate
     ori_period = 1000/sampling_rate
     conversion_factor = downsample_period/ori_period

@@ -4,11 +4,12 @@ from src.preprocess.noise import add_random_center_correlated_radial_noise, disc
 import numpy as np
 
 class ExtractRandomPeriod:
-    def __init__(self, start_index, period_duration, sampling_rate, downsample_period):
+    def __init__(self, start_index, period_duration, sampling_rate, downsample_period, random_offset):
         self.start_index = start_index
         self.period_duration = period_duration
         self.sampling_rate = sampling_rate
         self.downsample_period = downsample_period
+        self.random_offset = random_offset
         self.modify_y = False
 
     def __call__(self,input):
@@ -19,7 +20,8 @@ class ExtractRandomPeriod:
             input['y'], 
             input['fixation_mask'], 
             self.sampling_rate, 
-            self.downsample_period
+            self.downsample_period,
+            self.random_offset
         )
         input['x'] = x
         input['y'] = y

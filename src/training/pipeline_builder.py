@@ -17,7 +17,8 @@ def build_extract_random_period(config):
             start_index=config.get('start_index', 2),
             period_duration=config.get('period_duration', 2600),
             sampling_rate=config.get('sampling_rate', 60),
-            downsample_period=config.get('downsample_period', 200)
+            downsample_period=config.get('downsample_period', 200),
+            random_offset=config.get('random_offset', False)
         )
 def build_add_random_center_correlated_radial_noise(config):
     return AddRandomCenterCorrelatedRadialNoise(
