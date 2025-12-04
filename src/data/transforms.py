@@ -56,7 +56,10 @@ class Normalize:
             if isinstance(self.max_value, torch.Tensor):
                 self.max_value = self.max_value.cpu().numpy()
         if self.mode == 'coords':
-            x[:2] = x[:2] / self.max_value.unsqueeze(-1)
+            if isinstance(self.max_value, torch.Tensor):
+                x[:2] = x[:2] / self.max_value.unsqueeze(-1)
+            else:
+                x[:2] = x[:2] / self.max_value[..., np.newaxis]
         elif self.mode == 'time':
             x[2] = x[2] / self.max_value
         input[self.key] = x
