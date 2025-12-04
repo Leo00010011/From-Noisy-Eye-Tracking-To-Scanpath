@@ -52,6 +52,9 @@ class Normalize:
                 self.max_value = self.max_value.to(x.device)
             else:
                 self.max_value = torch.tensor(self.max_value).to(x.device)
+        else:
+            if isinstance(self.max_value, torch.Tensor):
+                self.max_value = self.max_value.cpu().numpy()
         if self.mode == 'coords':
             x[:2] = x[:2] / self.max_value.unsqueeze(-1)
         elif self.mode == 'time':
