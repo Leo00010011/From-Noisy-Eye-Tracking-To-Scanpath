@@ -139,10 +139,16 @@ for i, (model, _, _, test_dataloader) in enumerate(models_and_data):
         with torch.no_grad():
             output = model(**input)
             inputs, outputs = invert_transforms(input, output, test_dataloader)
+            cls_loss, reg_loss = compute_loss(inputs, outputs)
+            reg_out, cls_out = outputs['reg'], outputs['cls']
+            x = inputs['src']
+            y, y_mask, fixation_len = inputs['tgt'], inputs['tgt_mask'], inputs['fixation_len']
             reg_results += batch_to_list(reg_out, fixation_len)
             y_results += batch_to_list(y, fixation_len)
             x_results += batch_to_list(x)
             cls_targets = create_cls_targets(cls_out, fixation_len)
+            cls_loss_acum += cls_loss.item()
+            reg_loss_acum += reg_loss.item()
             acc_acum += accuracy(cls_out, y_mask, cls_targets)
             pre_pos_acum += precision(cls_out, y_mask, cls_targets)
             rec_pos_acum += recall(cls_out, y_mask, cls_targets)
@@ -156,6 +162,8 @@ for i, (model, _, _, test_dataloader) in enumerate(models_and_data):
         'y_results': (y_results),
         'x_results': (x_results),
         'reg_list': (reg_results),
+        'cls_loss_list': (cls_loss_acum/count),
+        'reg_loss_list': (reg_loss_acum/count),
         'coord_error_list': (coord_error_acum/count),
         'dur_error_list': (dur_error_acum/count),
         'acc_list': (acc_acum/count),
