@@ -4,13 +4,13 @@ import torch.nn as nn
 import os
 
 class DinoV3Wrapper(nn.Module):
-    def __init__(self, repo_path, model_name, freeze=True, regularization=True, weights=None):
+    def __init__(self, repo_path, model_name, freeze=True, regularization=True, weights=None, device='cpu'):
         super().__init__()
         self.repo_path = repo_path
         self.model_name = model_name
         self.freeze = freeze
         self.regularization = regularization
-
+        self.device = device
         # Check if repo_path exists. If not, use github repo.
         if os.path.exists(repo_path):
             kwargs = {'source': 'local'}
@@ -25,6 +25,7 @@ class DinoV3Wrapper(nn.Module):
 
         # Load model
         self.model = torch.hub.load(repo, model_name, **kwargs)
+        self.model = self.model.to(device)
         self.embed_dim = self.model.embed_dim
 
         # Initial Freeze Setup
