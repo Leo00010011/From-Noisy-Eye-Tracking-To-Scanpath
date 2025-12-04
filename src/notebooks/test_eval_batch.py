@@ -13,6 +13,7 @@ import gc
 if not os.path.exists('data'):
     new_directory_path = "..\\..\\"
     os.chdir(new_directory_path)
+print("Current working directory:", os.getcwd())
 
 
 from src.eval.eval_metrics import precision,recall,create_cls_targets, accuracy, eval_reg
