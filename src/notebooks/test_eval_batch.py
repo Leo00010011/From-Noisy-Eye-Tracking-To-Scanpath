@@ -8,13 +8,14 @@ from tqdm import tqdm
 from random import randint
 import numpy as np
 import matplotlib.pyplot as plt
+import sys
 import gc
 
 if not os.path.exists('data'):
     new_directory_path = "..\\..\\"
     os.chdir(new_directory_path)
 print("Current working directory:", os.getcwd())
-
+sys.path.append(os.getcwd())
 
 from src.eval.eval_metrics import precision,recall,create_cls_targets, accuracy, eval_reg
 from src.eval.eval_utils import plt_training_metrics, gather_best_metrics
