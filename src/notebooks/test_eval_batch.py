@@ -101,25 +101,10 @@ def invert_transforms(inputs, outputs, dataloader):
 # ## Review Metrics
 
 # %%
-
-# ckpt_path = ['outputs\\2025-11-19\\18-48-14',
-#              'outputs\\2025-11-27\\17-35-19',
-#              'outputs\\2025-11-28\\12-28-42'
-#              ]
-ckpt_path = os.path.join('outputs','2025-12-03','17-10-55')
-metric_path = [os.path.join(p, 'metrics.json') for p in ckpt_path]
-
-# %%
-plt_training_metrics(metric_path, start_epoch=10)
-
-# %%
 ckpt_path = [os.path.join('outputs','2025-11-19','18-48-14'),
              os.path.join('outputs','2025-11-27','17-35-19'),
              os.path.join('outputs','2025-11-28','12-28-42'),
              os.path.join('outputs','2025-12-03','17-10-55')]
-
-metric_path = [os.path.join(p, 'metrics.json') for p in ckpt_path]
-gather_best_metrics(metric_path)
 
 # %% [markdown]
 # ## Checkout Output
