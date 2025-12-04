@@ -42,7 +42,7 @@ class DinoV3Wrapper(nn.Module):
             print("Enabling image encoder regularization")
             self.model.train()
         else:
-            print("Disabling image encoder regularization")
+            print("Disabling image encoder regularization Inside")
             self.model.eval()
 
     def train(self, mode=True):
