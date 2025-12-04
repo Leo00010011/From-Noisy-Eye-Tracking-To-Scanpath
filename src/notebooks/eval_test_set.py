@@ -124,6 +124,8 @@ for i, (model, _, _, test_dataloader) in enumerate(models_and_data):
     print(f'Model {i} Evaluation')
     model.eval()
     acc_acum = 0
+    cls_loss_acum = 0
+    reg_loss_acum = 0
     pre_pos_acum = 0
     rec_pos_acum = 0
     pre_neg_acum = 0
