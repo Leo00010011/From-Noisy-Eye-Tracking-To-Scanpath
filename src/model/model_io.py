@@ -114,8 +114,10 @@ def load_test_data(pipe: PipelineBuilder, path: str):
     path = os.path.join(path, 'split.pth')
     index_dict = None
     if os.path.exists(path):
+        print(f"Loading splits from {path}")
         index_dict = torch.load(path)
     else:
+        print(f"Making new splits")
         train_idx, val_idx, test_idx = pipe.make_splits()
         index_dict = {
             'train': train_idx,
