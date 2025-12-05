@@ -34,9 +34,13 @@ def recall(cls_out, attn_mask, cls_targets, cls = 1):
     return recall
 
 def eval_reg(reg, y, y_mask):
-    diff = (reg[:,:-1,:] - y)* y_mask.unsqueeze(-1)[:,:-1,:]
+    y_mask = y_mask.unsqueeze(-1)[:,1:,:]
+    count = y_mask.sum().item()
+    diff = (reg[:,:-1,:] - y)* y_mask
     diff_xy = diff[:,:,:2]
-    reg_error = torch.mean(torch.sqrt(torch.sum(diff_xy**2, dim=-1))).item()
-    dur_error = torch.mean(torch.abs(diff[:,:,2])).item()
+    reg_error = torch.sqrt(torch.sum(diff_xy**2, dim=-1))
+    dur_error = torch.abs(diff[:,:,2])
+    reg_error = reg_error.sum().item() / count
+    dur_error = dur_error.sum().item() / count
     return reg_error, dur_error
 
