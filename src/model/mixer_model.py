@@ -60,10 +60,10 @@ class MixerModel(nn.Module):
         # input processing
         self.time_dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
         self.time_enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
-        if input_encoder == 'Linear':
+        if input_encoder == 'linear':
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
             self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
-        elif input_encoder == 'Fourier':
+        elif input_encoder == 'fourier':
             self.enc_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
             self.enc_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
             self.dec_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
