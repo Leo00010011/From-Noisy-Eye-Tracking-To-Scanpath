@@ -127,12 +127,12 @@ for i, (model, _, _, test_dataloader) in enumerate(models_and_data):
         input = move_data_to_device(batch, device)
         with torch.no_grad():
             output = model(**input)
-            inputs, outputs = invert_transforms(input, output, test_dataloader)
-            inputs_outputs.append((inputs, outputs))
-            cls_loss, reg_loss = compute_loss(inputs, outputs)
+            # input, output = invert_transforms(input, output, test_dataloader)
+            inputs_outputs.append((input, output))
+            cls_loss, reg_loss = compute_loss(input, output)
             print(f'Cls Loss: {cls_loss:.4f}, Reg Loss: {reg_loss:.4f}')
-            reg_out, cls_out = outputs['reg'], outputs['cls']
-            y, y_mask, fixation_len = inputs['tgt'], inputs['tgt_mask'], inputs['fixation_len']
+            reg_out, cls_out = output['reg'], output['cls']
+            y, y_mask, fixation_len = input['tgt'], input['tgt_mask'], input['fixation_len']
             cls_targets = create_cls_targets(cls_out, fixation_len)
             print('accuracy: ',accuracy(cls_out, y_mask, cls_targets))
             print('precision_pos: ',precision(cls_out, y_mask, cls_targets))

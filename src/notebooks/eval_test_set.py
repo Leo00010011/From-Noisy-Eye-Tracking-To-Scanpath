@@ -117,7 +117,6 @@ ckpt_path = [os.path.join('outputs','2025-11-19','18-48-14'),
 
 # %%
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-inputs_outputs = []
 
 models_and_data = load_models_with_data(ckpt_path)
 for i, (model, _, _, test_dataloader) in enumerate(models_and_data):  
