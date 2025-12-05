@@ -183,7 +183,6 @@ class PipelineBuilder:
         return v2.Compose([to_tensor, resize, to_float, normalize])
 
     def build_dataloader(self, train_idx, val_idx, test_idx) -> DataLoader:
-        dataloader_coonfig = None
         if hasattr(self.config.data, 'load'):
             dataloader_config = self.config.data.load
         else:
