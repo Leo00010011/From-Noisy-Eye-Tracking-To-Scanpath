@@ -360,7 +360,7 @@ class PipelineBuilder:
                 Validation every {} epochs
                 Training Samples: {}
                 """.format(self.config.training.num_epochs, 
-                           self.config.training.cls_weight, 
+                           self.config.loss.cls_weight, 
                            self.config.training.val_interval, 
                            n_samples))
 
