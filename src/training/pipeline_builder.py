@@ -344,6 +344,8 @@ class PipelineBuilder:
                 cls_func = torch.nn.functional.binary_cross_entropy_with_logits
             if self.config.loss.reg_func == 'mse':
                 reg_func = torch.nn.functional.mse_loss
+            elif self.config.loss.reg_func == 'l1':
+                reg_func = torch.nn.functional.l1_loss
             return EntireRegLossFunction(cls_weight = self.config.loss.cls_weight,
                                          cls_func = cls_func,
                                          reg_func = reg_func)
