@@ -5,7 +5,7 @@ def create_weights(fixation_len, attn_mask, device):
     div = 1/fixation_len
     div = torch.repeat_interleave(div, repeats=fixation_len, dim=0)
     weights[:,:-1][attn_mask[:,1:]] = div
-    return weights
+    return weights.unsqueeze(-1)
 
 def create_cls_targets(cls_out, fixation_len, device):
     batch_idx = torch.arange(cls_out.size()[0])

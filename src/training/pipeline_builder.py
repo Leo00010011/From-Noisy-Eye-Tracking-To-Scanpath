@@ -337,7 +337,7 @@ class PipelineBuilder:
         return scheduler
 
     def build_loss_fn(self):
-        if self.config.loss.type == 'entire_reg':
+        if not hasattr(self.config, 'loss') or self.config.loss.type == 'entire_reg':
             reg_func = None
             cls_func = None
             if self.config.loss.cls_func == 'bce_with_logits':
