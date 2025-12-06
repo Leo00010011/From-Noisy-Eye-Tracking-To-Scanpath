@@ -5,7 +5,6 @@ from src.training.pipeline_builder import PipelineBuilder
 from src.model.model_io import save_checkpoint, save_splits
 
 def train(builder:PipelineBuilder):
-        cls_weight = builder.config.training.cls_weight    
         num_epochs = builder.config.training.num_epochs
         needs_validate = builder.config.training.validate
         val_interval = builder.config.training.val_interval

@@ -4,7 +4,7 @@ def create_weights(fixation_len, attn_mask, device):
     weights = torch.ones(attn_mask.size(), dtype = torch.float32, device = device)
     div = 1/fixation_len
     div = torch.repeat_interleave(div, repeats=fixation_len, dim=0).unsqueeze(-1)
-    weights[:,:-1,:][attn_mask[:,1:,:]] = div
+    weights[:,:-1][attn_mask[:,1:]] = div
     return weights
 
 def create_cls_targets(cls_out, fixation_len, device):
