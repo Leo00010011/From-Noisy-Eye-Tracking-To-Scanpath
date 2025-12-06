@@ -9,7 +9,6 @@ training:
   num_epochs: 100
   validate: True
   val_interval: 10
-  cls_weight: 0.5
   learning_rate: 0.001
   decisive_metric: "reg_loss_val"
   save_best_only: True
