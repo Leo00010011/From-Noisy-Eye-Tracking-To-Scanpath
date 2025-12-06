@@ -14,7 +14,9 @@ def create_cls_targets(cls_out, fixation_len, device):
     return cls_targets
 
 class EntireRegLossFunction(torch.nn.Module):
-    def __init__(self, cls_weight = 0.5, cls_func = torch.nn.BCEWithLogitsLoss(), reg_func = torch.nn.MSELoss()):
+    def __init__(self, cls_weight = 0.5, 
+                 cls_func = torch.nn.functional.binary_cross_entropy_with_logits, 
+                 reg_func = torch.nn.functional.mse_loss):
         super().__init__()
         self.cls_weight = cls_weight
         self.cls_func = cls_func
