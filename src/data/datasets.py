@@ -366,7 +366,6 @@ def location_test(index, si, ei, gaze, fixation_mask, fixations):
     # print(f'✅ All fixation points are within acceptable distance from gaze points between indices {sidx} and {eidx}.')
     print(f'✅ Max distance between fixation and gaze points: {max_dist}')
 
-# TODO Compute image embeddings just once
 class FreeViewImgDataset(Dataset):
     def __init__(self, data:CocoFreeView, transform = None):
         self.img_path = [data.get_img_path(idx) for idx in range(len(data))]

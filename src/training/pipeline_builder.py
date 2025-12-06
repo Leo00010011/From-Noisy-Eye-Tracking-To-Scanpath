@@ -118,8 +118,6 @@ class PipelineBuilder:
             else:
                 self.img_dataset.resize_size = load_config.img_size
                 self.img_dataset.runtime_transform = transform
-            #else:
-            #    self.img_dataset = FreeViewImgDataset(self.data, transform=transform)
 
     def split_data(array, ratios):
         indices = np.arange(len(array))
@@ -270,7 +268,7 @@ class PipelineBuilder:
                               ff_dim = self.config.model.ff_dim,
                               max_pos_enc = self.config.model.max_pos_enc,
                               max_pos_dec = self.config.model.max_pos_dec,
-                              input_encoder = self.config.model.get('input_encoder', 'Linear'),
+                              input_encoder = self.config.model.get('input_encoder', 'linear'),
                               num_freq_bands = self.config.model.get('num_freq_bands', None),
                               pos_enc_hidden_dim = self.config.model.get('pos_enc_hidden_dim', None),
                               norm_first = self.config.model.norm_first,
