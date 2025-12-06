@@ -1,4 +1,4 @@
 type: "entire_reg"
-cls_weight: 0.2
+cls_weight: 0.8
 cls_func: "bce_with_logits"
 reg_func: "l1"

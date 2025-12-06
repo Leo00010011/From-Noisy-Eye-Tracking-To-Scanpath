@@ -27,12 +27,15 @@ class MetricsStorage:
         self.num_batches = 0
         
     def compute_normalized_regression_metrics(self,input, output, dataloadeer ):
-        inputs, outputs = invert_transforms(input, output, dataloadeer)
-        reg_out = outputs['reg']
-        y, y_mask = inputs['tgt'], inputs['tgt_mask']
+        input, output = invert_transforms(input, output, dataloadeer)
+        reg_out = output['reg']
+        y, y_mask = input['tgt'], input['tgt_mask']
         coord_error, dur_error = eval_reg(reg_out, y, y_mask)
-        self.loss_info['coord_error_train'] = coord_error
-        self.loss_info['dur_error_train'] = dur_error
+        for key, value in zip(['coord_error', 'dur_error'], [coord_error, dur_error]):
+            if key not in self.loss_info:
+                self.loss_info[key] = value
+            else:
+                self.loss_info[key] += value
 
     def update_batch_loss(self, info: dict):
         for key, value in info.items():
