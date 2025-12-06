@@ -61,7 +61,7 @@ def train(builder:PipelineBuilder):
             if not builder.config.scheduler.batch_lr:
                 scheduler.step()
             if needs_validate and ((epoch + 1) % val_interval == 0):
-                validate(model, val_dataloader, epoch, device, metrics_storage.metrics, log = builder.config.training.log)
+                validate(model,loss_fn, val_dataloader, epoch, device, metrics_storage.metrics, log = builder.config.training.log)
                 metrics_storage.save_metrics()
                 is_best = metrics_storage.update_best()
                 if is_best:
