@@ -148,7 +148,7 @@ class MixerModel(nn.Module):
 
     def forward(self, src, image_src, tgt, src_mask=None, tgt_mask=None, **kwargs):
         # src, tgt shape (B,L,F)
-        if self.input_encoder == 'Fourier':
+        if self.input_encoder == 'fourier':
             # separate the coordinates and time or duration
             enc_coords = src[:,:,:2]
             enc_time = src[:,:,2]
@@ -162,10 +162,12 @@ class MixerModel(nn.Module):
             # add the time and coords 
             src = enc_coords + enc_time
             tgt = dec_coords + dec_dur
-        else:
+        elif self.input_encoder == 'linear':
             # apply the linear projections
             src = self.enc_input_proj(src)
             tgt = self.dec_input_proj(tgt)
+        else:
+            raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
         # apply the order positional encodings
         enc_pe = self.time_enc_pe.pe.unsqueeze(0)
         src = src + enc_pe[:,:src.size()[1],:]
