@@ -91,14 +91,15 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True)
                     loss_info[key] += value
             input, output = invert_transforms(input, output, val_dataloader)
             reg_out = output['reg']
-            reg_error, duration_error = eval_reg(reg_out, y, y_mask)
-            coord_error_acum += reg_error
-            duration_error_acum += duration_error
-            
             cls_out = output['cls']
             y = input['tgt']
             y_mask = input['tgt_mask']
             fixation_len = input['fixation_len']
+            
+            reg_error, duration_error = eval_reg(reg_out, y, y_mask)
+            coord_error_acum += reg_error
+            duration_error_acum += duration_error
+            
             cls_targets = create_cls_targets(cls_out, fixation_len)
             acc_acum += accuracy(cls_out, y_mask, cls_targets)
             pre_pos_acum += precision(cls_out, y_mask, cls_targets)
