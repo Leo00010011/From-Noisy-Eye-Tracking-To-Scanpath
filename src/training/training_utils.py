@@ -7,41 +7,42 @@ class MetricsStorage:
     def __init__(self, filepath: str = None, decisive_metric: str = 'reg_loss_val'):
         self.metrics = {
             'epoch': [],
-            'reg_loss_train': [],
             'reg_error_val': [],
             'duration_error_val': [],
-            'reg_loss_val': [],
-            'cls_loss_train': [],
-            'cls_loss_val': [],
             'accuracy': [],
             'precision_pos': [],
             'recall_pos': [],
             'precision_neg': [],
             'recall_neg': []
         }
-        self.total_reg_loss = 0
-        self.total_cls_loss = 0
+        self.loss_info = {}
         self.num_batches = 0
         self.filepath = filepath
         self.decisive_metric = decisive_metric
         self.best_metric_value = np.inf
     
     def init_epoch(self):
-        self.total_reg_loss = 0
-        self.total_cls_loss = 0
+        self.loss_info = {}
         self.num_batches = 0
 
-    def update_batch_loss(self, reg_loss, cls_loss):
-        self.total_reg_loss += reg_loss.item()
-        self.total_cls_loss += cls_loss.item()
+    def update_batch_loss(self, info: dict):
+        for key, value in info.items():
+            if key not in self.loss_info:
+                self.loss_info[key] = value
+            else:
+                self.loss_info[key] += value
         self.num_batches += 1
     
     def finalize_epoch(self):
-        avg_reg_loss = self.total_reg_loss / self.num_batches
-        avg_cls_loss = self.total_cls_loss / self.num_batches
-        self.metrics['reg_loss_train'].append(avg_reg_loss)
-        self.metrics['cls_loss_train'].append(avg_cls_loss)
-        return avg_reg_loss, avg_cls_loss
+        agg_loss_info = {}
+        for key, value in self.loss_info.items():
+            key_str = f'{key}_train'
+            if key_str not in self.metrics:
+                self.metrics[key_str] = []
+            avg_loss = value / self.num_batches
+            self.metrics[key_str].append(avg_loss)
+            agg_loss_info[key] = avg_loss
+        return agg_loss_info
     
     def update_best(self):
         if self.metrics[self.decisive_metric][-1] < self.best_metric_value:
@@ -54,7 +55,7 @@ class MetricsStorage:
             json.dump(self.metrics, f)
 
 
-def validate(model, val_dataloader, epoch, device, metrics, log = True):
+def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True):
     model.eval()
     with torch.no_grad():
         acc_acum = 0
@@ -62,20 +63,21 @@ def validate(model, val_dataloader, epoch, device, metrics, log = True):
         rec_pos_acum = 0
         pre_neg_acum = 0
         rec_neg_acum = 0
-        reg_loss_acum = 0
-        cls_loss_acum = 0
-        reg_error_acum = 0
+        coord_error_acum = 0
         duration_error_acum = 0
+        loss_info = {}
         cnt = 0
         for batch in val_dataloader:
             input = move_data_to_device(batch, device)
 
             output = model(**input)
-            cls_loss, reg_loss = compute_loss(input, output)
-            reg_loss_acum += reg_loss.item()
-            cls_loss_acum += cls_loss.item()
+            _ , info = loss_fn(input, output)
+            for key, value in info.items():
+                if key not in loss_info:
+                    loss_info[key] = value
+                else:
+                    loss_info[key] += value
             cls_out = output['cls']
-            reg_out = output['reg']
             y = input['tgt']
             y_mask = input['tgt_mask']
             fixation_len = input['fixation_len']
@@ -85,16 +87,20 @@ def validate(model, val_dataloader, epoch, device, metrics, log = True):
             rec_pos_acum += recall(cls_out, y_mask, cls_targets)
             pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
             rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
+            reg_out = output['reg']
             reg_error, duration_error = eval_reg(reg_out, y, y_mask)
-            reg_error_acum += reg_error
+            coord_error_acum += reg_error
             duration_error_acum += duration_error
             cnt += 1
-        metrics['epoch'].append(epoch + 1)
-        metrics['reg_error_val'].append(reg_error_acum / cnt)
-        metrics['duration_error_val'].append(duration_error_acum / cnt)
-        metrics['reg_loss_val'].append(reg_loss_acum / cnt)
-        metrics['cls_loss_val'].append(cls_loss_acum / cnt)
+        for key, value in loss_info.items():
+            key_str = f'{key}_val'
+            if key_str not in metrics:
+                metrics[key_str] = []
+            metrics[key_str].append(value / cnt)
         metrics['accuracy'].append(acc_acum / cnt)
+        metrics['epoch'].append(epoch + 1)
+        metrics['reg_error_val'].append(coord_error_acum / cnt)
+        metrics['duration_error_val'].append(duration_error_acum / cnt)
         metrics['precision_pos'].append(pre_pos_acum / cnt)
         metrics['recall_pos'].append(rec_pos_acum / cnt)
         metrics['precision_neg'].append(pre_neg_acum / cnt)

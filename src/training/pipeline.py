@@ -30,6 +30,7 @@ def train(builder:PipelineBuilder):
         
         optimizer = builder.build_optimizer(model)
         scheduler = builder.build_scheduler(optimizer, train_dataloader)
+        loss_fn = builder.build_loss_fn()
         first_time = True
         metrics_storage = MetricsStorage(filepath=builder.config.training.metric_file, 
                                          decisive_metric=builder.config.training.decisive_metric)
@@ -48,16 +49,16 @@ def train(builder:PipelineBuilder):
                     first_time = False
                 # FORWARD PASS AND LOSS COMPUTATION
                 output = model(**input)  # Forward pass
-                cls_loss, reg_loss = compute_loss(input, output) # Compute loss
-                total_loss = (1-cls_weight)*reg_loss + cls_weight*cls_loss
+                loss, info = loss_fn(input, output) # Compute loss
                 # BACKWARD PASS AND OPTIMIZATION
-                total_loss.backward()
+                loss.backward()
                 optimizer.step()
                 if builder.config.scheduler.batch_lr:
                     scheduler.step()
-                metrics_storage.update_batch_loss(reg_loss, cls_loss)
-            avg_reg_loss, avg_cls_loss = metrics_storage.finalize_epoch()
-            print(f"Epoch {epoch+1}/{num_epochs}, Reg Loss: {avg_reg_loss:.4f}, Cls Loss: {avg_cls_loss:.4f}, LR: {optimizer.param_groups[0]['lr']:.6f}")
+                metrics_storage.update_batch_loss(info)
+            loss_info = metrics_storage.finalize_epoch()
+            loss_str = ", ".join([f"{key}: {value:.4f}" for key, value in loss_info.items()])
+            print(f"Epoch {epoch+1}/{num_epochs}, {loss_str}, LR: {optimizer.param_groups[0]['lr']:.6f}")
             if not builder.config.scheduler.batch_lr:
                 scheduler.step()
             if needs_validate and ((epoch + 1) % val_interval == 0):

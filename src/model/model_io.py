@@ -145,9 +145,6 @@ def load_model_for_eval(pipe, path):
             new_state_dict[k] = v
 
     model.load_state_dict(new_state_dict)
-    if hasattr(model, 'image_encoder'):
-        print("Putting Regularization variable to False")
-        model.image_encoder.regularization = False
     return model
 
 

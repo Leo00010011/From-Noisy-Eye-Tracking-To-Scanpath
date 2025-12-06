@@ -1,4 +1,5 @@
 import torch
+from src.model.loss_functions import EntireRegLossFunction
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
 import numpy as np
@@ -336,10 +337,18 @@ class PipelineBuilder:
         return scheduler
 
     def build_loss_fn(self):
-        # TODO allow to configurate different loss functions
-        # The duration, coordinates and end_token losses should have independent losses
-        pass
-        
+        if self.config.loss.type == 'entire_reg':
+            reg_func = None
+            cls_func = None
+            if self.config.loss.cls_func == 'bce_with_logits':
+                cls_func = torch.nn.BCEWithLogitsLoss()
+            if self.config.loss.reg_func == 'mse':
+                reg_func = torch.nn.MSELoss()
+            return EntireRegLossFunction(cls_weight = self.config.loss.cls_weight,
+                                         cls_func = cls_func,
+                                         reg_func = reg_func)
+        else:
+            raise ValueError(f"Loss type {self.config.loss.type} not supported.")
 
 
     def training_summary(self, n_samples):
