@@ -94,6 +94,21 @@ def plot_amplitude_dist(gaze_list, label_list, ptoa_list, bin_count=30, bin_min=
     plt.legend()
     plt.title('Amplitude Distribution in Degrees')
 
+def invert_transforms(inputs, outputs, dataloader):
+    pred_reg = outputs['reg']
+    gt_reg = inputs['tgt']
+    if hasattr(dataloader, 'path_dataset'):
+        transforms = dataloader.path_dataset.transforms
+    else:
+        transforms = dataloader.dataset.dataset.transforms
+    # reverse the transforms
+    for transform in reversed(transforms):
+        if transform.modify_y:
+            pred_reg = transform.inverse(pred_reg)
+            gt_reg = transform.inverse(gt_reg)
+    outputs['reg'] = pred_reg
+    inputs['tgt'] = gt_reg
+    return inputs, outputs
 
 def compute_angles(gaze):
     coords = gaze[:2, :]

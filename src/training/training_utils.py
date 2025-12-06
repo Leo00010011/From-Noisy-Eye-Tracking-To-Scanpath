@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import json
 from src.eval.eval_metrics import create_cls_targets, accuracy, precision, recall, eval_reg
+from src.eval.eval_utils import invert_transforms
 
 class MetricsStorage:
     def __init__(self, filepath: str = None, decisive_metric: str = 'reg_loss_val'):
@@ -24,6 +25,14 @@ class MetricsStorage:
     def init_epoch(self):
         self.loss_info = {}
         self.num_batches = 0
+        
+    def compute_normalized_regression_metrics(self,input, output, dataloadeer ):
+        inputs, outputs = invert_transforms(input, output, dataloadeer)
+        reg_out = outputs['reg']
+        y, y_mask = inputs['tgt'], inputs['tgt_mask']
+        coord_error, dur_error = eval_reg(reg_out, y, y_mask)
+        self.loss_info['coord_error_train'] = coord_error
+        self.loss_info['dur_error_train'] = dur_error
 
     def update_batch_loss(self, info: dict):
         for key, value in info.items():
@@ -77,6 +86,12 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True)
                     loss_info[key] = value
                 else:
                     loss_info[key] += value
+            input, output = invert_transforms(input, output, val_dataloader)
+            reg_out = output['reg']
+            reg_error, duration_error = eval_reg(reg_out, y, y_mask)
+            coord_error_acum += reg_error
+            duration_error_acum += duration_error
+            
             cls_out = output['cls']
             y = input['tgt']
             y_mask = input['tgt_mask']
@@ -87,10 +102,6 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True)
             rec_pos_acum += recall(cls_out, y_mask, cls_targets)
             pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
             rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
-            reg_out = output['reg']
-            reg_error, duration_error = eval_reg(reg_out, y, y_mask)
-            coord_error_acum += reg_error
-            duration_error_acum += duration_error
             cnt += 1
         for key, value in loss_info.items():
             key_str = f'{key}_val'

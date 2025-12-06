@@ -55,6 +55,7 @@ def train(builder:PipelineBuilder):
                 if builder.config.scheduler.batch_lr:
                     scheduler.step()
                 metrics_storage.update_batch_loss(info)
+                metrics_storage.compute_normalized_regression_metrics(input, output, train_dataloader)
             loss_info = metrics_storage.finalize_epoch()
             loss_str = ", ".join([f"{key}: {value:.4f}" for key, value in loss_info.items()])
             print(f"Epoch {epoch+1}/{num_epochs}, {loss_str}, LR: {optimizer.param_groups[0]['lr']:.6f}")

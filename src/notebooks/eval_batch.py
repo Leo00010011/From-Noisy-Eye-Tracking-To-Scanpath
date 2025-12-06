@@ -18,7 +18,7 @@ print("Current working directory:", os.getcwd())
 sys.path.append(os.getcwd())
 
 from src.eval.eval_metrics import precision,recall,create_cls_targets, accuracy, eval_reg
-from src.eval.eval_utils import plt_training_metrics, gather_best_metrics
+from src.eval.eval_utils import plt_training_metrics, gather_best_metrics, invert_transforms
 from src.eval.vis_scanpath import draw_scanpath_mpl
 from src.model.model_io import load_models_with_data
 from src.training.training_utils import move_data_to_device, compute_loss
@@ -79,21 +79,7 @@ def plot_classification_scores(cls_out,fixation_len, title="Classification Score
     plt.yticks([])
     plt.show()
     
-def invert_transforms(inputs, outputs, dataloader):
-    pred_reg = outputs['reg']
-    gt_reg = inputs['tgt']
-    if hasattr(dataloader, 'path_dataset'):
-        transforms = dataloader.path_dataset.transforms
-    else:
-        transforms = dataloader.dataset.dataset.transforms
-    # reverse the transforms
-    for transform in reversed(transforms):
-        if transform.modify_y:
-            pred_reg = transform.inverse(pred_reg)
-            gt_reg = transform.inverse(gt_reg)
-    outputs['reg'] = pred_reg
-    inputs['tgt'] = gt_reg
-    return inputs, outputs
+
 
 
 
