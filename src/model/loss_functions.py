@@ -46,7 +46,7 @@ class EntireRegLossFunction(torch.nn.Module):
             'cls_loss': float(cls_loss.item()),
             'reg_loss': float(reg_loss.item()),
         }
-        loss = cls_loss + self.cls_weight * reg_loss
+        loss = self.cls_weight * cls_loss + (1 - self.cls_weight) * reg_loss
         return loss, info
     
 class SeparatedRegLossFunction(torch.nn.Module):
@@ -79,13 +79,13 @@ class SeparatedRegLossFunction(torch.nn.Module):
         # >>>>>> Regression loss
         attn_mask = attn_mask.unsqueeze(-1)
         attn_mask = attn_mask[:,1:,:]
-        dur_loss = self.dur_func(dur_out[:,:-1,:][attn_mask], y[:,:,2:][attn_mask], reduction = 'sum')
+        dur_loss = self.dur_func(dur_out[:,:-1,:][attn_mask], y[:,:,2:][attn_mask])
         attn_mask = attn_mask.expand(-1,-1,2)
-        coord_loss = self.coord_func(coord_out[:,:-1,:][attn_mask], y[:,:,:2][attn_mask], reduction = 'sum')
+        coord_loss = self.coord_func(coord_out[:,:-1,:][attn_mask], y[:,:,:2][attn_mask])
         info = {
             'cls_loss': float(cls_loss.item()),
-            'coord_loss': float(coord_loss.item())/2.0,
+            'coord_loss': float(coord_loss.item()),
             'dur_loss': float(dur_loss.item()),
         }
-        loss = cls_loss + self.cls_weight * ((coord_loss + dur_loss)/3.0)
+        loss = (1 -self.cls_weight)*cls_loss + self.cls_weight * ((coord_loss + dur_loss)/2.0)
         return loss, info
