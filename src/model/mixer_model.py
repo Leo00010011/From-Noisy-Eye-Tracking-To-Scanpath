@@ -63,11 +63,14 @@ class MixerModel(nn.Module):
         if input_encoder == 'linear':
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
             self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
-        elif input_encoder == 'fourier':
-            self.enc_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
-            self.enc_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
-            self.dec_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
-            self.dec_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
+        elif input_encoder == 'fourier' or input_encoder == 'fourier_sum':
+            self.enc_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,use_mlp = True **factory_mode)
+            self.enc_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,use_mlp = True **factory_mode)
+            self.dec_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,use_mlp = True **factory_mode)
+            self.dec_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,use_mlp = True **factory_mode)
+        elif input_encoder == 'fourier_concat':
+            self.enc_inputs_pe = GaussianFourierPosEncoder(3, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, use_mlp = True, **factory_mode)
+            self.dec_inputs_pe = GaussianFourierPosEncoder(3, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, use_mlp = True, **factory_mode)
         else:
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         if image_encoder is not None:
@@ -171,7 +174,7 @@ class MixerModel(nn.Module):
 
     def forward(self, src, image_src, tgt, src_mask=None, tgt_mask=None, **kwargs):
         # src, tgt shape (B,L,F)
-        if self.input_encoder == 'fourier':
+        if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum':
             # separate the coordinates and time or duration
             enc_coords = src[:,:,:2]
             enc_time = src[:,:,2]
@@ -189,6 +192,10 @@ class MixerModel(nn.Module):
             # apply the linear projections
             src = self.enc_input_proj(src)
             tgt = self.dec_input_proj(tgt)
+        elif self.input_encoder == 'fourier_concat':
+            # apply the fourier encodings
+            src = self.enc_inputs_pe(src)
+            tgt = self.dec_inputs_pe(tgt)
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
         

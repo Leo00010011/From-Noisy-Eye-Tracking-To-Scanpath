@@ -15,7 +15,7 @@ class PositionalEncoding:
         pe[:,1::2] = np.cos(position*div)
         self.pe = torch.from_numpy(pe).to(device = device)
 class GaussianFourierPosEncoder(nn.Module):
-    def __init__(self, input_dim, mapping_size, hidden_dim, output_dim, sigma=1.0, device='cpu', dtype=torch.float32):
+    def __init__(self, input_dim, mapping_size, hidden_dim, output_dim,use_mlp = True, sigma=1.0, device='cpu', dtype=torch.float32):
         """
         Args:
             mapping_size: Number of random Fourier features (output will be input_dim * mapping_size * 2).
@@ -25,6 +25,7 @@ class GaussianFourierPosEncoder(nn.Module):
         """
         super().__init__()
         self.input_dim = input_dim
+        self.use_mlp = use_mlp
         
         # 1. Create the random matrix B *once*
         # We sample from a Normal distribution N(0, sigma^2)
@@ -37,15 +38,15 @@ class GaussianFourierPosEncoder(nn.Module):
         # 2. Register it as a buffer. 
         # It is NOT a parameter (no gradients), but it IS part of state_dict.
         self.register_buffer('B', B)
-        
-        self.embed_dim = input_dim * mapping_size * 2 # sin + cos
-        
-        self.mlp = nn.Sequential(
-            nn.Linear(self.embed_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, output_dim)
-        )
-        self.mlp.to(device=device, dtype=dtype)
+        if use_mlp:
+            self.embed_dim = input_dim * mapping_size * 2 # sin + cos
+            
+            self.mlp = nn.Sequential(
+                nn.Linear(self.embed_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, output_dim)
+            )
+            self.mlp.to(device=device, dtype=dtype)
 
     def forward(self, x):
         # x shape: (Batch, Seq_Len, Input_Dim)
@@ -61,5 +62,7 @@ class GaussianFourierPosEncoder(nn.Module):
         # 2. Fourier features: [sin, cos]
         # -> (B, L, mapping_size * 2)
         x_proj = torch.cat([torch.sin(projected), torch.cos(projected)], dim=-1)
-        
-        return self.mlp(x_proj)
+        if self.use_mlp:
+            return self.mlp(x_proj)
+        else:
+            return x_proj
