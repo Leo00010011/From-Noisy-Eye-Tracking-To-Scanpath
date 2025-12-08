@@ -342,11 +342,13 @@ class PipelineBuilder:
 
     def build_loss_fn(self):
         if not hasattr(self.config, 'loss') or self.config.loss.type == 'entire_reg':
-            
+            print("Using Entire Regression Loss Function")
             return EntireRegLossFunction(cls_weight = self.config.loss.cls_weight,
                                          cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
                                          reg_func = STR_TO_LOSS_FUNC[self.config.loss.reg_func])
+            
         elif self.config.loss.type == 'separated_reg':
+            print("Using Separated Regression Loss Function")
             return SeparatedRegLossFunction(cls_weight = self.config.loss.cls_weight,
                                          cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
                                          coord_func = STR_TO_LOSS_FUNC[self.config.loss.coord_func],

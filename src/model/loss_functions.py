@@ -77,13 +77,14 @@ class SeparatedRegLossFunction(torch.nn.Module):
         cls_loss = self.cls_func(cls_out[attn_mask], cls_targets[attn_mask], weight=weights[attn_mask])
         
         # >>>>>> Regression loss
-        attn_mask = attn_mask.unsqueeze(-1).expand(-1,-1,3)
+        attn_mask = attn_mask.unsqueeze(-1)
         attn_mask = attn_mask[:,1:,:]
-        coord_loss = self.coord_func(coord_out[:,:-1,:][attn_mask], y[attn_mask][:,:,:2], reduction = 'sum')
-        dur_loss = self.dur_func(dur_out[:,:-1,:][attn_mask], y[attn_mask][:,:,2], reduction = 'sum')
+        dur_loss = self.dur_func(dur_out[:,:-1,:][attn_mask], y[:,:,2:][attn_mask], reduction = 'sum')
+        attn_mask = attn_mask.expand(-1,-1,2)
+        coord_loss = self.coord_func(coord_out[:,:-1,:][attn_mask], y[:,:,:2][attn_mask], reduction = 'sum')
         info = {
             'cls_loss': float(cls_loss.item()),
-            'coord_loss': float(coord_loss.item()),
+            'coord_loss': float(coord_loss.item())/2.0,
             'dur_loss': float(dur_loss.item()),
         }
         loss = cls_loss + self.cls_weight * ((coord_loss + dur_loss)/3.0)
