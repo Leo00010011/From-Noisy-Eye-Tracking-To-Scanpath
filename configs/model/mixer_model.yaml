@@ -14,7 +14,7 @@ norm_first: True
 dropout_p: 0
 num_freq_bands: 15
 pos_enc_hidden_dim: "${half:${model.model_dim}}" 
-input_encoder: "fourier"
+input_encoder: "linear"
 pos_enc_sigma: 1.0
 compilate: True
 head_type: "linear"
