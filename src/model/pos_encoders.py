@@ -53,9 +53,9 @@ class GaussianFourierPosEncoder(nn.Module):
         # (B, L, input_dim) @ (input_dim, mapping_size) -> (B, L, mapping_size)
         x = x.unsqueeze(-1)
         if self.input_dim == 1:
-            projected = (2*torch.pi * x) * self.B
+            projected = (2 * torch.pi * x) * self.B
         else:
-            projected = (2*torch.pi * x) * self.B
+            projected = (2 * torch.pi * x) * self.B
             projected = projected.flatten(start_dim=-2)
         
         # 2. Fourier features: [sin, cos]

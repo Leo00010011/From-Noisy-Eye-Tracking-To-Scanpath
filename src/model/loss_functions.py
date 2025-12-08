@@ -31,6 +31,7 @@ class EntireRegLossFunction(torch.nn.Module):
         device = reg_out.device
         # case where all the fixations have the same size 
         if attn_mask is None:
+            print("No attention mask provided")
             attn_mask = torch.ones(cls_out.size(), dtype = torch.bool, device = device)
         # >>>>>> Classification loss
         weights = create_weights(fixation_len, attn_mask, device)
