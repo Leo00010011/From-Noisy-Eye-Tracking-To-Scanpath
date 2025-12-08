@@ -123,9 +123,9 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True)
             
         if log:
             print(f'>>>>>>> Validation results at epoch {metrics["epoch"][-1]}:')
-            print('reg_loss_val: ',metrics['reg_loss_val'][-1])
-            print('cls_loss_val: ',metrics['cls_loss_val'][-1])  
-            print('reg_error_val: ',metrics['reg_error_val'][-1])
+            for key, value in info.items():
+                print(f'{key}_val: {value}')
+            print('coordinate_error_val: ',metrics['reg_error_val'][-1])
             print('duration_error_val: ',metrics['duration_error_val'][-1])
             print('accuracy: ',metrics['accuracy'][-1])
             print('precision_pos: ',metrics['precision_pos'][-1])
