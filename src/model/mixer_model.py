@@ -158,6 +158,15 @@ class MixerModel(nn.Module):
         if self.head_type == 'mlp' and self.mlp_head_hidden_dim is not None:
             resolved_dims = [dim for dim in self.mlp_head_hidden_dim]
             summ += f"        MLP Head Hidden Dimension: {resolved_dims}\n"
+        if self.head_type == 'multi_mlp' and self.mlp_head_hidden_dim is not None:
+            resolved_dims = [dim for dim in self.mlp_head_hidden_dim]
+            summ += f"        Multi MLP Head Hidden Dimension: {resolved_dims}\n"
+        if self.input_encoder == 'fourier':
+            summ += f"        Fourier Input Encoder: True\n Number of Frequency Bands: {self.num_freq_bands}\n Sigma: {self.pos_enc_sigma}\n"
+        elif self.input_encoder == 'linear':
+            summ += f"        Linear Input Encoder: True\n"
+        else:
+            raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
         return summ
 
     def forward(self, src, image_src, tgt, src_mask=None, tgt_mask=None, **kwargs):

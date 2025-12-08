@@ -77,7 +77,7 @@ class SeparatedRegLossFunction(torch.nn.Module):
         cls_loss = self.cls_func(cls_out[attn_mask], cls_targets[attn_mask], weight=weights[attn_mask])
         
         # >>>>>> Regression loss
-        attn_mask = attn_mask.unsqueeze(-1).expand(-1,-1,2)
+        attn_mask = attn_mask.unsqueeze(-1).expand(-1,-1,3)
         attn_mask = attn_mask[:,1:,:]
         coord_loss = self.coord_func(coord_out[:,:-1,:][attn_mask], y[attn_mask][:,:,:2], reduction = 'sum')
         dur_loss = self.dur_func(dur_out[:,:-1,:][attn_mask], y[attn_mask][:,:,2], reduction = 'sum')
