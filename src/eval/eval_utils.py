@@ -99,7 +99,7 @@ def invert_transforms(inputs, outputs, dataloader):
     if 'reg' in outputs:
         pred_reg = outputs['reg']
     else:
-        pred_reg = torch.stack([outputs['coord'], outputs['dur']], dim=-1)
+        pred_reg = torch.concat([outputs['coord'], outputs['dur']], dim=2)
     gt_reg = inputs['tgt']
     if hasattr(dataloader, 'path_dataset'):
         transforms = dataloader.path_dataset.transforms
