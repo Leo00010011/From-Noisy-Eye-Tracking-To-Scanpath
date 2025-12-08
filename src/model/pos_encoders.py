@@ -52,11 +52,10 @@ class GaussianFourierPosEncoder(nn.Module):
         # 1. Project input: (2*pi*x) @ B
         # (B, L, input_dim) @ (input_dim, mapping_size) -> (B, L, mapping_size)
         x = x.unsqueeze(-1)
-        # The coordinates are normalized to the range [-1, 1] therefore we multiply by pi instead of 2*pi
         if self.input_dim == 1:
-            projected = (torch.pi * x) * self.B
+            projected = (2*torch.pi * x) * self.B
         else:
-            projected = (torch.pi * x) * self.B
+            projected = (2*torch.pi * x) * self.B
             projected = projected.flatten(start_dim=-2)
         
         # 2. Fourier features: [sin, cos]

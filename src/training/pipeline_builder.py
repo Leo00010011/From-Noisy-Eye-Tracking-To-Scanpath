@@ -1,5 +1,5 @@
 import torch
-from src.model.loss_functions import EntireRegLossFunction
+from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
 import numpy as np
@@ -11,7 +11,11 @@ from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
 from src.data.datasets import FreeViewImgDataset, CoupledDataloader, DeduplicatedMemoryDataset
 
-
+STR_TO_LOSS_FUNC = {
+    'bce_with_logits': torch.nn.functional.binary_cross_entropy_with_logits,
+    'mse': torch.nn.functional.mse_loss,
+    'l1': torch.nn.functional.l1_loss
+}
 
 def build_extract_random_period(config):
     return  ExtractRandomPeriod(
@@ -338,17 +342,15 @@ class PipelineBuilder:
 
     def build_loss_fn(self):
         if not hasattr(self.config, 'loss') or self.config.loss.type == 'entire_reg':
-            reg_func = None
-            cls_func = None
-            if self.config.loss.cls_func == 'bce_with_logits':
-                cls_func = torch.nn.functional.binary_cross_entropy_with_logits
-            if self.config.loss.reg_func == 'mse':
-                reg_func = torch.nn.functional.mse_loss
-            elif self.config.loss.reg_func == 'l1':
-                reg_func = torch.nn.functional.l1_loss
+            
             return EntireRegLossFunction(cls_weight = self.config.loss.cls_weight,
-                                         cls_func = cls_func,
-                                         reg_func = reg_func)
+                                         cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
+                                         reg_func = STR_TO_LOSS_FUNC[self.config.loss.reg_func])
+        elif self.config.loss.type == 'separated_reg':
+            return SeparatedRegLossFunction(cls_weight = self.config.loss.cls_weight,
+                                         cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
+                                         coord_func = STR_TO_LOSS_FUNC[self.config.loss.coord_func],
+                                         dur_func = STR_TO_LOSS_FUNC[self.config.loss.dur_func])
         else:
             raise ValueError(f"Loss type {self.config.loss.type} not supported.")
 

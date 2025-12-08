@@ -48,7 +48,7 @@ class EntireRegLossFunction(torch.nn.Module):
         loss = cls_loss + self.cls_weight * reg_loss
         return loss, info
     
-class SeparatedLossFunction(torch.nn.Module):
+class SeparatedRegLossFunction(torch.nn.Module):
     def __init__(self, cls_weight = 0.5, 
                  cls_func = torch.nn.functional.binary_cross_entropy_with_logits, 
                  coord_func = torch.nn.functional.mse_loss,
