@@ -1,4 +1,5 @@
 import json
+import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -95,7 +96,10 @@ def plot_amplitude_dist(gaze_list, label_list, ptoa_list, bin_count=30, bin_min=
     plt.title('Amplitude Distribution in Degrees')
 
 def invert_transforms(inputs, outputs, dataloader):
-    pred_reg = outputs['reg']
+    if 'reg' in outputs:
+        pred_reg = outputs['reg']
+    else:
+        pred_reg = torch.stack([outputs['coord'], outputs['dur']], dim=-1)
     gt_reg = inputs['tgt']
     if hasattr(dataloader, 'path_dataset'):
         transforms = dataloader.path_dataset.transforms
