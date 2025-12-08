@@ -12,9 +12,9 @@ max_pos_enc: 15
 max_pos_dec: 26
 norm_first: True
 dropout_p: 0
-num_freq_bands: 15
+num_freq_bands: 64
 pos_enc_hidden_dim: "${half:${model.model_dim}}" 
-input_encoder: "linear"
+input_encoder: "fourier"
 pos_enc_sigma: 1.0
 compilate: True
 head_type: "linear"
