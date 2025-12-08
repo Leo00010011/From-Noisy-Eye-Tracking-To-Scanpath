@@ -29,6 +29,9 @@ class EntireRegLossFunction(torch.nn.Module):
         attn_mask = input['tgt_mask']
         fixation_len = input['fixation_len']
         device = reg_out.device
+        # case where all the fixations have the same size 
+        if attn_mask is None:
+            attn_mask = torch.ones(cls_out.size(), dtype = torch.bool, device = device)
         # >>>>>> Classification loss
         weights = create_weights(fixation_len, attn_mask, device)
         cls_targets = create_cls_targets(cls_out, fixation_len, device)
@@ -43,4 +46,44 @@ class EntireRegLossFunction(torch.nn.Module):
             'reg_loss': float(reg_loss.item()),
         }
         loss = cls_loss + self.cls_weight * reg_loss
+        return loss, info
+    
+class SeparatedLossFunction(torch.nn.Module):
+    def __init__(self, cls_weight = 0.5, 
+                 cls_func = torch.nn.functional.binary_cross_entropy_with_logits, 
+                 coord_func = torch.nn.functional.mse_loss,
+                 dur_func = torch.nn.functional.mse_loss):
+        super().__init__()
+        self.cls_weight = cls_weight
+        self.cls_func = cls_func
+        self.coord_func = coord_func
+        self.dur_func = dur_func
+    
+    def forward(self, input, output):
+        coord_out = output['coord']
+        dur_out = output['dur']
+        cls_out = output['cls']
+        y = input['tgt']
+        attn_mask = input['tgt_mask']
+        fixation_len = input['fixation_len']
+        device = coord_out.device
+        # case where all the fixations have the same size 
+        if attn_mask is None:
+            attn_mask = torch.ones(cls_out.size(), dtype = torch.bool, device = device)
+        # >>>>>> Classification loss
+        weights = create_weights(fixation_len, attn_mask, device)
+        cls_targets = create_cls_targets(cls_out, fixation_len, device)
+        cls_loss = self.cls_func(cls_out[attn_mask], cls_targets[attn_mask], weight=weights[attn_mask])
+        
+        # >>>>>> Regression loss
+        attn_mask = attn_mask.unsqueeze(-1).expand(-1,-1,2)
+        attn_mask = attn_mask[:,1:,:]
+        coord_loss = self.coord_func(coord_out[:,:-1,:][attn_mask], y[attn_mask][:,:,:2], reduction = 'sum')
+        dur_loss = self.dur_func(dur_out[:,:-1,:][attn_mask], y[attn_mask][:,:,2], reduction = 'sum')
+        info = {
+            'cls_loss': float(cls_loss.item()),
+            'coord_loss': float(coord_loss.item()),
+            'dur_loss': float(dur_loss.item()),
+        }
+        loss = cls_loss + self.cls_weight * ((coord_loss + dur_loss)/3.0)
         return loss, info

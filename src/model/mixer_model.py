@@ -123,6 +123,20 @@ class MixerModel(nn.Module):
         elif head_type == 'linear':
             self.regression_head = nn.Linear(model_dim, output_dim,**factory_mode)
             self.end_head = nn.Linear(model_dim,1,**factory_mode)
+        elif head_type == 'multi_mlp':
+            self.coord_head = MLP(model_dim,
+                                           mlp_head_hidden_dim,
+                                           2,
+                                           **factory_mode)
+            self.dur_head = MLP(model_dim,
+                                           mlp_head_hidden_dim,
+                                           1,
+                                           **factory_mode)
+            
+            self.end_head = MLP(model_dim,
+                                     mlp_head_hidden_dim,
+                                     1,
+                                     **factory_mode)
         else:
             raise ValueError(f"Unsupported head_type: {head_type}")
 
@@ -168,6 +182,7 @@ class MixerModel(nn.Module):
             tgt = self.dec_input_proj(tgt)
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
+        
         # apply the order positional encodings
         enc_pe = self.time_enc_pe.pe.unsqueeze(0)
         src = src + enc_pe[:,:src.size()[1],:]
@@ -175,6 +190,7 @@ class MixerModel(nn.Module):
         start = self.start_token.expand(tgt.size(0),-1,-1)
         tgt = torch.cat([start, tgt], dim = 1)
         tgt = tgt + dec_pe[:,:tgt.size()[1],:]
+        
         # encoding path
         for mod in self.path_encoder:
             src = mod(src, src_mask)
@@ -194,7 +210,13 @@ class MixerModel(nn.Module):
         if self.norm_first:
             output = self.final_dec_norm(output)
         # output heads
-        reg_out = self.regression_head(output)
-        cls_out = self.end_head(output)
-        return {'reg': reg_out, 'cls': cls_out}
+        if self.head_type == 'multi_mlp':
+            coord_out = self.coord_head(output)
+            dur_out = self.dur_head(output)
+            cls_out = self.end_head(output)
+            return {'coord': coord_out, 'dur': dur_out, 'cls': cls_out}
+        elif self.head_type == 'mlp' or self.head_type == 'linear':
+            reg_out = self.regression_head(output)
+            cls_out = self.end_head(output)
+            return {'reg': reg_out, 'cls': cls_out}
     
