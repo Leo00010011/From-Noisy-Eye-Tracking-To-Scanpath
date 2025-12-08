@@ -164,7 +164,7 @@ class MixerModel(nn.Module):
         if self.head_type == 'multi_mlp' and self.mlp_head_hidden_dim is not None:
             resolved_dims = [dim for dim in self.mlp_head_hidden_dim]
             summ += f"        Multi MLP Head Hidden Dimension: {resolved_dims}\n"
-        if self.input_encoder == 'fourier':
+        if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_concat' or self.input_encoder == 'fourier_sum':
             summ += f"        Fourier Input Encoder: True\n Number of Frequency Bands: {self.num_freq_bands}\n Sigma: {self.pos_enc_sigma}\n"
         elif self.input_encoder == 'linear':
             summ += f"        Linear Input Encoder: True\n"
