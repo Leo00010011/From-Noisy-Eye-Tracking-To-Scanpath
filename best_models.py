@@ -6,7 +6,7 @@ path_list = []
 model_best_coord_error = []
 model_best_recall_pos = []
 for output_path in out.rglob('*.json'):
-    with open(str(output_path), 'r') as f:
+    with open(output_path, 'r') as f:
         metric = json.load(f)
     if 'reg_error_val' not in metric:
         continue
