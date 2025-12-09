@@ -46,7 +46,7 @@ class EntireRegLossFunction(torch.nn.Module):
             'cls_loss': float(cls_loss.item()),
             'reg_loss': float(reg_loss.item()),
         }
-        loss = self.cls_weight * cls_loss + (1 - self.cls_weight) * reg_loss
+        loss = cls_loss + self.cls_weight * reg_loss
         return loss, info
     
 class SeparatedRegLossFunction(torch.nn.Module):
