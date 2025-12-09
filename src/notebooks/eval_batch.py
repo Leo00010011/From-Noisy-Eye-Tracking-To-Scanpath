@@ -152,8 +152,8 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
             output = model(**input)
             input, output = slim_input_output(input, output)
             input, output = invert_transforms(input, output, test_dataloader)
-            inputs_outputs['inputs'].append(input)
-            inputs_outputs['outputs'].append(output)
+            current_model['inputs'].append(input)
+            current_model['outputs'].append(output)
             cls_loss, reg_loss = compute_loss(input, output)
             reg_out, cls_out = output['reg'], output['cls']
             y, y_mask, fixation_len = input['tgt'], input['tgt_mask'], input['fixation_len']
