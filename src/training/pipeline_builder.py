@@ -268,7 +268,8 @@ class PipelineBuilder:
                     weights=self.config.model.image_encoder.weights
                 )
                 image_dim = self.config.model.image_encoder.image_dim
-            if (hasattr(self.config.data.transforms, 'NormalizeCoords') 
+            if (hasattr(self.config.data, 'transforms') and 
+                hasattr(self.config.data.transforms, 'NormalizeCoords') 
                 and not hasattr(self.config.data.transforms.NormalizeCoords,'mode')
                 and self.config.model.input_encoder == 'Fourier'):
                     input_encoder = 'nerf_fourier'
