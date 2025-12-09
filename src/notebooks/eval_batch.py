@@ -79,9 +79,18 @@ def plot_classification_scores(cls_out,fixation_len, title="Classification Score
     plt.yticks([])
     plt.show()
     
-
-
-
+def slim_input_output(input, output):
+    slim_input = {
+        'src': input['src'],
+        'tgt': input['tgt'],
+        'tgt_mask': input['tgt_mask'],
+        'fixation_len': input['fixation_len'],
+    }
+    slim_output = {
+        'reg': output['reg'],
+        'cls': output['cls'],
+    }
+    return slim_input, slim_output
 
 # %% [markdown]
 # # Eval
@@ -121,25 +130,53 @@ models_and_data = load_models_with_data(ckpt_path)
 print(f'Model {names[0]}')
 for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
     model.eval()
+    current_model = {
+        'checkpoint_path': ckpt_path,
+        'model_name': name,
+        'inputs': [],
+        'outputs': [],
+    }
     for batch in tqdm(test_dataloader):
         input = move_data_to_device(batch, device)
+        acc_acum = 0
+        cls_loss_acum = 0
+        reg_loss_acum = 0
+        pre_pos_acum = 0
+        rec_pos_acum = 0
+        pre_neg_acum = 0
+        rec_neg_acum = 0
+        coord_error_acum = 0
+        duration_error_acum = 0
+        count = 0
         with torch.no_grad():
             output = model(**input)
+            input, output = slim_input_output(input, output)
             input, output = invert_transforms(input, output, test_dataloader)
-            inputs_outputs.append((ckpt_path,name, input, output))
+            inputs_outputs['inputs'].append(input)
+            inputs_outputs['outputs'].append(output)
             cls_loss, reg_loss = compute_loss(input, output)
-            print(f'Cls Loss: {cls_loss:.4f}, Reg Loss: {reg_loss:.4f}')
             reg_out, cls_out = output['reg'], output['cls']
             y, y_mask, fixation_len = input['tgt'], input['tgt_mask'], input['fixation_len']
+            cls_loss_acum += cls_loss.item()
+            reg_loss_acum += reg_loss.item()
             cls_targets = create_cls_targets(cls_out, fixation_len)
-            print('accuracy: ',accuracy(cls_out, y_mask, cls_targets))
-            print('precision_pos: ',precision(cls_out, y_mask, cls_targets))
-            print('recall_pos: ',recall(cls_out, y_mask, cls_targets))
-            print('precision_neg: ',precision(cls_out, y_mask, cls_targets, cls = 0))
-            print('recall_neg: ',recall(cls_out, y_mask, cls_targets, cls = 0))
-            reg_error, dur_error = eval_reg(reg_out, y, y_mask)
-            print(f'Regression error (pixels): {reg_error:.4f}, Duration error ({dur_error:.4f})')
-        break
+            acc_acum += accuracy(cls_out, y_mask, cls_targets)
+            pre_pos_acum += precision(cls_out, y_mask, cls_targets)
+            rec_pos_acum += recall(cls_out, y_mask, cls_targets)
+            pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
+            rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
+            coord_error, dur_error = eval_reg(reg_out, y, y_mask)
+            coord_error_acum += coord_error
+            duration_error_acum += dur_error
+            count += 1
+    inputs_outputs.append(current_model)
+    print(f'Cls Loss: {cls_loss_acum/count:.4f}, Reg Loss: {reg_loss_acum/count:.4f}')
+    print('accuracy: ',acc_acum/count)
+    print('precision_pos: ',pre_pos_acum/count)
+    print('recall_pos: ',rec_pos_acum/count)
+    print('precision_neg: ',pre_neg_acum/count)
+    print('recall_neg: ',rec_neg_acum/count)
+    print(f'Regression error (pixels): {coord_error_acum/count:.4f}, Duration error ({duration_error_acum/count:.4f})')
     print('--------------------------------')
     if i < len(names) - 1:
         print(f'Model {names[i + 1]}')
