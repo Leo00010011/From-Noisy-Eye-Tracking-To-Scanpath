@@ -44,8 +44,12 @@ def build_discretization_noise(config):
                                 config.get('image_W',512)))
 
 def build_normalize_coords(config):
-    max_value = torch.tensor([config.image_W,config.image_H])
-    return Normalize(key=config.key, mode=config.mode, max_value=max_value)
+    if not hasattr(config, 'mode'):
+        max_value = torch.tensor([config.image_W,config.image_H])
+        return Normalize(key='x', mode=config.key, max_value=max_value) 
+    else:       
+        max_value = torch.tensor([config.image_W,config.image_H])
+        return Normalize(key=config.key, mode=config.mode, max_value=max_value)
 
 def build_normalize_time(config):
     return Normalize(key=config.key, mode=config.mode, max_value=config.period_duration)
