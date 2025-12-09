@@ -90,10 +90,22 @@ def plot_classification_scores(cls_out,fixation_len, title="Classification Score
 # ## Review Metrics
 
 # %%
+# ckpt_path = [os.path.join('outputs','2025-11-19','18-48-14'),
+#              os.path.join('outputs','2025-11-27','17-35-19'),
+#              os.path.join('outputs','2025-11-28','12-28-42'),
+#              os.path.join('outputs','2025-12-03','17-10-55'),]
+names = ['best path model ',
+'best regression ',
+'best but classification ',
+'other best duration but classification ',
+'best duration good recall ']
+
+
 ckpt_path = [os.path.join('outputs','2025-11-19','18-48-14'),
-             os.path.join('outputs','2025-11-27','17-35-19'),
-             os.path.join('outputs','2025-11-28','12-28-42'),
-             os.path.join('outputs','2025-12-03','17-10-55'),]
+os.path.join('outputs','2025-12-06','19-38-17'),
+os.path.join('outputs','2025-12-03','12-58-11'),
+os.path.join('outputs','2025-11-27','17-30-18'),
+os.path.join('outputs','2025-12-09','11-56-23')]
 
 # %% [markdown]
 # ## Checkout Output
@@ -107,14 +119,14 @@ inputs_outputs = []
 
 models_and_data = load_models_with_data(ckpt_path)
 print(f'Model {0}')
-for i, (model, _, _, test_dataloader) in enumerate(models_and_data):    
+for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
     model.eval()
     for batch in tqdm(test_dataloader):
         input = move_data_to_device(batch, device)
         with torch.no_grad():
             output = model(**input)
             input, output = invert_transforms(input, output, test_dataloader)
-            inputs_outputs.append((input, output))
+            inputs_outputs.append((ckpt_path,name, input, output))
             cls_loss, reg_loss = compute_loss(input, output)
             print(f'Cls Loss: {cls_loss:.4f}, Reg Loss: {reg_loss:.4f}')
             reg_out, cls_out = output['reg'], output['cls']
