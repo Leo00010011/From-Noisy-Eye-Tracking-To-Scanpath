@@ -141,7 +141,8 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
             print(f'Regression error (pixels): {reg_error:.4f}, Duration error ({dur_error:.4f})')
         break
     print('--------------------------------')
-    print(f'Model {names[i + 1]}')
+    if i < len(names) - 1:
+        print(f'Model {names[i + 1]}')
     del model
     torch.cuda.empty_cache()
     gc.collect()
