@@ -133,6 +133,10 @@ for i, ((model, _, test_dataloader, _), ckpt_path, name) in enumerate(zip(models
     if hasattr(model, 'image_encoder'):
         model.image_encoder.eval()
     with torch.no_grad():
+        if hasattr(model, 'image_encoder'):
+            print('rope reg: ', model.image_encoder.rope_reg.training)
+        else:
+            print('No rope reg')
         
         current_model = {
             'checkpoint_path': ckpt_path,
