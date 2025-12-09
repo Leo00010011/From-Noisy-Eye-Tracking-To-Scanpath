@@ -118,7 +118,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 inputs_outputs = []
 
 models_and_data = load_models_with_data(ckpt_path)
-print(f'Model {0}')
+print(f'Model {names[0]}')
 for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
     model.eval()
     for batch in tqdm(test_dataloader):
@@ -140,7 +140,8 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
             reg_error, dur_error = eval_reg(reg_out, y, y_mask)
             print(f'Regression error (pixels): {reg_error:.4f}, Duration error ({dur_error:.4f})')
         break
-    print(f'Model {i+1}')
+    print('--------------------------------')
+    print(f'Model {name}')
     del model
     torch.cuda.empty_cache()
     gc.collect()
