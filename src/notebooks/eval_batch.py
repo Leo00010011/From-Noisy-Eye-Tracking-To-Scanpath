@@ -133,24 +133,26 @@ for i, ((model, _, test_dataloader, _), ckpt_path, name) in enumerate(zip(models
     if hasattr(model, 'image_encoder'):
         model.image_encoder.eval()
     with torch.no_grad():
+        
         current_model = {
             'checkpoint_path': ckpt_path,
             'model_name': name,
             'inputs': [],
             'outputs': [],
         }
+        acc_acum = 0
+        cls_loss_acum = 0
+        reg_loss_acum = 0
+        pre_pos_acum = 0
+        rec_pos_acum = 0
+        pre_neg_acum = 0
+        rec_neg_acum = 0
+        coord_error_acum = 0
+        duration_error_acum = 0
+        count = 0
+        
         for batch in tqdm(test_dataloader):
             input = move_data_to_device(batch, device)
-            acc_acum = 0
-            cls_loss_acum = 0
-            reg_loss_acum = 0
-            pre_pos_acum = 0
-            rec_pos_acum = 0
-            pre_neg_acum = 0
-            rec_neg_acum = 0
-            coord_error_acum = 0
-            duration_error_acum = 0
-            count = 0
             output = model(**input)
             input, output = slim_input_output(input, output)
             input, output = invert_transforms(input, output, test_dataloader)
