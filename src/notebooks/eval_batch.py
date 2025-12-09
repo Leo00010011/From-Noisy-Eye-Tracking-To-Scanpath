@@ -130,6 +130,8 @@ models_and_data = load_models_with_data(ckpt_path)
 print(f'Model {names[0]}')
 for i, ((model, _, test_dataloader, _), ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
     model.eval()
+    if hasattr(model, 'image_encoder'):
+        model.image_encoder.eval()
     with torch.no_grad():
         current_model = {
             'checkpoint_path': ckpt_path,
