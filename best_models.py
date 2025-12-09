@@ -33,7 +33,6 @@ for output_path in out.rglob('*.json'):
                                         metric['duration_error_val'][min_idx],
                                         metric['recall_pos'][min_idx],
                                         metric['precision_pos'][min_idx]))
-print(model_best_coord_error)
 idx = list(range(len(model_best_coord_error)))
 print('coord error')
 idx.sort(key = lambda x: model_best_coord_error[x])
