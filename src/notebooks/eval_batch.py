@@ -145,4 +145,4 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
     del model
     torch.cuda.empty_cache()
     gc.collect()
-torch.save(inputs_outputs, f'inputs_outputs_{i+1}.pth')
+torch.save(inputs_outputs, f'inputs_outputs.pth')
