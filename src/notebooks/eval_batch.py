@@ -131,10 +131,10 @@ print(f'Model {names[0]}')
 for i, ((model, _, test_dataloader, _), ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
     model.eval()
     if hasattr(model, 'image_encoder'):
-        model.image_encoder.eval()
+        model.image_encoder.model.eval()
     with torch.no_grad():
         if hasattr(model, 'image_encoder'):
-            print('rope reg: ', model.image_encoder.rope_reg.training)
+            print('rope reg: ', model.image_encoder.model.rope_reg.training)
         else:
             print('No rope reg')
         
