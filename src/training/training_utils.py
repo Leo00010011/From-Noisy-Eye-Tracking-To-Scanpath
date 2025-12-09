@@ -146,6 +146,8 @@ def compute_loss(input, output):
     
     criterion_cls = torch.nn.BCEWithLogitsLoss()
     # the end token should not have a regression
+    if attn_mask is None:
+        attn_mask = torch.ones(cls_out.size()[:-1], dtype = torch.bool, device = reg_out.device)
     attn_mask_reg = attn_mask.clone()
     batch_idx = torch.arange(cls_out.size()[0])
     attn_mask_reg[batch_idx, fixation_len] = False
