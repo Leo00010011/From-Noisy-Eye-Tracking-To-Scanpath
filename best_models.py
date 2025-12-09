@@ -15,7 +15,7 @@ for output_path in out.rglob('*.json'):
     if 'reg_error_val' not in metric:
         continue
     path_list.append(output_path)
-    if min(metric['reg_error_val']) < 10:
+    if min(metric['reg_error_val']) < 10 or min(metric['recall_pos']) < 0.03:
         continue
     idx = list(range(len(metric['reg_error_val'])))
     min_idx = min(idx, key = lambda x: metric['reg_error_val'][x])
