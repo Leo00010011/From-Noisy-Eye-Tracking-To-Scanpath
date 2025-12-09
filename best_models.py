@@ -45,6 +45,7 @@ for i in idx[:4]:
     print(str(path_list[i]), f' {model_best_dur_error[i]}')
 if model_best_dur_with_good_recall:
     print('duration with good recall')
+    idx = list(range(len(model_best_dur_with_good_recall)))
     idx.sort(key = lambda x: model_best_dur_with_good_recall[x])
     for i in idx[:4]:
         print(str(path_list[i]), f' {model_best_dur_with_good_recall[i]}')
