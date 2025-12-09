@@ -266,6 +266,13 @@ class PipelineBuilder:
                     weights=self.config.model.image_encoder.weights
                 )
                 image_dim = self.config.model.image_encoder.image_dim
+            if (hasattr(self.config.data.transforms, 'NormalizeCoords') 
+                and not hasattr(self.config.data.transforms.NormalizeCoords,'mode')
+                and self.config.model.input_encoder == 'Fourier'):
+                    input_encoder = 'nerf_fourier'
+            else:
+                input_encoder = self.config.model.get('input_encoder', 'linear')
+                    
 
             model = MixerModel(input_dim = self.config.model.input_dim,
                               output_dim = self.config.model.output_dim,
@@ -277,7 +284,7 @@ class PipelineBuilder:
                               ff_dim = self.config.model.ff_dim,
                               max_pos_enc = self.config.model.max_pos_enc,
                               max_pos_dec = self.config.model.max_pos_dec,
-                              input_encoder = self.config.model.get('input_encoder', 'linear'),
+                              input_encoder = input_encoder,
                               num_freq_bands = self.config.model.get('num_freq_bands', None),
                               pos_enc_hidden_dim = self.config.model.get('pos_enc_hidden_dim', None),
                               norm_first = self.config.model.norm_first,
