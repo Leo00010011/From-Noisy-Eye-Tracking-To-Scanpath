@@ -4,6 +4,7 @@ import json
 out = Path('outputs')
 path_list = []
 model_best_coord_error = []
+model_best_dur_error = []
 model_best_recall_pos = []
 for output_path in out.rglob('*.json'):
     try:
@@ -16,7 +17,9 @@ for output_path in out.rglob('*.json'):
     path_list.append(output_path)
     if min(metric['reg_error_val']) < 10:
         continue
-    model_best_coord_error.append( min(metric['reg_error_val']))
+    idx = list(range(len(metric['reg_error_val'])))
+    min_idx = min(idx, key = lambda x: metric['reg_error_val'][x])
+    model_best_coord_error.append( (metric['reg_error_val'][min_idx], metric['duration_error_val'][min_idx], metric['recall_pos'][min_idx]))
     model_best_recall_pos.append( max(metric['recall_pos']))
 idx = list(range(len(model_best_coord_error)))
 print('coord error')
