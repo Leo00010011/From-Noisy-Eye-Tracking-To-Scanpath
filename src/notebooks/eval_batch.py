@@ -116,9 +116,11 @@ def slim_input_output(input, output):
 # os.path.join('outputs','2025-11-27','17-30-18'),
 # os.path.join('outputs','2025-12-09','11-56-23')]
 
-names = ['new norm path model ']
+names = ['fourier sum ', 'linear']
 
-ckpt_path = [os.path.join('outputs','2025-12-10','12-47-33')]
+ckpt_path = [os.path.join('outputs','2025-12-10','12-47-33'),
+             os.path.join('outputs','2025-12-10','15-18-11')]
+
 # %% [markdown]
 # ## Checkout Output
 
