@@ -84,12 +84,9 @@ class MixerModel(nn.Module):
             self.dec_inputs_pe = GaussianFourierPosEncoder(3, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
         else:
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
-        print(f"IMAGE ENCODER")
         if image_encoder is not None:
             img_embed_dim = image_encoder.embed_dim
             num_heads = image_encoder.model.num_heads
-            print(f"num_heads: {num_heads}")
-            print(f"model_dim: {model_dim}")
             if img_embed_dim == model_dim:
                 self.img_input_proj = nn.Identity()
             else:
