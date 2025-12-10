@@ -108,8 +108,8 @@ def invert_transforms(inputs, outputs, dataloader):
     # reverse the transforms
     for transform in reversed(transforms):
         if transform.modify_y:
-            pred_reg = transform.inverse(pred_reg, inputs['tgt_mask'])
-            gt_reg = transform.inverse(gt_reg, inputs['tgt_mask'][:,1:])
+            pred_reg = transform.inverse(pred_reg, inputs['tgt_mask'].unsqueeze(-1))
+            gt_reg = transform.inverse(gt_reg, inputs['tgt_mask'][:,1:].unsqueeze(-1))
     outputs['reg'] = pred_reg
     inputs['tgt'] = gt_reg
     return inputs, outputs
