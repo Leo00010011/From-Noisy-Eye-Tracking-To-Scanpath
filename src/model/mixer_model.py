@@ -227,7 +227,7 @@ class MixerModel(nn.Module):
         
         # enhancing features
         for mod in self.feature_enhancer:
-            src, img_src = mod(src, image_src, src1_mask = src_mask, src2_mask = None)
+            src, image_src = mod(src, image_src, src1_mask = src_mask, src2_mask = None)
             
         # decoding
         output = tgt
