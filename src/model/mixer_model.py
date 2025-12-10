@@ -5,6 +5,7 @@ import copy
 import numpy as np
 from src.model.blocks import TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer
 from src.model.pos_encoders import PositionalEncoding, GaussianFourierPosEncoder, FourierPosEncoder
+from src.model.rope_positional_embeddings import RopePositionEmbedding
 
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
@@ -33,6 +34,7 @@ class MixerModel(nn.Module):
                        n_feature_enhancer = 1,
                        image_dim = None,
                        pos_enc_sigma = 1.0,
+                       use_rope = False,
                        dtype = torch.float32,
                        device = 'cpu'):
         super().__init__()
@@ -55,6 +57,10 @@ class MixerModel(nn.Module):
         self.pos_enc_hidden_dim = pos_enc_hidden_dim
         self.input_encoder = input_encoder
         self.pos_enc_sigma = pos_enc_sigma
+        self.use_rope = use_rope
+        
+        
+        
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         # input processing
@@ -80,10 +86,24 @@ class MixerModel(nn.Module):
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         if image_encoder is not None:
             img_embed_dim = image_encoder.embed_dim
+            num_heads = image_encoder.model.num_heads
+            print(f"num_heads: {num_heads}")
+            print(f"model_dim: {model_dim}")
             if img_embed_dim == model_dim:
                 self.img_input_proj = nn.Identity()
             else:
                 self.img_input_proj = nn.Linear(img_embed_dim, model_dim, **factory_mode)
+            if use_rope:
+                self.rope_pos = RopePositionEmbedding(embed_dim = model_dim,
+                                                      num_heads = n_heads,
+                                                      base = image_encoder.model.rope_embed.base,
+                                                      min_period = image_encoder.model.rope_embed.min_period,
+                                                      max_period  = image_encoder.model.rope_embed.max_period,
+                                                      normalize_coords  = image_encoder.model.rope_embed.normalize_coords,
+                                                      shift_coords  = image_encoder.model.rope_embed.shift_coords,
+                                                      jitter_coords  = image_encoder.model.rope_embed.jitter_coords,
+                                                      rescale_coords  = image_encoder.model.rope_embed.rescale_coords ,
+                                                      **factory_mode)
         # encoding
         path_layer = TransformerEncoder(model_dim = model_dim,
                                            total_dim = total_dim,

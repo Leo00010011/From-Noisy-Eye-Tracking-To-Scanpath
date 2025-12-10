@@ -54,11 +54,8 @@ class RopePositionEmbedding(nn.Module):
         )
         self._init_weights()
 
-    def forward(self, *, H: int, W: int) -> tuple[Tensor, Tensor]:
-        device = self.periods.device
-        dtype = self.dtype
-        dd = {"device": device, "dtype": dtype}
-
+    def _create_grid(self, patch_res: tuple[int, int]|None, dd: dict) -> Tensor:
+        H, W = patch_res
         # Prepare coords in range [-1, +1]
         if self.normalize_coords == "max":
             max_HW = max(H, W)
@@ -73,38 +70,69 @@ class RopePositionEmbedding(nn.Module):
             coords_w = torch.arange(0.5, W, **dd) / W  # [W]
         else:
             raise ValueError(f"Unknown normalize_coords: {self.normalize_coords}")
-        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing="ij"), dim=-1)  # [H, W, 2]
-        coords = coords.flatten(0, 1)  # [HW, 2]
-        coords = 2.0 * coords - 1.0  # Shift range [0, 1] to [-1, +1]
-
+        coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing="xy"), dim=-1)  # [W,H, 2]
+        coords = coords.flatten(0, 1).unsqueeze(0)  # [1, WH, 2]
+        return coords
+    
+    def get_augmented_params(self, dd):
+        shift_hw = None
+        jitter_hw = None
+        rescale_hw = None
         # Shift coords by adding a uniform value in [-shift, shift]
         if self.training and self.shift_coords is not None:
             shift_hw = torch.empty(2, **dd).uniform_(-self.shift_coords, self.shift_coords)
-            coords += shift_hw[None, :]
 
         # Jitter coords by multiplying the range [-1, 1] by a log-uniform value in [1/jitter, jitter]
         if self.training and self.jitter_coords is not None:
             jitter_max = np.log(self.jitter_coords)
             jitter_min = -jitter_max
             jitter_hw = torch.empty(2, **dd).uniform_(jitter_min, jitter_max).exp()
-            coords *= jitter_hw[None, :]
 
         # Rescale coords by multiplying the range [-1, 1] by a log-uniform value in [1/rescale, rescale]
         if self.training and self.rescale_coords is not None:
             rescale_max = np.log(self.rescale_coords)
             rescale_min = -rescale_max
             rescale_hw = torch.empty(1, **dd).uniform_(rescale_min, rescale_max).exp()
-            coords *= rescale_hw
+        return shift_hw, jitter_hw, rescale_hw
+    
+    def compute_embeddings(self,coords, shift_hw, jitter_hw, rescale_hw ):
+        coords = 2.0 * coords - 1.0  # Shift range [0, 1] to [-1, +1]
+        # Shift coords by adding a uniform value in [-shift, shift]
+        if self.training and self.shift_coords is not None:
+            coords += shift_hw[None, None, :] # [B, N, F]
 
-        # Prepare angles and sin/cos
-        angles = 2 * math.pi * coords[:, :, None] / self.periods[None, None, :]  # [HW, 2, D//4]
-        angles = angles.flatten(1, 2)  # [HW, D//2]
-        angles = angles.tile(2)  # [HW, D]
-        cos = torch.cos(angles)  # [HW, D]
-        sin = torch.sin(angles)  # [HW, D]
 
-        return (sin, cos)  # 2 * [HW, D]
+        # Jitter coords by multiplying the range [-1, 1] by a log-uniform value in [1/jitter, jitter]
+        if self.training and self.jitter_coords is not None:
+            coords *= jitter_hw[None, None, :] # [B, N, F]
 
+        # Rescale coords by multiplying the range [-1, 1] by a log-uniform value in [1/rescale, rescale]
+        if self.training and self.rescale_coords is not None:
+            coords *= rescale_hw[None, None, :] # [B, N, F]
+            
+        angles = 2 * math.pi * coords[:,:, :, None] / self.periods[None,None, None, :]  # [B, N, 2, D//4]
+        angles = angles.flatten(1, 2)  # [B, N, D//2]
+        angles = angles.tile(2)  # [B, N, D]
+        cos = torch.cos(angles)  # [B, N, D]
+        sin = torch.sin(angles)  # [B, N, D]
+        return sin, cos  # [B, N, D]
+
+    def forward(self, traj_coords: Tensor|None, patch_res: tuple[int, int]|None) -> tuple[Tensor, Tensor]:
+        device = self.periods.device
+        dtype = self.dtype
+        dd = {"device": device, "dtype": dtype}
+        shift_hw, jitter_hw, rescale_hw = self.get_augmented_params(dd)
+        if traj_coords is not None:
+            traj_embeddings = self.compute_embeddings(traj_coords, shift_hw, jitter_hw, rescale_hw)
+        if patch_res is not None:
+            patch_coords = self._create_grid(patch_res, dd)
+            patch_embeddings = self.compute_embeddings(patch_coords, shift_hw, jitter_hw, rescale_hw)
+            if traj_embeddings is not None:
+                return traj_embeddings, patch_embeddings
+            else:
+                return patch_embeddings
+        return traj_embeddings
+    
     def _init_weights(self):
         device = self.periods.device
         dtype = self.dtype

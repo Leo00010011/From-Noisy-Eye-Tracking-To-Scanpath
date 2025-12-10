@@ -50,22 +50,23 @@ def rope_apply(x: Tensor, sin: Tensor, cos: Tensor) -> Tensor:
     # cos: [..., D], eg [cos0, cos1, cos2, cos0, cos1, cos2]
     return (x * cos) + (rope_rotate_half(x) * sin)
 
-def apply_rope( q: Tensor, k: Tensor, rope: Tensor | Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tensor]:
+def apply_rope( q: Tensor, k: Tensor, q_rope: Tensor | Tuple[Tensor, Tensor], k_rope: Tensor | Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tensor]:
     # All operations will use the dtype of rope, the output is cast back to the dtype of q and k
     q_dtype = q.dtype
     k_dtype = k.dtype
-    sin, cos = rope
-    rope_dtype = sin.dtype
+    sin_q, cos_q = q_rope
+    sin_k, cos_k = k_rope
+    rope_dtype = sin_q.dtype
     q = q.to(dtype=rope_dtype)
     k = k.to(dtype=rope_dtype)
     N = q.shape[-2]
-    prefix = N - sin.shape[-2]
+    prefix = N - sin_q.shape[-2]
     assert prefix >= 0
     q_prefix = q[:, :, :prefix, :]
-    q = rope_apply(q[:, :, prefix:, :], sin, cos)  # [B, head, hw, D//head]
+    q = rope_apply(q[:, :, prefix:, :], sin_q, cos_q)  # [B, head, hw, D//head]
     q = torch.cat((q_prefix, q), dim=-2)  # [B, head, N, D//head]
     k_prefix = k[:, :, :prefix, :]
-    k = rope_apply(k[:, :, prefix:, :], sin, cos)  # [B, head, hw, D//head]
+    k = rope_apply(k[:, :, prefix:, :], sin_k, cos_k)  # [B, head, hw, D//head]
     k = torch.cat((k_prefix, k), dim=-2)  # [B, head, N, D//head]
     q = q.to(dtype=q_dtype)
     k = k.to(dtype=k_dtype)
@@ -92,7 +93,9 @@ class MultiHeadedAttention(nn.Module):
     
     def forward(self,query:torch.Tensor,
                      key :torch.Tensor = None,
-                     attn_mask :torch.Tensor= None):
+                     attn_mask :torch.Tensor= None,
+                     q_rope :Tuple[torch.Tensor, torch.Tensor]| None = None,
+                     k_rope :Tuple[torch.Tensor, torch.Tensor]| None = None):
         # in_proj
         if self.is_self_attention:
             result = self.proj_in(query)
@@ -106,6 +109,8 @@ class MultiHeadedAttention(nn.Module):
         query = query.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2)
         key = key.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2)
         value = value.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2)
+        if q_rope is not None and k_rope is not None:
+            query, key = apply_rope(query, key, q_rope, k_rope)
         L_b,_,L_q,_ = query.size()
         L_k = key.size(2)
         # scaled dot product
@@ -153,19 +158,19 @@ class TransformerEncoder(nn.Module):
         self.norm2 = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
         self.dropout3 = nn.Dropout(dropout_p)
 
-    def __self_attention(self, x, attn_mask):
-        return self.dropout1(self.self_attn(x, attn_mask=attn_mask))
+    def __self_attention(self, x, attn_mask, rope_pos = None):
+        return self.dropout1(self.self_attn(x, attn_mask=attn_mask, q_rope=rope_pos))
 
     def __feed_forward(self, x):
         return self.dropout3(self.linear2(self.dropout2(self.activation(self.linear1(x)))))
 
-    def forward(self, src, src_mask = None):
+    def forward(self, src, src_mask = None, rope_pos = None):
         x = src
         if self.norm_first:
-            x = x + self.__self_attention(self.norm1(x), src_mask)
+            x = x + self.__self_attention(self.norm1(x), src_mask, rope_pos)
             x = x + self.__feed_forward(self.norm2(x))
         else:
-            x = self.norm1(x + self.__self_attention(x, src_mask))
+            x = self.norm1(x + self.__self_attention(x, src_mask, rope_pos))
             x = self.norm2(x + self.__feed_forward(x))
         return x
     
@@ -278,30 +283,38 @@ class DoubleInputDecoder(nn.Module):
         self.linear_down_dropout = nn.Dropout(dropout_p)
         self.linear_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
 
-    def __self_attention(self, x, attn_mask = None):
-        return self.self_attn_dropout(self.self_attn(x, attn_mask=attn_mask))
+    def __self_attention(self, x, attn_mask = None, src_rope = None):
+        return self.self_attn_dropout(self.self_attn(x, attn_mask=attn_mask, q_rope=src_rope))
 
-    def __cross_attention1(self, src, mem, attn_mask = None):
-        return self.first_cross_attn_dropout(self.first_cross_attn(src, mem, attn_mask=attn_mask))
+    def __cross_attention1(self, src, mem, attn_mask = None,src_rope = None, mem1_rope = None):
+        return self.first_cross_attn_dropout(self.first_cross_attn(src, mem, attn_mask=attn_mask, q_rope=src_rope, k_rope=mem1_rope))
 
-    def __cross_attention2(self, src, mem, attn_mask = None):
-        return self.second_cross_attn_dropout(self.second_cross_attn(src, mem, attn_mask=attn_mask))
+    def __cross_attention2(self, src, mem, attn_mask = None,src_rope = None, mem2_rope = None):
+        return self.second_cross_attn_dropout(self.second_cross_attn(src, mem, attn_mask=attn_mask, q_rope=src_rope, k_rope=mem2_rope))
 
     def __feed_forward(self, x):
         return self.linear_down_dropout(self.linear_down(self.linear_up_dropout(self.activation(self.linear_up(x)))))
 
     
-    def forward(self, src, mem1, mem2, tgt_mask = None, mem1_mask = None, mem2_mask = None):
+    def forward(self, src,
+                      mem1,
+                      mem2,
+                      tgt_mask = None,
+                      mem1_mask = None,
+                      mem2_mask = None,
+                      src_rope = None,
+                      mem1_rope = None,
+                      mem2_rope = None):
         x = src
         if self.norm_first:
-            x = x + self.__self_attention(self.self_attn_norm(x), attn_mask=tgt_mask)
-            x = x + self.__cross_attention1(self.first_cross_attn_norm(x), mem1, attn_mask=mem1_mask)
-            x = x + self.__cross_attention2(self.second_cross_attn_norm(x), mem2, attn_mask=mem2_mask)
+            x = x + self.__self_attention(self.self_attn_norm(x), attn_mask=tgt_mask, src_rope=src_rope)
+            x = x + self.__cross_attention1(self.first_cross_attn_norm(x), mem1, attn_mask=mem1_mask, src_rope=src_rope, mem1_rope=mem1_rope)
+            x = x + self.__cross_attention2(self.second_cross_attn_norm(x), mem2, attn_mask=mem2_mask, src_rope=src_rope, mem2_rope=mem2_rope)
             x = x + self.__feed_forward(self.linear_norm(x))
         else:
-            x = self.self_attn_norm(x + self.__self_attention(x, attn_mask=tgt_mask))
-            x = self.first_cross_attn_norm(x + self.__cross_attention1(x, mem1, attn_mask=mem1_mask))
-            x = self.second_cross_attn_norm(x + self.__cross_attention2(x, mem2, attn_mask=mem2_mask))
+            x = self.self_attn_norm(x + self.__self_attention(x, attn_mask=tgt_mask, src_rope=src_rope))
+            x = self.first_cross_attn_norm(x + self.__cross_attention1(x, mem1, attn_mask=mem1_mask, src_rope=src_rope, mem1_rope=mem1_rope))
+            x = self.second_cross_attn_norm(x + self.__cross_attention2(x, mem2, attn_mask=mem2_mask, src_rope=src_rope, mem2_rope=mem2_rope))
             x = self.linear_norm(x + self.__feed_forward(x))
         
         return x
@@ -363,29 +376,29 @@ class FeatureEnhancer(nn.Module):
                              output_dropout_p = dropout_p, out_dim = model_dim, **factory_kwargs)
         self.second_ff_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
 
-    def __self_attention(self, x , attn_dropout, self_attn, attn_mask = None):
-        return attn_dropout(self_attn(x, attn_mask=attn_mask))
+    def __self_attention(self, x , attn_dropout, self_attn, attn_mask = None, src_rope = None):
+        return attn_dropout(self_attn(x, attn_mask=attn_mask, q_rope=src_rope))
     
 
-    def __cross_attention(self, first, second, cross_attn_dropout, cross_attn, attn_mask = None):
-        return cross_attn_dropout(cross_attn(first, second, attn_mask=attn_mask))
+    def __cross_attention(self, first, second, cross_attn_dropout, cross_attn, attn_mask = None, src_rope = None, mem_rope = None):
+        return cross_attn_dropout(cross_attn(first, second, attn_mask=attn_mask, q_rope=src_rope, k_rope=mem_rope))
 
-    def forward(self, src1, src2, src1_mask = None, src2_mask = None):
+    def forward(self, src1, src2, src1_mask = None, src2_mask = None, src1_rope = None, src2_rope = None):
         x1 = src1
         x2 = src2
     
         if self.norm_first:
-            x1 = x1 + self.__self_attention(self.first_attn_norm(x1),self.first_attn_dropout, self.first_self_attn, attn_mask=src1_mask)
-            x2 = x2 + self.__self_attention(self.second_attn_norm(x2),self.second_attn_dropout, self.second_self_attn, attn_mask=src2_mask)
-            x1 = x1 + self.__cross_attention(self.f2s_cross_attn_norm(x1), x2, self.f2s_cross_attn_dropout, self.f2s_cross_attn, attn_mask=src2_mask)
-            x2 = x2 + self.__cross_attention(self.s2f_cross_attn_norm(x2), x1, self.s2f_cross_attn_dropout, self.s2f_cross_attn,attn_mask=src2_mask)
+            x1 = x1 + self.__self_attention(self.first_attn_norm(x1),self.first_attn_dropout, self.first_self_attn, attn_mask=src1_mask, src_rope=src1_rope)
+            x2 = x2 + self.__self_attention(self.second_attn_norm(x2),self.second_attn_dropout, self.second_self_attn, attn_mask=src2_mask, src_rope=src2_rope)
+            x1 = x1 + self.__cross_attention(self.f2s_cross_attn_norm(x1), x2, self.f2s_cross_attn_dropout, self.f2s_cross_attn, attn_mask=src2_mask, src_rope=src1_rope, mem_rope=src2_rope)
+            x2 = x2 + self.__cross_attention(self.s2f_cross_attn_norm(x2), x1, self.s2f_cross_attn_dropout, self.s2f_cross_attn,attn_mask=src2_mask, src_rope=src2_rope, mem_rope=src1_rope)
             x1 = x1 + self.first_ff(self.first_ff_norm(x1))
             x2 = x2 + self.second_ff(self.second_ff_norm(x2))
         else:
-            x1 = self.first_attn_norm(x1 + self.__self_attention(x1,self.first_attn_dropout, self.first_self_attn, attn_mask=src1_mask))
-            x2 = self.first_attn_norm(x2 + self.__self_attention(x2,self.second_attn_dropout, self.second_self_attn, attn_mask=src2_mask))
-            x1 = self.f2s_cross_attn_norm(x1 + self.__cross_attention(x1, x2, self.f2s_cross_attn_dropout, self.f2s_cross_attn, attn_mask=src2_mask))
-            x2 = self.s2f_cross_attn_norm(x2 + self.__cross_attention(x2, x1, self.s2f_cross_attn_dropout, self.s2f_cross_attn,attn_mask=src2_mask))
+            x1 = self.first_attn_norm(x1 + self.__self_attention(x1,self.first_attn_dropout, self.first_self_attn, attn_mask=src1_mask, src_rope=src1_rope))
+            x2 = self.first_attn_norm(x2 + self.__self_attention(x2,self.second_attn_dropout, self.second_self_attn, attn_mask=src2_mask, src_rope=src2_rope))
+            x1 = self.f2s_cross_attn_norm(x1 + self.__cross_attention(x1, x2, self.f2s_cross_attn_dropout, self.f2s_cross_attn, attn_mask=src2_mask, src_rope=src1_rope, mem_rope=src2_rope))
+            x2 = self.s2f_cross_attn_norm(x2 + self.__cross_attention(x2, x1, self.s2f_cross_attn_dropout, self.s2f_cross_attn,attn_mask=src2_mask, src_rope=src2_rope, mem_rope=src1_rope))
             x1 = self.first_ff_norm(x1 + self.first_ff(x1))
             x2 = self.second_ff_norm(x2 + self.second_ff(x2))
         
