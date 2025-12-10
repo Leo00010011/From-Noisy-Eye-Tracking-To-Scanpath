@@ -224,6 +224,10 @@ class MixerModel(nn.Module):
         if self.image_encoder is not None:
             image_src = self.image_encoder(image_src)
             image_src = self.img_input_proj(image_src)
+        
+        # enhancing features
+        for mod in self.feature_enhancer:
+            src = mod(src, image_src, src1_mask = src_mask, src2_mask = None)
             
         # decoding
         output = tgt
