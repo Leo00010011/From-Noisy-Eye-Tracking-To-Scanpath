@@ -97,14 +97,16 @@ class LogNormalizeDuration:
         # shape (F,L)
         d = input['y'][2]
         d = (np.log1p(d) - self.mean) / self.std
-        d = d * self.scale
+        # atan normalization
+        d = (1 / np.pi) * np.atan(d) + 0.5
         input['y'][2] = d
         return input
     
     def inverse(self, y):
         # shape (B,L,F)
         d = y[:,:,2]
-        d = torch.exp((d/self.scale*self.std) + self.mean) - 1
+        d = torch.tan(torch.pi*(d - 0.5))
+        d = torch.exp((d*self.std) + self.mean) - 1
         y[:,:,2] = d
         return y
     
