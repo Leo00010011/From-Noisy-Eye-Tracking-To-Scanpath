@@ -103,19 +103,22 @@ def slim_input_output(input, output):
 #              os.path.join('outputs','2025-11-27','17-35-19'),
 #              os.path.join('outputs','2025-11-28','12-28-42'),
 #              os.path.join('outputs','2025-12-03','17-10-55'),]
-names = ['best path model ',
-'best regression ',
-'best but classification ',
-'other best duration but classification ',
-'best duration good recall ']
+# names = ['best path model ',
+# 'best regression ',
+# 'best but classification ',
+# 'other best duration but classification ',
+# 'best duration good recall ']
 
 
-ckpt_path = [os.path.join('outputs','2025-11-19','18-48-14'),
-os.path.join('outputs','2025-12-06','19-38-17'),
-os.path.join('outputs','2025-12-03','12-58-11'),
-os.path.join('outputs','2025-11-27','17-30-18'),
-os.path.join('outputs','2025-12-09','11-56-23')]
+# ckpt_path = [os.path.join('outputs','2025-11-19','18-48-14'),
+# os.path.join('outputs','2025-12-06','19-38-17'),
+# os.path.join('outputs','2025-12-03','12-58-11'),
+# os.path.join('outputs','2025-11-27','17-30-18'),
+# os.path.join('outputs','2025-12-09','11-56-23')]
 
+names = ['new norm path model ']
+
+ckpt_path = [os.path.join('outputs','2025-12-10','12-47-33')]
 # %% [markdown]
 # ## Checkout Output
 
