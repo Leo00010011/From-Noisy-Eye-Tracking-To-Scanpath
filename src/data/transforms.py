@@ -87,26 +87,35 @@ class Normalize:
         max_value={self.max_value}'''
         
 class LogNormalizeDuration:
-    def __init__(self, mean, std, scale):
+    def __init__(self, mean, std, scale, use_tan):
         self.mean = mean
         self.std = std
         self.scale = scale
+        self.use_tan = use_tan
         self.modify_y = True
+        
         
     def __call__(self,input):
         # shape (F,L)
         d = input['y'][2]
-        d = (np.log1p(d) - self.mean) / self.std
         # atan normalization
-        d = (1 / np.pi) * np.arctan(d) + 0.5
+        if self.use_tan:
+            d = (np.log1p(d) - self.mean) / self.std
+            d = (1 / np.pi) * np.arctan(d) + 0.5
+        else:
+            d = (np.log1p(d) - self.mean) / self.std
+            d = d * self.scale
         input['y'][2] = d
         return input
     
     def inverse(self, y):
         # shape (B,L,F)
         d = y[:,:,2]
-        d = torch.tan(torch.pi*(d - 0.5))
-        d = torch.exp((d*self.std) + self.mean) - 1
+        if self.use_tan == True:
+            d = torch.tan(torch.pi*(d - 0.5))
+            d = torch.exp((d*self.std) + self.mean) - 1
+        else:
+            d = torch.exp((d/self.scale*self.std) + self.mean) - 1
         y[:,:,2] = d
         return y
     

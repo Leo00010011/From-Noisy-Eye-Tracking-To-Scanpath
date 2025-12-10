@@ -36,7 +36,7 @@ def recall(cls_out, attn_mask, cls_targets, cls = 1):
 def eval_reg(reg, y, y_mask):
     y_mask = y_mask.unsqueeze(-1)[:,1:,:]
     count = y_mask.sum().item()
-    diff = (reg[:,:-1,:] - y)* y_mask
+    diff = torch.where(y_mask.bool(), reg[:,:-1,:] - y, torch.tensor(0.0, device=y.device))
     diff_xy = diff[:,:,:2]
     reg_error = torch.sqrt(torch.sum(diff_xy**2, dim=-1))
     dur_error = torch.abs(diff[:,:,2])

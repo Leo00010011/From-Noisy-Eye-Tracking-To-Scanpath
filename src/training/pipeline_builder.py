@@ -57,7 +57,7 @@ def build_normalize_time(config):
         return Normalize(key=config.key, mode=config.mode, max_value=config.period_duration)
 
 def build_log_normalize_duration(config):
-    return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale)
+    return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale, use_tan=config.get('use_tan', False))
 
 class PipelineBuilder:
     def __init__(self, config):
