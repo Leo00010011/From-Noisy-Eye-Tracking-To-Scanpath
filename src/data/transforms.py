@@ -1,5 +1,5 @@
 import torch
-from src.data.datasets import extract_random_period
+from src.data.datasets import extract_random_period, PAD_TOKEN_ID
 from src.preprocess.noise import add_random_center_correlated_radial_noise, discretization_noise
 import numpy as np
 
@@ -60,12 +60,13 @@ class Normalize:
                 x[:2] = x[:2] / self.max_value.unsqueeze(-1)
             else:
                 x[:2] = x[:2] / self.max_value[..., np.newaxis]
+            
         elif self.mode == 'time':
             x[2] = x[2] / self.max_value
         input[self.key] = x
         return input
     
-    def inverse(self, y):
+    def inverse(self, y, tgt_mask):
         # shape (B,L,F)
         if isinstance(y, torch.Tensor):
             if isinstance(self.max_value, torch.Tensor):
@@ -74,8 +75,10 @@ class Normalize:
                 self.max_value = torch.tensor(self.max_value).to(y.device)
         if self.mode == 'coords':
             y[:,:,:2] = y[:,:,:2] * self.max_value
+            y.masked_fill(~tgt_mask, PAD_TOKEN_ID)
         elif self.mode == 'time':
             y[:,:,2] = y[:,:,2] * self.max_value
+            y.masked_fill(~tgt_mask, PAD_TOKEN_ID)
         return y
 
     def __repr__(self):
@@ -108,7 +111,7 @@ class LogNormalizeDuration:
         input['y'][2] = d
         return input
     
-    def inverse(self, y):
+    def inverse(self, y, tgt_mask):
         # shape (B,L,F)
         d = y[:,:,2]
         if self.use_tan == True:
@@ -117,6 +120,7 @@ class LogNormalizeDuration:
         else:
             d = torch.exp((d/self.scale*self.std) + self.mean) - 1
         y[:,:,2] = d
+        y.masked_fill(~tgt_mask, PAD_TOKEN_ID)
         return y
     
     def __repr__(self):

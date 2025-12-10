@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
+PAD_TOKEN_ID = 0.5
 
 def extract_random_period(start_index, period_duration, noisy_samples, fixations, fixation_mask, sampling_rate, downsample_period, random_offset = True):
     size = math.ceil(period_duration/downsample_period)
@@ -281,7 +282,7 @@ def seq2seq_padded_collate_fn(batch):
     input_sequences = [torch.from_numpy(item[0].T).float() for item in batch]
     target_sequences = [torch.from_numpy(item[1].T).float() for item in batch]
 
-    PAD_TOKEN_ID = 0.0
+
     
     padded_inputs = torch.nn.utils.rnn.pad_sequence(
         input_sequences, 
