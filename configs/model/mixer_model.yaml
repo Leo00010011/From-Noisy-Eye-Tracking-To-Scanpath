@@ -4,10 +4,10 @@ output_dim: 3
 n_encoder: 8
 n_decoder: 8
 n_feature_enhancer: 3
-model_dim: 512
-total_dim: 512
-n_heads: 8
-ff_dim: 2048
+model_dim: 384
+total_dim: 384
+n_heads: 6
+ff_dim: 1536
 max_pos_enc: 15
 max_pos_dec: 26
 norm_first: True
