@@ -98,7 +98,7 @@ class LogNormalizeDuration:
         d = input['y'][2]
         d = (np.log1p(d) - self.mean) / self.std
         # atan normalization
-        d = (1 / np.pi) * np.atan(d) + 0.5
+        d = (1 / np.pi) * np.arctan(d) + 0.5
         input['y'][2] = d
         return input
     
