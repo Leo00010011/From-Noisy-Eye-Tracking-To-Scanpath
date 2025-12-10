@@ -119,7 +119,8 @@ def slim_input_output(input, output):
 names = ['fourier sum ', 'linear']
 
 ckpt_path = [os.path.join('outputs','2025-12-10','12-47-33'),
-             os.path.join('outputs','2025-12-10','15-18-11')]
+             os.path.join('outputs','2025-12-10','15-18-11'),
+             os.path.join('outputs','2025-12-10','15-57-12')]
 
 # %% [markdown]
 # ## Checkout Output
