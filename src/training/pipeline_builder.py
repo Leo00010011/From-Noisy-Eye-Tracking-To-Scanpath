@@ -268,10 +268,6 @@ class PipelineBuilder:
                     weights=self.config.model.image_encoder.weights
                 )
                 image_dim = self.config.model.image_encoder.image_dim
-                img_embed_dim = image_encoder.embed_dim
-                num_heads = image_encoder.model.num_heads
-                print(f"img_embed_dim: {img_embed_dim}")
-                print(f"num_heads: {num_heads}")
             if (hasattr(self.config.data, 'transforms') and 
                 hasattr(self.config.data.transforms, 'NormalizeCoords') 
                 and not hasattr(self.config.data.transforms.NormalizeCoords,'mode')

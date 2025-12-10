@@ -143,6 +143,10 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
             print('rope reg: ', model.image_encoder.model.rope_embed.training)
         else:
             print('No rope reg')
+            img_embed_dim = model.image_encoder.embed_dim
+            num_heads = model.image_encoder.model.num_heads
+            print(f"img_embed_dim: {img_embed_dim}")
+            print(f"num_heads: {num_heads}")
         
         current_model = {
             'checkpoint_path': ckpt_path,
