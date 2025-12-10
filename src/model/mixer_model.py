@@ -137,6 +137,8 @@ class MixerModel(nn.Module):
         if  norm_first:
             self.final_dec_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
             self.final_enc_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
+            self.final_fenh_norm_src = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
+            self.final_fenh_norm_image = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
         if head_type == 'mlp':
             self.regression_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
@@ -235,6 +237,7 @@ class MixerModel(nn.Module):
         # encoding path
         for mod in self.path_encoder:
             src = mod(src, src_mask)
+            
         if self.norm_first:
             src = self.final_enc_norm(src)
             
@@ -246,6 +249,9 @@ class MixerModel(nn.Module):
             # enhancing features
             for mod in self.feature_enhancer:
                 src, image_src = mod(src, image_src, src1_mask = src_mask, src2_mask = None)
+            if self.norm_first:
+                src = self.final_fenh_norm_src(src)
+                image_src = self.final_fenh_norm_image(image_src)
             
         # decoding
         output = tgt
