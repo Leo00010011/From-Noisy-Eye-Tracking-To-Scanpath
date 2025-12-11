@@ -117,7 +117,7 @@ class RopePositionEmbedding(nn.Module):
         sin = torch.sin(angles)  # [B, N, D]
         return sin, cos  # [B, N, D]
 
-    def forward(self, traj_coords: Tensor|None, patch_res: tuple[int, int]|None) -> tuple[Tensor, Tensor]:
+    def forward(self, traj_coords: Tensor|None = None, patch_res: tuple[int, int]|None = None) -> tuple[Tensor, Tensor]:
         device = self.periods.device
         dtype = self.dtype
         dd = {"device": device, "dtype": dtype}
