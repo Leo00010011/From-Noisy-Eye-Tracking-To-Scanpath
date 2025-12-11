@@ -53,7 +53,7 @@ def rope_apply(x: Tensor, sin: Tensor, cos: Tensor) -> Tensor:
 def prefix_rope(token, sin, cos):
     N = token.shape[-2]
     prefix = N - sin.shape[-2]
-    if prefix >= 0:
+    if prefix > 0:
         token_prefix = token[:, :, :prefix, :]
         token = rope_apply(token[:, :, prefix:, :], sin, cos)  # [B, head, hw, D//head]
         token = torch.cat((token_prefix, token), dim=-2)  # [B, head, N, D//head]
