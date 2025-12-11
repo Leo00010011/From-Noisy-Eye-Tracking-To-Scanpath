@@ -112,16 +112,16 @@ class MixerModel(nn.Module):
                                            norm_first= norm_first,
                                            **factory_mode)
         self.path_encoder = _get_clones(path_layer,n_encoder) 
-        
-        feature_enhancer_layer = FeatureEnhancer(model_dim = model_dim,
-                                           total_dim = total_dim,
-                                           n_heads = n_heads,
-                                           ff_dim = ff_dim,
-                                           dropout_p = dropout_p,
-                                           activation= activation,
-                                           norm_first= norm_first,
-                                           **factory_mode)
-        self.feature_enhancer = _get_clones(feature_enhancer_layer,n_feature_enhancer)
+        if n_feature_enhancer > 0:
+            feature_enhancer_layer = FeatureEnhancer(model_dim = model_dim,
+                                            total_dim = total_dim,
+                                            n_heads = n_heads,
+                                            ff_dim = ff_dim,
+                                            dropout_p = dropout_p,
+                                            activation= activation,
+                                            norm_first= norm_first,
+                                            **factory_mode)
+            self.feature_enhancer = _get_clones(feature_enhancer_layer,n_feature_enhancer)
         
         # decoding
         decoder_layer = DoubleInputDecoder(model_dim = model_dim,
@@ -253,15 +253,16 @@ class MixerModel(nn.Module):
             image_src = self.img_input_proj(image_src)
         
             # enhancing features
-            for mod in self.feature_enhancer:
-                src_rope = None
-                image_rope = None
-                if self.use_rope:
-                    src_rope, image_rope = self.rope_pos(traj_coords = src_coords, patch_res = (size, size))
-                src, image_src = mod(src, image_src, src1_mask = src_mask, src2_mask = None, src1_rope = src_rope, src2_rope = image_rope)
-            if self.norm_first:
-                src = self.final_fenh_norm_src(src)
-                image_src = self.final_fenh_norm_image(image_src)
+            if self.n_feature_enhancer > 0:
+                for mod in self.feature_enhancer:
+                    src_rope = None
+                    image_rope = None
+                    if self.use_rope:
+                        src_rope, image_rope = self.rope_pos(traj_coords = src_coords, patch_res = (size, size))
+                    src, image_src = mod(src, image_src, src1_mask = src_mask, src2_mask = None, src1_rope = src_rope, src2_rope = image_rope)
+                if self.norm_first:
+                    src = self.final_fenh_norm_src(src)
+                    image_src = self.final_fenh_norm_image(image_src)
             
         # decoding
         output = tgt
