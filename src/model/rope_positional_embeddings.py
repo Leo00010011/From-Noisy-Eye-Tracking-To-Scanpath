@@ -99,19 +99,18 @@ class RopePositionEmbedding(nn.Module):
         coords = 2.0 * coords - 1.0  # Shift range [0, 1] to [-1, +1]
         # Shift coords by adding a uniform value in [-shift, shift]
         if self.training and self.shift_coords is not None:
-            coords += shift_hw[None, None, :] # [B, N, F]
-
+            coords += shift_hw[None, None, :] # [B, N, 2]
 
         # Jitter coords by multiplying the range [-1, 1] by a log-uniform value in [1/jitter, jitter]
         if self.training and self.jitter_coords is not None:
-            coords *= jitter_hw[None, None, :] # [B, N, F]
+            coords *= jitter_hw[None, None, :] # [B, N, 2]
 
         # Rescale coords by multiplying the range [-1, 1] by a log-uniform value in [1/rescale, rescale]
         if self.training and self.rescale_coords is not None:
-            coords *= rescale_hw[None, None, :] # [B, N, F]
+            coords *= rescale_hw[None, None, :] # [B, N, 2]
             
         angles = 2 * math.pi * coords[:,:, :, None] / self.periods[None,None, None, :]  # [B, N, 2, D//4]
-        angles = angles.flatten(1, 2)  # [B, N, D//2]
+        angles = angles.flatten(-2,-1)  # [B, N, D//2]
         angles = angles.tile(2)  # [B, N, D]
         cos = torch.cos(angles)  # [B, N, D]
         sin = torch.sin(angles)  # [B, N, D]

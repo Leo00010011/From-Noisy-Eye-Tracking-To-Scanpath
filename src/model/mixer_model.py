@@ -92,8 +92,8 @@ class MixerModel(nn.Module):
             else:
                 self.img_input_proj = nn.Linear(img_embed_dim, model_dim, **factory_mode)
             if use_rope:
-                self.rope_pos = RopePositionEmbedding(embed_dim = model_dim,
-                                                      num_heads = n_heads,
+                self.rope_pos = RopePositionEmbedding(embed_dim = self.model_dim,
+                                                      num_heads = self.n_heads,
                                                       base = image_encoder.model.rope_embed.base,
                                                       min_period = image_encoder.model.rope_embed.min_period,
                                                       max_period  = image_encoder.model.rope_embed.max_period,
