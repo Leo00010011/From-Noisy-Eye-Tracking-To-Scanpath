@@ -37,4 +37,4 @@ class DinoV3Wrapper(nn.Module):
             feats, cls_token = out[0]
             cls_token = cls_token.unsqueeze(1)
             feats = feats.flatten(2,3).permute(0,2,1) # (B, H*W, F)
-            return torch.cat([feats, cls_token], dim=1)
+            return torch.cat([cls_token, feats], dim=1)

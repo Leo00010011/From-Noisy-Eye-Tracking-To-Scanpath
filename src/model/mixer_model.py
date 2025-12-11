@@ -201,6 +201,9 @@ class MixerModel(nn.Module):
 
     def forward(self, src, image_src, tgt, src_mask=None, tgt_mask=None, **kwargs):
         # src, tgt shape (B,L,F)
+        src_coords = src[:,:,:2]
+        tgt_coords = tgt[:,:,:2]
+        size = self.image_encoder.model.patch_size
         if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum' or self.input_encoder == 'nerf_fourier':
             # separate the coordinates and time or duration
             enc_coords = src[:,:,:2]
@@ -236,7 +239,10 @@ class MixerModel(nn.Module):
         
         # encoding path
         for mod in self.path_encoder:
-            src = mod(src, src_mask)
+            src_rope = None
+            if self.use_rope:
+                src_rope = self.rope_pos(traj_coords = src_coords)
+            src = mod(src, src_mask, rope_pos = src_rope)
             
         if self.norm_first:
             src = self.final_enc_norm(src)
@@ -248,7 +254,11 @@ class MixerModel(nn.Module):
         
             # enhancing features
             for mod in self.feature_enhancer:
-                src, image_src = mod(src, image_src, src1_mask = src_mask, src2_mask = None)
+                src_rope = None
+                image_rope = None
+                if self.use_rope:
+                    src_rope, image_rope = self.rope_pos(traj_coords = src_coords, patch_res = (size, size))
+                src, image_src = mod(src, image_src, src1_mask = src_mask, src2_mask = None, src1_rope = src_rope, src2_rope = image_rope)
             if self.norm_first:
                 src = self.final_fenh_norm_src(src)
                 image_src = self.final_fenh_norm_image(image_src)
@@ -256,7 +266,12 @@ class MixerModel(nn.Module):
         # decoding
         output = tgt
         for mod in self.decoder:
-            output = mod(output, src, image_src, tgt_mask, src_mask, None)
+            src_rope = None
+            tgt_rope = None
+            image_rope = None
+            if self.use_rope:
+                [src_rope, tgt_rope], image_rope = self.rope_pos(traj_coords = [src_coords, tgt_coords], patch_res = (size, size))
+            output = mod(output, src, image_src, tgt_mask, src_mask, src_rope = tgt_rope, mem1_rope = src_rope, mem2_rope = image_rope)
 
         if self.norm_first:
             output = self.final_dec_norm(output)

@@ -123,7 +123,12 @@ class RopePositionEmbedding(nn.Module):
         dd = {"device": device, "dtype": dtype}
         shift_hw, jitter_hw, rescale_hw = self.get_augmented_params(dd)
         if traj_coords is not None:
-            traj_embeddings = self.compute_embeddings(traj_coords, shift_hw, jitter_hw, rescale_hw)
+            if isinstance(traj_coords, list):
+                traj_embeddings = []
+                for coords in traj_coords:
+                    traj_embeddings.append(self.compute_embeddings(coords, shift_hw, jitter_hw, rescale_hw))
+            else:
+                traj_embeddings = self.compute_embeddings(traj_coords, shift_hw, jitter_hw, rescale_hw)
         if patch_res is not None:
             patch_coords = self._create_grid(patch_res, dd)
             patch_embeddings = self.compute_embeddings(patch_coords, shift_hw, jitter_hw, rescale_hw)
