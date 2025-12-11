@@ -61,13 +61,20 @@ def apply_rope( q: Tensor, k: Tensor, q_rope: Tensor | Tuple[Tensor, Tensor], k_
     k = k.to(dtype=rope_dtype)
     N = q.shape[-2]
     prefix = N - sin_q.shape[-2]
-    assert prefix >= 0
-    q_prefix = q[:, :, :prefix, :]
-    q = rope_apply(q[:, :, prefix:, :], sin_q, cos_q)  # [B, head, hw, D//head]
-    q = torch.cat((q_prefix, q), dim=-2)  # [B, head, N, D//head]
-    k_prefix = k[:, :, :prefix, :]
-    k = rope_apply(k[:, :, prefix:, :], sin_k, cos_k)  # [B, head, hw, D//head]
-    k = torch.cat((k_prefix, k), dim=-2)  # [B, head, N, D//head]
+    if prefix >= 0:
+        q_prefix = q[:, :, :prefix, :]
+        q = rope_apply(q[:, :, prefix:, :], sin_q, cos_q)  # [B, head, hw, D//head]
+        q = torch.cat((q_prefix, q), dim=-2)  # [B, head, N, D//head]
+    else:
+        q = rope_apply(q, sin_q, cos_q)
+    N = k.shape[-2]
+    prefix = N - sin_k.shape[-2]
+    if prefix >= 0:
+        k_prefix = k[:, :, :prefix, :]
+        k = rope_apply(k[:, :, prefix:, :], sin_k, cos_k)  # [B, head, hw, D//head]
+        k = torch.cat((k_prefix, k), dim=-2)  # [B, head, N, D//head]
+    else:
+        k = rope_apply(k, sin_k, cos_k)
     q = q.to(dtype=q_dtype)
     k = k.to(dtype=k_dtype)
     return q, k
