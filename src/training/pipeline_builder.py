@@ -295,6 +295,7 @@ class PipelineBuilder:
                               head_type = self.config.model.get('head_type', 'linear'),
                               mlp_head_hidden_dim = self.config.model.get('mlp_head_hidden_dim', None),
                               pos_enc_sigma = self.config.model.get('pos_enc_sigma', None),
+                              use_rope = self.config.model.get('use_rope', False),
                               activation = activation,
                               device = self.device,
                               image_encoder = image_encoder,
