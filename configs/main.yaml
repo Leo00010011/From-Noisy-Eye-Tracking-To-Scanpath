@@ -6,7 +6,7 @@ defaults:
   - _self_
 
 training:
-  num_epochs: 300
+  num_epochs: 100
   validate: True
   val_interval: 10
   learning_rate: 0.001
