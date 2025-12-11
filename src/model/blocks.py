@@ -50,6 +50,17 @@ def rope_apply(x: Tensor, sin: Tensor, cos: Tensor) -> Tensor:
     # cos: [..., D], eg [cos0, cos1, cos2, cos0, cos1, cos2]
     return (x * cos) + (rope_rotate_half(x) * sin)
 
+def prefix_rope(token, sin, cos):
+    N = token.shape[-2]
+    prefix = N - sin.shape[-2]
+    if prefix >= 0:
+        token_prefix = token[:, :, :prefix, :]
+        token = rope_apply(token[:, :, prefix:, :], sin, cos)  # [B, head, hw, D//head]
+        token = torch.cat((token_prefix, token), dim=-2)  # [B, head, N, D//head]
+    else:
+        token = rope_apply(token, sin, cos)
+    return token
+
 def apply_rope( q: Tensor, k: Tensor, q_rope: Tensor | Tuple[Tensor, Tensor], k_rope: Tensor | Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tensor]:
     # All operations will use the dtype of rope, the output is cast back to the dtype of q and k
     q_dtype = q.dtype
@@ -59,22 +70,8 @@ def apply_rope( q: Tensor, k: Tensor, q_rope: Tensor | Tuple[Tensor, Tensor], k_
     rope_dtype = sin_q.dtype
     q = q.to(dtype=rope_dtype)
     k = k.to(dtype=rope_dtype)
-    N = q.shape[-2]
-    prefix = N - sin_q.shape[-2]
-    if prefix >= 0:
-        q_prefix = q[:, :, :prefix, :]
-        q = rope_apply(q[:, :, prefix:, :], sin_q, cos_q)  # [B, head, hw, D//head]
-        q = torch.cat((q_prefix, q), dim=-2)  # [B, head, N, D//head]
-    else:
-        q = rope_apply(q, sin_q, cos_q)
-    N = k.shape[-2]
-    prefix = N - sin_k.shape[-2]
-    if prefix >= 0:
-        k_prefix = k[:, :, :prefix, :]
-        k = rope_apply(k[:, :, prefix:, :], sin_k, cos_k)  # [B, head, hw, D//head]
-        k = torch.cat((k_prefix, k), dim=-2)  # [B, head, N, D//head]
-    else:
-        k = rope_apply(k, sin_k, cos_k)
+    q = prefix_rope(q, sin_q, cos_q)
+    k = prefix_rope(k, sin_k, cos_k)
     q = q.to(dtype=q_dtype)
     k = k.to(dtype=k_dtype)
     return q, k
@@ -116,8 +113,8 @@ class MultiHeadedAttention(nn.Module):
         query = query.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2)
         key = key.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2)
         value = value.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2)
-        if q_rope is not None and k_rope is not None:
-            query, key = apply_rope(query, key, q_rope, k_rope)
+        if q_rope is not None:
+            query, key = apply_rope(query, key, q_rope, k_rope if k_rope is not None else q_rope)
         L_b,_,L_q,_ = query.size()
         L_k = key.size(2)
         # scaled dot product
