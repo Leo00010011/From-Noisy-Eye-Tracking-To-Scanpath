@@ -403,9 +403,9 @@ class FeatureEnhancer(nn.Module):
             x2 = self.f2s_cross_attn_norm2(x2)
             x1 = x1 + self.__cross_attention(x1, x2, self.f2s_cross_attn_dropout, self.f2s_cross_attn, attn_mask=src2_mask, src_rope=src1_rope, mem_rope=src2_rope)
             
-            x1 = self.s2f_cross_attn_norm1(x1)
-            x2 = self.s2f_cross_attn_norm2(x2)
-            x2 = x2 + self.__cross_attention(x2, x1, self.s2f_cross_attn_dropout, self.s2f_cross_attn, attn_mask=src1_mask, src_rope=src2_rope, mem_rope=src1_rope)
+            # x1 = self.s2f_cross_attn_norm1(x1)
+            # x2 = self.s2f_cross_attn_norm2(x2)
+            # x2 = x2 + self.__cross_attention(x2, x1, self.s2f_cross_attn_dropout, self.s2f_cross_attn, attn_mask=src1_mask, src_rope=src2_rope, mem_rope=src1_rope)
             
             x1 = x1 + self.first_ff(self.first_ff_norm(x1))
             x2 = x2 + self.second_ff(self.second_ff_norm(x2))
