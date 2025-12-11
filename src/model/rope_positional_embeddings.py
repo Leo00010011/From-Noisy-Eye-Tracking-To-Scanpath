@@ -111,10 +111,11 @@ class RopePositionEmbedding(nn.Module):
             
         angles = 2 * math.pi * coords[:,:, :, None] / self.periods[None,None, None, :]  # [B, N, 2, D//4]
         angles = angles.flatten(-2,-1)  # [B, N, D//2]
-        angles = angles.tile(2)  # [B, N, D]
-        cos = torch.cos(angles)  # [B, N, D]
-        sin = torch.sin(angles)  # [B, N, D]
-        return sin, cos  # [B, N, D]
+        angles = angles.unsqueeze(1) # [B, 1, N, D//2]
+        angles = angles.tile(2)  # [B, 1, N, D]
+        cos = torch.cos(angles)  # [B, 1, N, D]
+        sin = torch.sin(angles)  # [B, 1, N, D]
+        return sin, cos  # [B, 1, N, D]
 
     def forward(self, traj_coords: Tensor|None = None, patch_res: tuple[int, int]|None = None) -> tuple[Tensor, Tensor]:
         device = self.periods.device
