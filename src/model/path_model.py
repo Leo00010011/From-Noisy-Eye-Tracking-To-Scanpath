@@ -84,6 +84,20 @@ class PathModel(nn.Module):
         elif head_type == 'linear':
             self.regression_head = nn.Linear(model_dim, output_dim,**factory_mode)
             self.end_head = nn.Linear(model_dim,1,**factory_mode)
+        elif head_type == 'multi_mlp':
+            self.coord_head = MLP(model_dim,
+                                           mlp_head_hidden_dim,
+                                           2,
+                                           **factory_mode)
+            self.dur_head = MLP(model_dim,
+                                           mlp_head_hidden_dim,
+                                           1,
+                                           **factory_mode)
+            
+            self.end_head = MLP(model_dim,
+                                     mlp_head_hidden_dim,
+                                     1,
+                                     **factory_mode)
         else:
             raise ValueError(f"Unsupported head_type: {head_type}")
 
@@ -107,6 +121,8 @@ class PathModel(nn.Module):
                    self.head_type)
         if self.head_type == 'mlp':
             summ += f"    MLP Head Hidden Dimension: {resolved_dims}\n"
+        elif self.head_type == 'multi_mlp':
+            summ += f"    MultiMLP Head Hidden Dimension: {resolved_dims}\n"
         return summ
 
     def forward(self,src, tgt, src_mask = None, tgt_mask = None, **kwargs):
@@ -136,7 +152,13 @@ class PathModel(nn.Module):
         if self.norm_first:
             output = self.final_dec_norm(output)
         # output heads
-        reg_out = self.regression_head(output)
-        cls_out = self.end_head(output)
-        return {'reg': reg_out, 'cls': cls_out}
+        if self.head_type == 'linear' or self.head_type == 'mlp':
+            reg_out = self.regression_head(output)
+            cls_out = self.end_head(output)
+            return {'reg': reg_out, 'cls': cls_out}
+        elif self.head_type == 'multi_mlp':
+            coord_out = self.coord_head(output)
+            dur_out = self.dur_head(output)
+            cls_out = self.end_head(output)
+            return {'coord': coord_out, 'dur': dur_out, 'cls': cls_out}
     
