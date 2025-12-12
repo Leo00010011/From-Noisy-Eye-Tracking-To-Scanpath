@@ -118,8 +118,8 @@ class LogNormalizeDuration:
         else:
             d = (np.log1p(d) - self.mean) / self.std
             d = d * self.scale
+        d[mask] = PAD_TOKEN_ID
         input['y'][2] = d
-        input['y'][2].masked_fill(mask, PAD_TOKEN_ID)
         return input
     
     def inverse(self, y, tgt_mask):
