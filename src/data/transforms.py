@@ -70,6 +70,7 @@ class Normalize:
         if isinstance(x, torch.Tensor):
             x = x.masked_fill(mask, PAD_TOKEN_ID)
         else:
+            print(x.shape, mask.shape)
             x[mask] = PAD_TOKEN_ID
         input[self.key] = x
         return input
