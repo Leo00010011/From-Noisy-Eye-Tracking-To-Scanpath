@@ -50,12 +50,13 @@ class EntireRegLossFunction(torch.nn.Module):
         return loss, info
     
 class SeparatedRegLossFunction(torch.nn.Module):
-    def __init__(self, cls_weight = 0.5, 
+    def __init__(self, cls_weight = 0.5, dur_weight = 0.5,
                  cls_func = torch.nn.functional.binary_cross_entropy_with_logits, 
                  coord_func = torch.nn.functional.mse_loss,
                  dur_func = torch.nn.functional.mse_loss):
         super().__init__()
         self.cls_weight = cls_weight
+        self.dur_weight = dur_weight
         self.cls_func = cls_func
         self.coord_func = coord_func
         self.dur_func = dur_func
@@ -88,5 +89,5 @@ class SeparatedRegLossFunction(torch.nn.Module):
             'coord_loss': float(coord_loss.item()),
             'dur_loss': float(dur_loss.item()),
         }
-        loss = cls_loss + self.cls_weight * ((coord_loss + dur_loss)/2.0)
+        loss = cls_loss + self.cls_weight * (((1-self.dur_weight) * coord_loss + self.dur_weight * dur_loss))
         return loss, info

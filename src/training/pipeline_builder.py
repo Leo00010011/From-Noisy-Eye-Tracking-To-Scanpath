@@ -367,7 +367,8 @@ class PipelineBuilder:
             return SeparatedRegLossFunction(cls_weight = self.config.loss.cls_weight,
                                          cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
                                          coord_func = STR_TO_LOSS_FUNC[self.config.loss.coord_func],
-                                         dur_func = STR_TO_LOSS_FUNC[self.config.loss.dur_func])
+                                         dur_func = STR_TO_LOSS_FUNC[self.config.loss.dur_func],
+                                         dur_weight = self.config.loss.dur_weight)
         else:
             raise ValueError(f"Loss type {self.config.loss.type} not supported.")
 
