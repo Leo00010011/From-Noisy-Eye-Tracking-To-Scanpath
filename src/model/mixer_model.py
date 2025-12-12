@@ -277,7 +277,7 @@ class MixerModel(nn.Module):
             src_rope = tgt_rope = image_rope = None
             if self.use_rope:
                 [src_rope, tgt_rope], image_rope = self.rope_pos(traj_coords = [src_coords, tgt_coords], patch_res = (size, size))
-            output = mod(output, src, image_src, tgt_mask, src_mask, src_rope = tgt_rope, mem1_rope = src_rope, mem2_rope = image_rope)
+            output = mod(output, image_src,src , tgt_mask, src_mask, src_rope = tgt_rope, mem1_rope = image_rope, mem2_rope = src_rope)
 
         if self.norm_first:
             output = self.final_dec_norm(output)
