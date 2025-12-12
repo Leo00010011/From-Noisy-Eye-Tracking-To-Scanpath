@@ -48,7 +48,7 @@ class Normalize:
         # shape (F,L)
         x = input[self.key]
         if isinstance(x, torch.Tensor):
-            mask = (x == PAD_TOKEN_ID).all(dim=-1).unsqueeze(-1)
+            mask = (x == PAD_TOKEN_ID).all(dim=0).unsqueeze(0)
         else:
             mask = np.all(x == PAD_TOKEN_ID, axis=-1)[..., np.newaxis]
         if isinstance(x, torch.Tensor):
@@ -70,7 +70,7 @@ class Normalize:
         if isinstance(x, torch.Tensor):
             x = x.masked_fill(mask, PAD_TOKEN_ID)
         else:
-            print(x.shape, mask.shape)
+            mask = np.broadcast_to(mask, x.shape)
             x[mask] = PAD_TOKEN_ID
         input[self.key] = x
         return input
