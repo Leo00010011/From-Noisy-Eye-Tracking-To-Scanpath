@@ -47,6 +47,7 @@ class Normalize:
     def __call__(self,input):
         # shape (F,L)
         x = input[self.key]
+        mask = (x == PAD_TOKEN_ID).all(dim = -1).unsqueeze(-1)
         if isinstance(x, torch.Tensor):
             if isinstance(self.max_value, torch.Tensor):
                 self.max_value = self.max_value.to(x.device)
@@ -63,6 +64,7 @@ class Normalize:
             
         elif self.mode == 'time':
             x[2] = x[2] / self.max_value
+        x.masked_fill(mask, PAD_TOKEN_ID)
         input[self.key] = x
         return input
     
@@ -101,6 +103,7 @@ class LogNormalizeDuration:
     def __call__(self,input):
         # shape (F,L)
         d = input['y'][2]
+        mask = d == PAD_TOKEN_ID
         # atan normalization
         if self.use_tan:
             d = (np.log1p(d) - self.mean) / self.std
@@ -109,6 +112,7 @@ class LogNormalizeDuration:
             d = (np.log1p(d) - self.mean) / self.std
             d = d * self.scale
         input['y'][2] = d
+        input['y'][2].masked_fill(mask, PAD_TOKEN_ID)
         return input
     
     def inverse(self, y, tgt_mask):
