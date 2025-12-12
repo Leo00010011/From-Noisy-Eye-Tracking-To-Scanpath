@@ -90,7 +90,11 @@ class MixerModel(nn.Module):
             if img_embed_dim == model_dim:
                 self.img_input_proj = nn.Identity()
             else:
-                self.img_input_proj = nn.Linear(img_embed_dim, model_dim, **factory_mode)
+                # self.img_input_proj = nn.Linear(img_embed_dim, model_dim, **factory_mode)
+                self.img_input_proj = MLP(img_embed_dim,
+                                           mlp_head_hidden_dim,
+                                           model_dim,
+                                           **factory_mode)
             if use_rope:
                 self.rope_pos = RopePositionEmbedding(embed_dim = self.model_dim,
                                                       num_heads = self.n_heads,
@@ -254,15 +258,18 @@ class MixerModel(nn.Module):
         
             # enhancing features
             if self.n_feature_enhancer > 0:
+                
+                img_enh = image_src
                 for mod in self.feature_enhancer:
                     src_rope = None
                     image_rope = None
                     if self.use_rope:
                         src_rope, image_rope = self.rope_pos(traj_coords = src_coords, patch_res = (size, size))
-                    src, image_src = mod(src, image_src, src1_mask = src_mask, src2_mask = None, src1_rope = src_rope, src2_rope = image_rope)
+                    src, img_enh = mod(src, img_enh, src1_mask = src_mask, src2_mask = None, src1_rope = src_rope, src2_rope = image_rope)
                 if self.norm_first:
                     src = self.final_fenh_norm_src(src)
-                    image_src = self.final_fenh_norm_image(image_src)
+            if self.norm_first:
+                image_src = self.final_fenh_norm_image(image_src)
             
         # decoding
         output = tgt
