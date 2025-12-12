@@ -47,7 +47,10 @@ class Normalize:
     def __call__(self,input):
         # shape (F,L)
         x = input[self.key]
-        mask = (x == PAD_TOKEN_ID).all(axis = -1).unsqueeze(-1)
+        if isinstance(x, torch.Tensor):
+            mask = (x == PAD_TOKEN_ID).all(dim=-1).unsqueeze(-1)
+        else:
+            mask = np.all(x == PAD_TOKEN_ID, axis=-1)[..., np.newaxis]
         if isinstance(x, torch.Tensor):
             if isinstance(self.max_value, torch.Tensor):
                 self.max_value = self.max_value.to(x.device)
