@@ -122,6 +122,7 @@ class RopePositionEmbedding(nn.Module):
         dtype = self.dtype
         dd = {"device": device, "dtype": dtype}
         shift_hw, jitter_hw, rescale_hw = self.get_augmented_params(dd)
+        traj_embeddings = None
         if traj_coords is not None:
             if isinstance(traj_coords, list):
                 traj_embeddings = []
