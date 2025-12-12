@@ -100,7 +100,8 @@ class MixerModel(nn.Module):
                                                       normalize_coords  = image_encoder.model.rope_embed.normalize_coords,
                                                       shift_coords  = image_encoder.model.rope_embed.shift_coords,
                                                       jitter_coords  = image_encoder.model.rope_embed.jitter_coords,
-                                                      rescale_coords  = image_encoder.model.rope_embed.rescale_coords ,
+                                                      # rescale_coords  = image_encoder.model.rope_embed.rescale_coords ,
+                                                      rescale_coords  = 0,
                                                       **factory_mode)
         # encoding
         path_layer = TransformerEncoder(model_dim = model_dim,

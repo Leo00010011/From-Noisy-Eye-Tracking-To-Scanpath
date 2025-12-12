@@ -1,8 +1,8 @@
 defaults:
   - scheduler: multistep_lr
   - data: default
-  - model: path_model
-  - loss: separated_loss
+  - model: mixer_model
+  - loss: entire_loss
   - _self_
 
 training:
