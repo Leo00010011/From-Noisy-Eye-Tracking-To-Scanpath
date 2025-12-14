@@ -99,10 +99,11 @@ def slim_input_output(input, output):
 # ## Review Metrics
 
 # %%
-names = ['best path model ']
+names = ['best path model', 'best mixer model']
 
 
-ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12')]
+ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
+             os.path.join('outputs','2025-12-12','19-18-29')]
 
 # %% [markdown]
 # ## Checkout Output
