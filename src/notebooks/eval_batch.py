@@ -102,9 +102,9 @@ def slim_input_output(input, output):
 names = ['path model', 'mixer model RoPE', 'mixer model no RoPE']
 
 
-ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12')]
-             #os.path.join('outputs','2025-12-12','19-18-29'),
-             #os.path.join('outputs','2025-12-15','11-50-27')]
+ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
+             os.path.join('outputs','2025-12-12','19-18-29'),
+             os.path.join('outputs','2025-12-15','11-50-27')]
 
 # %% [markdown]
 # ## Checkout Output
