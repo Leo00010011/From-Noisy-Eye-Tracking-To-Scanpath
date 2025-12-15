@@ -120,12 +120,12 @@ models_and_data = load_models_with_data(ckpt_path)
 print(f'Model {names[0]}')
 for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
     model.eval()
-    if hasattr(model, 'image_encoder'):
-        model.image_encoder.model.eval()
-        img_embed_dim = model.image_encoder.embed_dim
-        num_heads = model.image_encoder.model.num_heads
-        print(f"img_embed_dim: {img_embed_dim}")
-        print(f"num_heads: {num_heads}")
+    # if hasattr(model, 'image_encoder'):
+    #     model.image_encoder.model.eval()
+    #     img_embed_dim = model.image_encoder.embed_dim
+    #     num_heads = model.image_encoder.model.num_heads
+    #     print(f"img_embed_dim: {img_embed_dim}")
+    #     print(f"num_heads: {num_heads}")
     with torch.no_grad():
         if hasattr(model, 'image_encoder'):
             print('rope reg: ', model.image_encoder.model.rope_embed.training)
