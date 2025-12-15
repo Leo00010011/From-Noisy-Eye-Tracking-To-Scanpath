@@ -247,10 +247,10 @@ def plot_vector_dist(gaze_list, ptoa_list, label_list, hist_min= -20, hist_max=2
             # CORRECTED LINE: dx=1, dy=0 to go from (-1,0) to (0,0)
             axis[i].arrow(-1, 0, 1, 0, head_width=0.1, head_length=0.1, fc='red', ec='red', length_includes_head=True)
 
-        axis[i].set_title(f'2D Histogram of Vectors from {label}')
+        axis[i].set_title(f'{label}')
         axis[i].set_xlabel('Scaled X Difference')
         axis[i].set_ylabel('Scaled Y Difference')
-
+    plt.suptitle('2D Histogram of Vectors')
     plt.tight_layout() # Adjust subplots to fit in figure area
     plt.show()
 
