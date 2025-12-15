@@ -120,12 +120,6 @@ models_and_data = load_models_with_data(ckpt_path)
 print(f'Model {names[0]}')
 for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
     model.eval()
-    # if hasattr(model, 'image_encoder'):
-    #     model.image_encoder.model.eval()
-    #     img_embed_dim = model.image_encoder.embed_dim
-    #     num_heads = model.image_encoder.model.num_heads
-    #     print(f"img_embed_dim: {img_embed_dim}")
-    #     print(f"num_heads: {num_heads}")
     with torch.no_grad():
         if hasattr(model, 'image_encoder'):
             print('rope reg: ', model.image_encoder.model.rope_embed.training)
@@ -156,23 +150,23 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
             input, output = invert_transforms(input, output, test_dataloader)
             current_model['inputs'].append(input)
             current_model['outputs'].append(output)
-            cls_loss, reg_loss = compute_loss(input, output)
             reg_out, cls_out = output['reg'], output['cls']
             y, y_mask, fixation_len = input['tgt'], input['tgt_mask'], input['fixation_len']
-            cls_loss_acum += cls_loss.item()
-            reg_loss_acum += reg_loss.item()
+            # cls_loss, reg_loss = compute_loss(input, output)
+            # cls_loss_acum += cls_loss.item()
+            # reg_loss_acum += reg_loss.item()
+            coord_error, dur_error = eval_reg(reg_out, y, y_mask)
+            coord_error_acum += coord_error
+            duration_error_acum += dur_error
             cls_targets = create_cls_targets(cls_out, fixation_len)
             acc_acum += accuracy(cls_out, y_mask, cls_targets)
             pre_pos_acum += precision(cls_out, y_mask, cls_targets)
             rec_pos_acum += recall(cls_out, y_mask, cls_targets)
             pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
             rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
-            coord_error, dur_error = eval_reg(reg_out, y, y_mask)
-            coord_error_acum += coord_error
-            duration_error_acum += dur_error
             count += 1
     inputs_outputs.append(current_model)
-    print(f'Cls Loss: {cls_loss_acum/count:.4f}, Reg Loss: {reg_loss_acum/count:.4f}')
+    # print(f'Cls Loss: {cls_loss_acum/count:.4f}, Reg Loss: {reg_loss_acum/count:.4f}')
     print('accuracy: ',acc_acum/count)
     print('precision_pos: ',pre_pos_acum/count)
     print('recall_pos: ',rec_pos_acum/count)
