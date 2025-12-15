@@ -152,9 +152,9 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
             current_model['outputs'].append(output)
             reg_out, cls_out = output['reg'], output['cls']
             y, y_mask, fixation_len = input['tgt'], input['tgt_mask'], input['fixation_len']
-            # cls_loss, reg_loss = compute_loss(input, output)
-            # cls_loss_acum += cls_loss.item()
-            # reg_loss_acum += reg_loss.item()
+            cls_loss, reg_loss = compute_loss(input, output)
+            cls_loss_acum += cls_loss.item()
+            reg_loss_acum += reg_loss.item()
             coord_error, dur_error = eval_reg(reg_out, y, y_mask)
             coord_error_acum += coord_error
             duration_error_acum += dur_error
