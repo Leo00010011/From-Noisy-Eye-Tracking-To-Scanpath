@@ -24,6 +24,7 @@ class MixerModel(nn.Module):
                        input_encoder = None,
                        max_pos_enc = 8,
                        max_pos_dec = 4,
+                       image_features_dropout = 0.3,
                        num_freq_bands = 15,
                        pos_enc_hidden_dim = None,
                        activation = F.relu,
@@ -42,6 +43,7 @@ class MixerModel(nn.Module):
         self.name = 'MixerModel'
         self.model_dim = model_dim
         self.n_heads = n_heads
+        self.image_features_dropout = image_features_dropout
         self.ff_dim = ff_dim
         self.dropout_p = dropout_p
         self.n_encoder = n_encoder
@@ -101,6 +103,7 @@ class MixerModel(nn.Module):
                 self.img_input_proj = MLP(img_embed_dim,
                                            mlp_head_hidden_dim,
                                            model_dim,
+                                           hidden_dropout_p = image_features_dropout,
                                            **factory_mode)
             if use_rope:
                 self.rope_pos = RopePositionEmbedding(embed_dim = self.model_dim,

@@ -285,6 +285,7 @@ class PipelineBuilder:
                               total_dim = self.config.model.total_dim,
                               n_heads = self.config.model.n_heads,
                               ff_dim = self.config.model.ff_dim,
+                              image_features_dropout = self.config.model.image_features_dropout,
                               max_pos_enc = self.config.model.max_pos_enc,
                               max_pos_dec = self.config.model.max_pos_dec,
                               input_encoder = input_encoder,
