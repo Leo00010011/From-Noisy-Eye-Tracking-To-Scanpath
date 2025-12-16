@@ -299,6 +299,8 @@ class MixerModel(nn.Module):
             # obtain index
             # remove the cls token
             visual_tokens = image_src[:,1:,:]
+            print(visual_tokens.shape)
+            print(self.patch_resolution)
             B = visual_tokens.size(0)
             # select the corresponding image features
             coords = torch.floor(tgt_coords*16).long()
