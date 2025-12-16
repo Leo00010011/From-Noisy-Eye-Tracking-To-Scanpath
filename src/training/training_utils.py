@@ -10,6 +10,7 @@ class MetricsStorage:
             'epoch': [],
             'reg_error_val': [],
             'duration_error_val': [],
+            'outliers_count_val': [],
             'accuracy': [],
             'precision_pos': [],
             'recall_pos': [],
