@@ -91,7 +91,7 @@ class MixerModel(nn.Module):
         
         if image_encoder is not None:
             img_embed_dim = image_encoder.embed_dim
-            patch_resolution = (self.img_size / image_encoder.model.patch_size).int()
+            patch_resolution = int((self.img_size / image_encoder.model.patch_size))
             self.patch_resolution = (patch_resolution, patch_resolution)
             print(self.patch_resolution)
             if img_embed_dim == model_dim:
