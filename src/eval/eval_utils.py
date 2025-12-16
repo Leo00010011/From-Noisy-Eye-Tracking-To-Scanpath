@@ -95,7 +95,7 @@ def plot_amplitude_dist(gaze_list, label_list, ptoa_list, bin_count=30, bin_min=
     plt.legend()
     plt.title('Amplitude Distribution in Degrees')
 
-def invert_transforms(inputs, outputs, dataloader):
+def invert_transforms(inputs, outputs, dataloader, remove_outliers = False):
     if 'reg' in outputs:
         pred_reg = outputs['reg']
     else:
@@ -110,6 +110,11 @@ def invert_transforms(inputs, outputs, dataloader):
         if transform.modify_y:
             pred_reg = transform.inverse(pred_reg, inputs['tgt_mask'].unsqueeze(-1))
             gt_reg = transform.inverse(gt_reg, inputs['tgt_mask'][:,1:].unsqueeze(-1))
+    if remove_outliers:
+        y_mask = inputs['tgt_mask'][:,1:].unsqueeze(-1)
+        outliers = (pred_reg[:,:-1,2:] > 1200) & y_mask
+        pred_reg[:,:-1,2:][outliers] = 1200
+        outputs['outliers_count'] = outliers.sum().item()
     outputs['reg'] = pred_reg
     inputs['tgt'] = gt_reg
     return inputs, outputs

@@ -139,6 +139,7 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
         rec_pos_acum = 0
         pre_neg_acum = 0
         rec_neg_acum = 0
+        outliers_count_acum = 0
         coord_error_acum = 0
         duration_error_acum = 0
         count = 0
@@ -147,12 +148,13 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
             input = move_data_to_device(batch, device)
             output = model(**input)
             input, output = slim_input_output(input, output)
-            input, output = invert_transforms(input, output, test_dataloader)
+            input, output = invert_transforms(input, output, test_dataloader, remove_outliers = True)
             current_model['inputs'].append(input)
             current_model['outputs'].append(output)
             reg_out, cls_out = output['reg'], output['cls']
             y, y_mask, fixation_len = input['tgt'], input['tgt_mask'], input['fixation_len']
             cls_loss, reg_loss = compute_loss(input, output)
+            outliers_count_acum += output['outliers_count']
             cls_loss_acum += cls_loss.item()
             reg_loss_acum += reg_loss.item()
             coord_error, dur_error = eval_reg(reg_out, y, y_mask)
@@ -167,6 +169,7 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
             count += 1
     inputs_outputs.append(current_model)
     # print(f'Cls Loss: {cls_loss_acum/count:.4f}, Reg Loss: {reg_loss_acum/count:.4f}')
+    print(f'Outliers count: {outliers_count_acum}')
     print('accuracy: ',acc_acum/count)
     print('precision_pos: ',pre_pos_acum/count)
     print('recall_pos: ',rec_pos_acum/count)

@@ -90,17 +90,17 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True)
                     loss_info[key] = value
                 else:
                     loss_info[key] += value
-            input, output = invert_transforms(input, output, val_dataloader)
+            input, output = invert_transforms(input, output, val_dataloader, remove_outliers = True)
             reg_out = output['reg']
             cls_out = output['cls']
             y = input['tgt']
             y_mask = input['tgt_mask']
             fixation_len = input['fixation_len']
             
-            reg_error, duration_error, outliers_count = eval_reg(reg_out, y, y_mask, remove_outliers = True)
+            reg_error, duration_error = eval_reg(reg_out, y, y_mask)
             coord_error_acum += reg_error
             duration_error_acum += duration_error
-            outliers_count_acum += outliers_count
+            outliers_count_acum += output['outliers_count']
             cls_targets = create_cls_targets(cls_out, fixation_len)
             acc_acum += accuracy(cls_out, y_mask, cls_targets)
             pre_pos_acum += precision(cls_out, y_mask, cls_targets)
@@ -117,11 +117,11 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True)
         metrics['epoch'].append(epoch + 1)
         metrics['reg_error_val'].append(coord_error_acum / cnt)
         metrics['duration_error_val'].append(duration_error_acum / cnt)
+        metrics['outliers_count'].append(outliers_count_acum)
         metrics['precision_pos'].append(pre_pos_acum / cnt)
         metrics['recall_pos'].append(rec_pos_acum / cnt)
         metrics['precision_neg'].append(pre_neg_acum / cnt)
         metrics['recall_neg'].append(rec_neg_acum / cnt)
-        metrics['outliers_count'].append(outliers_count_acum)
         if log:
             print(f'>>>>>>> Validation results at epoch {metrics["epoch"][-1]}:')
             for key, value in info.items():
