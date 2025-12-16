@@ -17,7 +17,7 @@ pos_enc_hidden_dim: "${half:${model.model_dim}}"
 input_encoder: "linear"
 pos_enc_sigma: 1.0
 use_rope: False
-compilate: True
+compilate: False
 head_type: "linear"
 activation:  "gelu"
 device: "cuda"
