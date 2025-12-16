@@ -420,3 +420,36 @@ class FeatureEnhancer(nn.Module):
         return x1, x2
 
     
+class ArgMaxRegressor(nn.Module):
+    def __init__(self, H,W, device = 'cpu', dtype = torch.float32):
+        super().__init__()
+        self.H = H
+        self.W = W
+        H_coords = (torch.arange(H) + 0.5)/H 
+        W_coords = (torch.arange(W) + 0.5)/W 
+        
+        self.coord_mesh = torch.stack(torch.meshgrid(H_coords, W_coords), dim=-1)
+        # create coordinate mesh
+        # (H,W,2) -> (1,H,W,2) -> (1,H,W,1,2) -> (1,H*W,1,2)
+        self.coord_mesh = self.coord_mesh.unsqueeze(0).unsqueeze(-2).flatten(start_dim=1, end_dim=2)
+        self.coord_mesh = self.coord_mesh.to(device)
+        self.coord_mesh = self.coord_mesh.to(dtype)
+    
+    
+    def forward(self, x, visual_tokens):
+        # x: (B, L, F)
+        # visual tokens (B, 1 + H*W,F) 
+        # removing extra visual tokens
+        N = self.coord_mesh.shape[1]
+        prefix = visual_tokens.shape[1] - N
+        visual_tokens = visual_tokens[:, prefix:, :]
+        # visual_tokens: (B, H*W, F)
+        # Compute similarity between each query (x) and spatial location (visual_tokens)
+        similarity = torch.matmul(visual_tokens, x.transpose(-2, -1))  # (B, H*W, L)
+        # Apply softmax over the spatial dimension so weights sum to one over image positions for each token
+        attn_weights = torch.softmax(similarity, dim=1)  # (B, H*W, L)
+        # Compute weighted sum: (B, H*W, L, 2)
+        weighted = attn_weights.unsqueeze(-1) * self.coord_mesh  # (B, H*W, L, 2)
+        # Sum over the spatial dimension (H*W) to get predicted 2D coords per output token
+        soft_argmax = weighted.sum(dim=1)               # (B, L, 2)
+        return soft_argmax

@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import copy
 import numpy as np
-from src.model.blocks import TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer
+from src.model.blocks import TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer, ArgMaxRegressor
 from src.model.pos_encoders import PositionalEncoding, GaussianFourierPosEncoder, FourierPosEncoder
 from src.model.rope_positional_embeddings import RopePositionEmbedding
 
@@ -87,6 +87,7 @@ class MixerModel(nn.Module):
         if image_encoder is not None:
             img_embed_dim = image_encoder.embed_dim
             num_heads = image_encoder.model.num_heads
+            self.patch_resolution = image_encoder.model.patch_embed.patches_resolution
             if img_embed_dim == model_dim:
                 self.img_input_proj = nn.Identity()
             else:
@@ -169,6 +170,24 @@ class MixerModel(nn.Module):
                                      mlp_head_hidden_dim,
                                      1,
                                      **factory_mode)
+        elif head_type == 'argmax_regressor':
+            if image_encoder is None:
+                raise ValueError("Image encoder is required for argmax regressor")
+            self.regressor_head = MLP(model_dim,
+                                           mlp_head_hidden_dim,
+                                           model_dim,
+                                           **factory_mode)
+            
+            self.argmax_regressor = ArgMaxRegressor(H = self.patch_resolution[0], W = self.patch_resolution[1], **factory_mode)
+            self.dur_head = MLP(model_dim,
+                                           mlp_head_hidden_dim,
+                                           1,
+                                           **factory_mode)
+            
+            self.end_head = MLP(model_dim,
+                                     mlp_head_hidden_dim,
+                                     1,
+                                     **factory_mode)
         else:
             raise ValueError(f"Unsupported head_type: {head_type}")
 
@@ -205,9 +224,8 @@ class MixerModel(nn.Module):
 
     def forward(self, src, image_src, tgt, src_mask=None, tgt_mask=None, **kwargs):
         # src, tgt shape (B,L,F)
-        src_coords = src[:,:,:2]
-        tgt_coords = tgt[:,:,:2]
-        size = self.image_encoder.model.patch_size
+        src_coords = src[:,:,:2].clone()
+        tgt_coords = tgt[:,:,:2].clone()
         if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum' or self.input_encoder == 'nerf_fourier':
             # separate the coordinates and time or duration
             enc_coords = src[:,:,:2]
@@ -264,7 +282,7 @@ class MixerModel(nn.Module):
                     src_rope = None
                     image_rope = None
                     if self.use_rope:
-                        src_rope, image_rope = self.rope_pos(traj_coords = src_coords, patch_res = (size, size))
+                        src_rope, image_rope = self.rope_pos(traj_coords = src_coords, patch_res = self.patch_resolution)
                     src, img_enh = mod(src, img_enh, src1_mask = src_mask, src2_mask = None, src1_rope = src_rope, src2_rope = image_rope)
                 if self.norm_first:
                     src = self.final_fenh_norm_src(src)
@@ -276,7 +294,7 @@ class MixerModel(nn.Module):
         for mod in self.decoder:
             src_rope = tgt_rope = image_rope = None
             if self.use_rope:
-                [src_rope, tgt_rope], image_rope = self.rope_pos(traj_coords = [src_coords, tgt_coords], patch_res = (size, size))
+                [src_rope, tgt_rope], image_rope = self.rope_pos(traj_coords = [src_coords, tgt_coords], patch_res = self.patch_resolution)
             output = mod(output, image_src,src , tgt_mask, src_mask, src_rope = tgt_rope, mem1_rope = image_rope, mem2_rope = src_rope)
 
         if self.norm_first:
@@ -284,6 +302,12 @@ class MixerModel(nn.Module):
         # output heads
         if self.head_type == 'multi_mlp':
             coord_out = self.coord_head(output)
+            dur_out = self.dur_head(output)
+            cls_out = self.end_head(output)
+            return {'coord': coord_out, 'dur': dur_out, 'cls': cls_out}
+        elif self.head_type == 'argmax_regressor':
+            reg_out = self.regressor_head(output)
+            coord_out = self.argmax_regressor(reg_out, image_src)
             dur_out = self.dur_head(output)
             cls_out = self.end_head(output)
             return {'coord': coord_out, 'dur': dur_out, 'cls': cls_out}

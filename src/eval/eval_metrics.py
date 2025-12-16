@@ -34,15 +34,16 @@ def recall(cls_out, attn_mask, cls_targets, cls = 1):
     return recall
 
 def eval_reg(reg, y, y_mask, remove_outliers = False):
+    reg = reg.clone()
     y_mask = y_mask.unsqueeze(-1)[:,1:,:]
     count = y_mask.sum().item()
-    diff = torch.where(y_mask.bool(), reg[:,:-1,:] - y, torch.tensor(0.0, device=y.device))
+    if remove_outliers:
+        outliers = (reg[:,:-1,2:] > 1200) & y_mask
+        reg[:,:-1,2:][outliers] = 1200
+    diff = torch.where(y_mask, reg[:,:-1,:] - y, torch.tensor(0.0, device=y.device))
     diff_xy = diff[:,:,:2]
     reg_error = torch.sqrt(torch.sum(diff_xy**2, dim=-1))
     dur_error = torch.abs(diff[:,:,2])
-    if remove_outliers:
-        outliers = dur_error > 1200 
-        dur_error[outliers] = 1200 - 234
     reg_error = reg_error.sum().item() / count
     dur_error = dur_error.sum().item() / count
     if remove_outliers:
