@@ -87,6 +87,7 @@ class MultiHeadedAttention(nn.Module):
         self.head_dim = total_dim//n_heads
         factory_kwargs = {'device': device, 'dtype': dtype}
         self.factory_kwargs = factory_kwargs
+        self.scale = 1.0 / (self.head_dim ** 0.5)
         
         if is_self_attention:
             self.proj_in = nn.Linear(model_dim,total_dim*3, bias = False, **factory_kwargs)
@@ -109,17 +110,17 @@ class MultiHeadedAttention(nn.Module):
             result = self.proj_kv(key)
             key, value = torch.chunk(result, 2,dim = -1)
         # reshape
+        L_b,L_q,_ = query.size()
+        L_k = key.size(1)
         # (B,L_seq, total_dim) -> (B, L_seq, n_heads, head_dim) -> (B, n_heads, L_seq, head_dim)
-        query = query.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2)
-        key = key.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2)
-        value = value.unflatten(-1,[self.n_heads, self.head_dim]).transpose(1,2)
+        query = query.view(L_b,L_q,self.n_heads, self.head_dim).transpose(1,2)
+        key = key.view(L_b,L_k,self.n_heads, self.head_dim).transpose(1,2)
+        value = value.view(L_b,L_k,self.n_heads, self.head_dim).transpose(1,2)
         if q_rope is not None:
             query, key = apply_rope(query, key, q_rope, k_rope if k_rope is not None else q_rope)
-        L_b,_,L_q,_ = query.size()
-        L_k = key.size(2)
         # scaled dot product
         if attn_mask is None:
-            attn_output = F.scaled_dot_product_attention(query, key, value,is_causal= self.is_causal)
+            attn_output = F.scaled_dot_product_attention(query, key, value,is_causal= self.is_causal, scale=self.scale)
         else:
             # attention mask shape (B, L_seq)
             attn_bias = torch.zeros(size = (L_b, 1, L_q, L_k), device = query.device, dtype = query.dtype)
@@ -127,7 +128,7 @@ class MultiHeadedAttention(nn.Module):
             if self.is_causal:
                 temp_mask = torch.ones((L_q, L_k), dtype = torch.bool, device = query.device).tril()
                 attn_bias = attn_bias.masked_fill(temp_mask.logical_not(), float("-inf"))            
-            attn_output = F.scaled_dot_product_attention(query, key, value, attn_mask = attn_bias)
+            attn_output = F.scaled_dot_product_attention(query, key, value, attn_mask = attn_bias, scale=self.scale)
         # (B, n_heads, L_seq, head_dims)
         attn_output = attn_output.transpose(1,2).flatten(-2)
         # (B, L_seq, total)
