@@ -3,7 +3,7 @@ input_dim: 3
 output_dim: 3
 n_encoder: 8
 n_decoder: 8
-n_feature_enhancer: 3
+n_feature_enhancer: 0
 model_dim: 512
 total_dim: 512
 n_heads: 8
