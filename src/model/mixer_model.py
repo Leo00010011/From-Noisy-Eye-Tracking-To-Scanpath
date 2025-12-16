@@ -82,6 +82,10 @@ class MixerModel(nn.Module):
         elif input_encoder == 'fourier_concat':
             self.enc_inputs_pe = GaussianFourierPosEncoder(3, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
             self.dec_inputs_pe = GaussianFourierPosEncoder(3, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
+        elif input_encoder == 'image_features_concat':
+            self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
+            self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
+            self.mix_image_features = nn.Linear(model_dim*2, model_dim, **factory_mode)
         else:
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         if image_encoder is not None:
@@ -240,7 +244,7 @@ class MixerModel(nn.Module):
             # add the time and coords 
             src = enc_coords + enc_time
             tgt = dec_coords + dec_dur
-        elif self.input_encoder == 'linear':
+        elif self.input_encoder == 'linear' or self.input_encoder == 'image_features_concat':
             # apply the linear projections
             src = self.enc_input_proj(src)
             tgt = self.dec_input_proj(tgt)
@@ -288,7 +292,9 @@ class MixerModel(nn.Module):
                     src = self.final_fenh_norm_src(src)
             if self.norm_first:
                 image_src = self.final_fenh_norm_image(image_src)
-            
+                
+        if self.input_encoder == 'image_features_concat':
+            tgt = self.mix_image_features(torch.cat([tgt, image_src], dim = -1))
         # decoding
         output = tgt
         for mod in self.decoder:

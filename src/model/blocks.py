@@ -453,3 +453,5 @@ class ArgMaxRegressor(nn.Module):
         # Sum over the spatial dimension (H*W) to get predicted 2D coords per output token
         soft_argmax = weighted.sum(dim=1)               # (B, L, 2)
         return soft_argmax
+    
+    
