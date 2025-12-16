@@ -88,10 +88,12 @@ class MixerModel(nn.Module):
             self.mix_image_features = nn.Linear(model_dim*2, model_dim, **factory_mode)
         else:
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
+        
         if image_encoder is not None:
             img_embed_dim = image_encoder.embed_dim
-            num_heads = image_encoder.model.num_heads
-            self.patch_resolution = image_encoder.model.patch_embed.patches_resolution
+            patch_resolution = (self.img_size / image_encoder.model.patch_size).int()
+            self.patch_resolution = (patch_resolution, patch_resolution)
+            print(self.patch_resolution)
             if img_embed_dim == model_dim:
                 self.img_input_proj = nn.Identity()
             else:
@@ -299,8 +301,6 @@ class MixerModel(nn.Module):
             # obtain index
             # remove the cls token
             visual_tokens = image_src[:,1:,:]
-            print(visual_tokens.shape)
-            print(self.patch_resolution)
             B = visual_tokens.size(0)
             # select the corresponding image features
             coords = torch.floor(tgt_coords*16).long()
