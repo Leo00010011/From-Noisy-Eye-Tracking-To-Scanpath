@@ -75,6 +75,7 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True)
         rec_pos_acum = 0
         pre_neg_acum = 0
         rec_neg_acum = 0
+        outliers_count_acum = 0
         coord_error_acum = 0
         duration_error_acum = 0
         loss_info = {}
@@ -96,10 +97,10 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True)
             y_mask = input['tgt_mask']
             fixation_len = input['fixation_len']
             
-            reg_error, duration_error = eval_reg(reg_out, y, y_mask)
+            reg_error, duration_error, outliers_count = eval_reg(reg_out, y, y_mask, remove_outliers = True)
             coord_error_acum += reg_error
             duration_error_acum += duration_error
-            
+            outliers_count_acum += outliers_count
             cls_targets = create_cls_targets(cls_out, fixation_len)
             acc_acum += accuracy(cls_out, y_mask, cls_targets)
             pre_pos_acum += precision(cls_out, y_mask, cls_targets)
@@ -120,7 +121,7 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True)
         metrics['recall_pos'].append(rec_pos_acum / cnt)
         metrics['precision_neg'].append(pre_neg_acum / cnt)
         metrics['recall_neg'].append(rec_neg_acum / cnt)
-            
+        metrics['outliers_count'].append(outliers_count_acum)
         if log:
             print(f'>>>>>>> Validation results at epoch {metrics["epoch"][-1]}:')
             for key, value in info.items():
