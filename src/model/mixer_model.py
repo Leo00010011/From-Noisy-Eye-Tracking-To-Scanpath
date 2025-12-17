@@ -238,6 +238,8 @@ class MixerModel(nn.Module):
         src_coords = src[:,:,:2].clone()
         if tgt is not None:
             tgt_coords = tgt[:,:,:2].clone()
+        else:
+            tgt_coords = None
         if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum' or self.input_encoder == 'nerf_fourier':
             enc_coords = src[:,:,:2]
             enc_time = src[:,:,2]
@@ -308,7 +310,7 @@ class MixerModel(nn.Module):
             if self.norm_first:
                 image_src = self.final_fenh_norm_image(image_src)
                 
-        if self.input_encoder == 'image_features_concat':
+        if self.input_encoder == 'image_features_concat' and tgt_coords is not None:
             visual_tokens = image_src[:,1:,:]
             B = visual_tokens.size(0)
             coords = torch.floor(tgt_coords*16).long()
