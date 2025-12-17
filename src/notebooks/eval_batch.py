@@ -148,7 +148,7 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
             
             for batch in tqdm(test_dataloader):
                 input = move_data_to_device(batch, device)
-                output = eval_autoregressive(model, input, out_len = 14)
+                output = eval_autoregressive(model, input)
                 input, output = slim_input_output(input, output)
                 input, output = invert_transforms(input, output, test_dataloader, remove_outliers = True)
                 current_model['inputs'].append(input)
