@@ -130,7 +130,7 @@ class PathModel(nn.Module):
         # src, tgt shape (B,L,F)
         src = self.enc_input_proj(src)
         # add the start to tgt
-        start = self.start_token.expand(tgt.size(0),-1,-1)
+        start = self.start_token.expand(src.size(0),-1,-1)
         if tgt is not None:
             tgt = self.dec_input_proj(tgt)
             tgt = torch.cat([start, tgt], dim = 1)
