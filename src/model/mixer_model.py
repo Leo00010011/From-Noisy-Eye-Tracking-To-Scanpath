@@ -238,37 +238,44 @@ class MixerModel(nn.Module):
         src_coords = src[:,:,:2].clone()
         tgt_coords = tgt[:,:,:2].clone()
         if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum' or self.input_encoder == 'nerf_fourier':
-            # separate the coordinates and time or duration
             enc_coords = src[:,:,:2]
             enc_time = src[:,:,2]
-            dec_coords = tgt[:,:,:2]
-            dec_dur = tgt[:,:,2]
-            # apply the fourier encodings
             enc_coords = self.enc_coords_pe(enc_coords)
             enc_time = self.enc_time_pe(enc_time)
-            dec_coords = self.dec_coords_pe(dec_coords)
-            dec_dur = self.dec_time_pe(dec_dur)
-            # add the time and coords 
             src = enc_coords + enc_time
-            tgt = dec_coords + dec_dur
+            if tgt is not None:
+                dec_coords = tgt[:,:,:2]
+                dec_dur = tgt[:,:,2]
+                dec_coords = self.dec_coords_pe(dec_coords)
+                dec_dur = self.dec_time_pe(dec_dur)
+                tgt = dec_coords + dec_dur
+            # add the time and coords 
         elif self.input_encoder == 'linear' or self.input_encoder == 'image_features_concat':
             # apply the linear projections
             src = self.enc_input_proj(src)
-            tgt = self.dec_input_proj(tgt)
+            if tgt is not None: 
+                tgt = self.dec_input_proj(tgt)
         elif self.input_encoder == 'fourier_concat':
             # apply the fourier encodings
             src = self.enc_inputs_pe(src)
-            tgt = self.dec_inputs_pe(tgt)
+            if tgt is not None:
+                tgt = self.dec_inputs_pe(tgt)
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
         
         # apply the order positional encodings
-        enc_pe = self.time_enc_pe.pe.unsqueeze(0)
-        src = src + enc_pe[:,:src.size()[1],:]
-        dec_pe = self.time_dec_pe.pe.unsqueeze(0)
-        start = self.start_token.expand(tgt.size(0),-1,-1)
-        tgt = torch.cat([start, tgt], dim = 1)
-        tgt = tgt + dec_pe[:,:tgt.size()[1],:]
+        if tgt is not None:
+            enc_pe = self.time_enc_pe.pe.unsqueeze(0)
+            src = src + enc_pe[:,:src.size()[1],:]
+            dec_pe = self.time_dec_pe.pe.unsqueeze(0)
+            start = self.start_token.expand(tgt.size(0),-1,-1)
+            tgt = torch.cat([start, tgt], dim = 1)
+            tgt = tgt + dec_pe[:,:tgt.size()[1],:]
+        else:
+            dec_pe = self.time_dec_pe.pe.unsqueeze(0)
+            tgt = self.start_token.expand(src.size(0),-1,-1)
+            tgt = tgt + dec_pe[:,:tgt.size()[1],:]
+            
         
         # encoding path
         for mod in self.path_encoder:

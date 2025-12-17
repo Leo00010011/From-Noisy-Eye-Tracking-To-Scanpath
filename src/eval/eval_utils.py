@@ -292,3 +292,28 @@ def calculate_relative_vectors(vec):
     new_y = (v2[0, :] * sin_angle + v2[1, :] * cos_angle) / norm_v1
 
     return np.vstack((new_x, new_y))
+
+def concat_reg(output):
+    if 'reg' in output:
+        return output['reg']
+    else:
+        return torch.concat([output['coord'], output['dur']], dim=2)
+
+def eval_autoregressive(model, inputs, out_len, only_last = False):
+    model.eval()
+    output = None
+    inputs['tgt_mask'] = None
+    with torch.no_grad():
+        for _ in range(out_len):
+            inputs['tgt'] = output            
+            current_output = model(**inputs)
+            
+            reg = concat_reg(current_output)
+            if only_last:
+                if output is None:
+                    output = reg
+                else:
+                    output = torch.concat([only_last, reg[:,-1:,:]], dim=1)
+            else:
+                output = reg
+    return output

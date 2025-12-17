@@ -129,14 +129,17 @@ class PathModel(nn.Module):
 
         # src, tgt shape (B,L,F)
         src = self.enc_input_proj(src)
-        tgt = self.dec_input_proj(tgt)
+        # add the start to tgt
+        start = self.start_token.expand(tgt.size(0),-1,-1)
+        if tgt is not None:
+            tgt = self.dec_input_proj(tgt)
+            tgt = torch.cat([start, tgt], dim = 1)
+        else:
+            tgt = start
         # sum up the positional encodings (max_pos, model_dim) -> (L, model_dim)
         enc_pe = self.enc_pe.pe.unsqueeze(0)
         dec_pe = self.dec_pe.pe.unsqueeze(0)
-        start = self.start_token.expand(tgt.size(0),-1,-1)
         src = src + enc_pe[:,:src.size()[1],:]
-        # add the start to tgt
-        tgt = torch.cat([start, tgt], dim = 1)
         tgt = tgt + dec_pe[:,:tgt.size()[1],:]
         # encoding
         memory = src

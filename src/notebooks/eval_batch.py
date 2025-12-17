@@ -18,7 +18,7 @@ print("Current working directory:", os.getcwd())
 sys.path.append(os.getcwd())
 
 from src.eval.eval_metrics import precision,recall,create_cls_targets, accuracy, eval_reg
-from src.eval.eval_utils import plt_training_metrics, gather_best_metrics, invert_transforms
+from src.eval.eval_utils import plt_training_metrics, gather_best_metrics, invert_transforms, eval_autoregressive
 from src.eval.vis_scanpath import draw_scanpath_mpl
 from src.model.model_io import load_models_with_data
 from src.training.training_utils import move_data_to_device, compute_loss
@@ -125,48 +125,48 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
             print('rope reg: ', model.image_encoder.model.rope_embed.training)
         else:
             print('No rope reg')
-        
-        current_model = {
-            'checkpoint_path': ckpt_path,
-            'model_name': name,
-            'inputs': [],
-            'outputs': [],
-        }
-        acc_acum = 0
-        cls_loss_acum = 0
-        reg_loss_acum = 0
-        pre_pos_acum = 0
-        rec_pos_acum = 0
-        pre_neg_acum = 0
-        rec_neg_acum = 0
-        outliers_count_acum = 0
-        coord_error_acum = 0
-        duration_error_acum = 0
-        count = 0
-        
-        for batch in tqdm(test_dataloader):
-            input = move_data_to_device(batch, device)
-            output = model(**input)
-            input, output = slim_input_output(input, output)
-            input, output = invert_transforms(input, output, test_dataloader, remove_outliers = True)
-            current_model['inputs'].append(input)
-            current_model['outputs'].append(output)
-            reg_out, cls_out = output['reg'], output['cls']
-            y, y_mask, fixation_len = input['tgt'], input['tgt_mask'], input['fixation_len']
-            cls_loss, reg_loss = compute_loss(input, output)
-            outliers_count_acum += output['outliers_count']
-            cls_loss_acum += cls_loss.item()
-            reg_loss_acum += reg_loss.item()
-            coord_error, dur_error = eval_reg(reg_out, y, y_mask)
-            coord_error_acum += coord_error
-            duration_error_acum += dur_error
-            cls_targets = create_cls_targets(cls_out, fixation_len)
-            acc_acum += accuracy(cls_out, y_mask, cls_targets)
-            pre_pos_acum += precision(cls_out, y_mask, cls_targets)
-            rec_pos_acum += recall(cls_out, y_mask, cls_targets)
-            pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
-            rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
-            count += 1
+        for only_last, sufix in zip([True, False], ['only last', 'whole seq']):
+            current_model = {
+                'checkpoint_path': ckpt_path,
+                'model_name': f'{name} {sufix}',
+                'inputs': [],
+                'outputs': [],
+            }
+            acc_acum = 0
+            cls_loss_acum = 0
+            reg_loss_acum = 0
+            pre_pos_acum = 0
+            rec_pos_acum = 0
+            pre_neg_acum = 0
+            rec_neg_acum = 0
+            outliers_count_acum = 0
+            coord_error_acum = 0
+            duration_error_acum = 0
+            count = 0
+            
+            for batch in tqdm(test_dataloader):
+                input = move_data_to_device(batch, device)
+                output = eval_autoregressive(model, input, out_len = 14)
+                input, output = slim_input_output(input, output)
+                input, output = invert_transforms(input, output, test_dataloader, remove_outliers = True)
+                current_model['inputs'].append(input)
+                current_model['outputs'].append(output)
+                reg_out, cls_out = output['reg'], output['cls']
+                y, y_mask, fixation_len = input['tgt'], input['tgt_mask'], input['fixation_len']
+                cls_loss, reg_loss = compute_loss(input, output)
+                outliers_count_acum += output['outliers_count']
+                cls_loss_acum += cls_loss.item()
+                reg_loss_acum += reg_loss.item()
+                coord_error, dur_error = eval_reg(reg_out, y, y_mask)
+                coord_error_acum += coord_error
+                duration_error_acum += dur_error
+                cls_targets = create_cls_targets(cls_out, fixation_len)
+                acc_acum += accuracy(cls_out, y_mask, cls_targets)
+                pre_pos_acum += precision(cls_out, y_mask, cls_targets)
+                rec_pos_acum += recall(cls_out, y_mask, cls_targets)
+                pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
+                rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
+                count += 1
     inputs_outputs.append(current_model)
     # print(f'Cls Loss: {cls_loss_acum/count:.4f}, Reg Loss: {reg_loss_acum/count:.4f}')
     print(f'Outliers count: {outliers_count_acum}')
