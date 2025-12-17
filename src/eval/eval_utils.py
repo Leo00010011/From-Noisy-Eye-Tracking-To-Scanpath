@@ -303,6 +303,7 @@ def eval_autoregressive(model, inputs, out_len, only_last = False):
     model.eval()
     output = None
     tgt_mask = inputs['tgt_mask']
+    inputs['tgt_mask'] = None
     with torch.no_grad():
         for _ in range(out_len):
             inputs['tgt'] = output            
