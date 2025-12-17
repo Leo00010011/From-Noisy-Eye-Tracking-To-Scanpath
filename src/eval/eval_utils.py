@@ -302,7 +302,7 @@ def concat_reg(output):
 def eval_autoregressive(model, inputs, out_len, only_last = False):
     model.eval()
     output = None
-    inputs['tgt_mask'] = None
+    tgt_mask = inputs['tgt_mask']
     with torch.no_grad():
         for _ in range(out_len):
             inputs['tgt'] = output            
@@ -317,4 +317,5 @@ def eval_autoregressive(model, inputs, out_len, only_last = False):
             else:
                 output = reg
     current_output['reg'] = output
+    inputs['tgt_mask'] = tgt_mask
     return current_output
