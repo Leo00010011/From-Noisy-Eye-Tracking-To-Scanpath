@@ -236,7 +236,8 @@ class MixerModel(nn.Module):
     def forward(self, src, image_src, tgt, src_mask=None, tgt_mask=None, **kwargs):
         # src, tgt shape (B,L,F)
         src_coords = src[:,:,:2].clone()
-        tgt_coords = tgt[:,:,:2].clone()
+        if tgt is not None:
+            tgt_coords = tgt[:,:,:2].clone()
         if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum' or self.input_encoder == 'nerf_fourier':
             enc_coords = src[:,:,:2]
             enc_time = src[:,:,2]

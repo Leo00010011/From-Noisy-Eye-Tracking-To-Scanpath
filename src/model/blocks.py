@@ -116,7 +116,7 @@ class MultiHeadedAttention(nn.Module):
         query = query.view(L_b,L_q,self.n_heads, self.head_dim).transpose(1,2)
         key = key.view(L_b,L_k,self.n_heads, self.head_dim).transpose(1,2)
         value = value.view(L_b,L_k,self.n_heads, self.head_dim).transpose(1,2)
-        if q_rope is not None:
+        if q_rope is not None and k_rope is not None:
             query, key = apply_rope(query, key, q_rope, k_rope if k_rope is not None else q_rope)
         # scaled dot product
         if attn_mask is None:

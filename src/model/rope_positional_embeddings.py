@@ -127,7 +127,10 @@ class RopePositionEmbedding(nn.Module):
             if isinstance(traj_coords, list):
                 traj_embeddings = []
                 for coords in traj_coords:
-                    traj_embeddings.append(self.compute_embeddings(coords, shift_hw, jitter_hw, rescale_hw))
+                    if coords is None:
+                        traj_embeddings.append(None)
+                    else:
+                        traj_embeddings.append(self.compute_embeddings(coords, shift_hw, jitter_hw, rescale_hw))
             else:
                 traj_embeddings = self.compute_embeddings(traj_coords, shift_hw, jitter_hw, rescale_hw)
         if patch_res is not None:
