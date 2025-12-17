@@ -316,4 +316,5 @@ def eval_autoregressive(model, inputs, out_len, only_last = False):
                     output = torch.concat([only_last, reg[:,-1:,:]], dim=1)
             else:
                 output = reg
-    return output
+    current_output['reg'] = output
+    return current_output
