@@ -26,6 +26,7 @@ class MixerModel(nn.Module):
                        max_pos_dec = 4,
                        image_features_dropout = 0.3,
                        num_freq_bands = 15,
+                       use_enh_img_features = False,
                        pos_enc_hidden_dim = None,
                        activation = F.relu,
                        norm_first = False ,
@@ -60,7 +61,7 @@ class MixerModel(nn.Module):
         self.input_encoder = input_encoder
         self.pos_enc_sigma = pos_enc_sigma
         self.use_rope = use_rope
-        
+        self.use_enh_img_features = use_enh_img_features
         
         
         # special token
@@ -282,6 +283,8 @@ class MixerModel(nn.Module):
                     src, img_enh = mod(src, img_enh, src1_mask = src_mask, src2_mask = None, src1_rope = src_rope, src2_rope = image_rope)
                 if self.norm_first:
                     src = self.final_fenh_norm_src(src)
+            if self.use_enh_img_features:
+                image_src = img_enh
             if self.norm_first:
                 image_src = self.final_fenh_norm_image(image_src)
                 

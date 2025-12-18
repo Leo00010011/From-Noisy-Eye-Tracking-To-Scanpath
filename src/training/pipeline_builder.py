@@ -290,6 +290,7 @@ class PipelineBuilder:
                               max_pos_dec = self.config.model.max_pos_dec,
                               input_encoder = input_encoder,
                               num_freq_bands = self.config.model.get('num_freq_bands', None),
+                              use_enh_img_features = self.config.model.get('use_enh_img_features', False),
                               pos_enc_hidden_dim = self.config.model.get('pos_enc_hidden_dim', None),
                               norm_first = self.config.model.norm_first,
                               dropout_p= self.config.model.dropout_p,

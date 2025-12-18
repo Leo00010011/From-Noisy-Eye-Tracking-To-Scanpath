@@ -11,6 +11,7 @@ ff_dim: 2048
 max_pos_enc: 15
 max_pos_dec: 26
 image_features_dropout: 0.1
+use_enh_img_features: True
 norm_first: True
 dropout_p: 0
 num_freq_bands: 15
