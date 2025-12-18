@@ -331,6 +331,8 @@ class MixerModel(nn.Module):
             visual_tokens = image_src[:,1:,:]
             B = tgt_coords.size(0)
             coords = torch.floor(tgt_coords*16).long()
+            print(visual_tokens.shape)
+            print(coords)
             visual_tokens = visual_tokens.view(B, self.patch_resolution[0], self.patch_resolution[1], self.model_dim)
             grid_h = coords[:, :, 0] 
             grid_w = coords[:, :, 1]
