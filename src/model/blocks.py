@@ -341,7 +341,7 @@ class FeatureEnhancer(nn.Module):
                                             total_dim,
                                             n_heads,
                                             is_self_attention=True,
-                                            is_causal= True,
+                                            is_causal= False,
                                             **factory_kwargs)
         self.first_attn_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
         self.first_attn_dropout = nn.Dropout(dropout_p)
@@ -350,7 +350,7 @@ class FeatureEnhancer(nn.Module):
                                             total_dim,
                                             n_heads,
                                             is_self_attention=True,
-                                            is_causal= True,
+                                            is_causal= False,
                                             **factory_kwargs)
         self.second_attn_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
         self.second_attn_dropout = nn.Dropout(dropout_p)
