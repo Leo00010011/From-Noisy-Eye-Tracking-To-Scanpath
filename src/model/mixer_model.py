@@ -261,6 +261,7 @@ class MixerModel(nn.Module):
                 tgt = self.dec_inputs_pe(tgt)
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
+<<<<<<< Updated upstream
         # apply the order positional encodings
         start = self.start_token.expand(src.size(0),-1,-1)
         if tgt is not None:
@@ -271,6 +272,12 @@ class MixerModel(nn.Module):
         dec_pe = self.time_dec_pe.pe.unsqueeze(0)
         src = src + enc_pe[:,:src.size()[1],:]
         tgt = tgt + dec_pe[:,:tgt.size()[1],:]
+=======
+      
+        enc_pe = self.time_enc_pe.pe.unsqueeze(0)
+        src = src + enc_pe[:,:src.size()[1],:]
+      
+>>>>>>> Stashed changes
             
         
         # encoding path
@@ -306,15 +313,52 @@ class MixerModel(nn.Module):
         self.src = src
         self.image_src = image_src
         self.src_coords = src_coords
+<<<<<<< Updated upstream
         
 
     def forward(self, src, image_src, tgt, src_mask=None, tgt_mask=None, **kwargs):
         # src, tgt shape (B,L,F)
         self.encode_context(src, image_src, src_mask, tgt, tgt_mask, **kwargs)
+=======
+    
+    def decode(self, tgt, tgt_mask, src_mask, **kwargs):
+>>>>>>> Stashed changes
         src = self.src
         image_src = self.image_src
         src_coords = self.src_coords
         
+<<<<<<< Updated upstream
+=======
+        
+        if tgt is not None:
+            if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum' or self.input_encoder == 'nerf_fourier':
+                dec_coords = tgt[:,:,:2]
+                dec_dur = tgt[:,:,2]
+                dec_coords = self.dec_coords_pe(dec_coords)
+                dec_dur = self.dec_time_pe(dec_dur)
+                tgt = dec_coords + dec_dur
+                # add the time and coords 
+            elif self.input_encoder == 'linear' or self.input_encoder == 'image_features_concat':
+                # apply the linear projections
+                tgt = self.dec_input_proj(tgt)
+            elif self.input_encoder == 'fourier_concat':
+                # apply the fourier encodings
+                tgt = self.dec_inputs_pe(tgt)
+            else:
+                raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
+        # apply the order positional encodings
+        start = self.start_token.expand(src.size(0),-1,-1)
+        if tgt is not None:
+            tgt = torch.cat([start, tgt], dim = 1)
+        else:
+            tgt = start
+            
+         
+        
+        dec_pe = self.time_dec_pe.pe.unsqueeze(0)
+        tgt = tgt + dec_pe[:,:tgt.size()[1],:]
+        
+>>>>>>> Stashed changes
         if tgt is not None:
             tgt_coords = tgt[:,:,:2].clone()
         else:
@@ -356,4 +400,10 @@ class MixerModel(nn.Module):
             reg_out = self.regression_head(output)
             cls_out = self.end_head(output)
             return {'reg': reg_out, 'cls': cls_out}
+
+    def forward(self, **kwargs):
+        # src, tgt shape (B,L,F)
+        self.encode_context(**kwargs)
+        return self.decode(**kwargs)
+        
     
