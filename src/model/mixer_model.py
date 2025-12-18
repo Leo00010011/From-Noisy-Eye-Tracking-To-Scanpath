@@ -316,8 +316,6 @@ class MixerModel(nn.Module):
             tgt = torch.cat([start, tgt], dim = 1)
         else:
             tgt = start
-            
-         
         
         dec_pe = self.time_dec_pe.pe.unsqueeze(0)
         tgt = tgt + dec_pe[:,:tgt.size()[1],:]
