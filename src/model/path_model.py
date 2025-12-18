@@ -125,28 +125,36 @@ class PathModel(nn.Module):
             summ += f"    MultiMLP Head Hidden Dimension: {resolved_dims}\n"
         return summ
 
-    def forward(self,src, tgt, src_mask = None, tgt_mask = None, **kwargs):
-
-        # src, tgt shape (B,L,F)
+    def encode(self, src, src_mask, **kwargs):
+         # src, tgt shape (B,L,F)
         src = self.enc_input_proj(src)
         # add the start to tgt
-        start = self.start_token.expand(src.size(0),-1,-1)
-        if tgt is not None:
-            tgt = self.dec_input_proj(tgt)
-            tgt = torch.cat([start, tgt], dim = 1)
-        else:
-            tgt = start
+        
         # sum up the positional encodings (max_pos, model_dim) -> (L, model_dim)
         enc_pe = self.enc_pe.pe.unsqueeze(0)
-        dec_pe = self.dec_pe.pe.unsqueeze(0)
         src = src + enc_pe[:,:src.size()[1],:]
-        tgt = tgt + dec_pe[:,:tgt.size()[1],:]
+      
         # encoding
         memory = src
         for mod in self.encoder:
             memory = mod(memory, src_mask)
         if self.norm_first:
             memory = self.final_enc_norm(memory)
+        self.memory = memory
+        self.src_mask = src_mask
+        
+    def decode(self, tgt, tgt_mask, src_mask, **kwargs):
+        memory = self.memory
+        src_mask = self.src_mask
+        start = self.start_token.expand(memory.size(0),-1,-1)
+        if tgt is not None:
+            tgt = self.dec_input_proj(tgt)
+            tgt = torch.cat([start, tgt], dim = 1)
+        else:
+            tgt = start
+       
+        dec_pe = self.dec_pe.pe.unsqueeze(0)
+        tgt = tgt + dec_pe[:,:tgt.size()[1],:]
         # decoding
         output = tgt
         for mod in self.decoder:
@@ -164,4 +172,9 @@ class PathModel(nn.Module):
             dur_out = self.dur_head(output)
             cls_out = self.end_head(output)
             return {'coord': coord_out, 'dur': dur_out, 'cls': cls_out}
+
+    def forward(self, **kwargs):
+        self.encode(**kwargs)
+        return self.decode(**kwargs)
+       
     

@@ -234,7 +234,7 @@ class MixerModel(nn.Module):
         return summ
     
     
-    def encode_context(self, src, image_src, src_mask, **kwargs):
+    def encode(self, src, image_src, src_mask, **kwargs):
         src_coords = src[:,:,:2].clone()
         if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum' or self.input_encoder == 'nerf_fourier':
             enc_coords = src[:,:,:2]
@@ -365,7 +365,7 @@ class MixerModel(nn.Module):
 
     def forward(self, **kwargs):
         # src, tgt shape (B,L,F)
-        self.encode_context(**kwargs)
+        self.encode(**kwargs)
         return self.decode(**kwargs)
         
     
