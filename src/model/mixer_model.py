@@ -294,7 +294,10 @@ class MixerModel(nn.Module):
         image_src = self.image_src
         src_coords = self.src_coords
         
-        
+        if tgt is not None:
+            tgt_coords = tgt[:,:,:2].clone()
+        else:
+            tgt_coords = None
         start = self.start_token.expand(src.size(0),-1,-1)
         if tgt is not None:
             if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum' or self.input_encoder == 'nerf_fourier':
@@ -320,10 +323,7 @@ class MixerModel(nn.Module):
         dec_pe = self.time_dec_pe.pe.unsqueeze(0)
         tgt = tgt + dec_pe[:,:tgt.size()[1],:]
         
-        if tgt is not None:
-            tgt_coords = tgt[:,:,:2].clone()
-        else:
-            tgt_coords = None
+        
         if self.input_encoder == 'image_features_concat' and tgt_coords is not None:
             visual_tokens = image_src[:,1:,:]
             B = visual_tokens.size(0)
@@ -339,7 +339,7 @@ class MixerModel(nn.Module):
         output = tgt
         for mod in self.decoder:
             src_rope = tgt_rope = image_rope = None
-            if self.use_rope:
+            if self.use_rope and tgt_coords is not None:
                 [src_rope, tgt_rope], image_rope = self.rope_pos(traj_coords = [src_coords, tgt_coords], patch_res = self.patch_resolution)
             output = mod(output, image_src,src , tgt_mask, src_mask, src_rope = tgt_rope, mem1_rope = image_rope, mem2_rope = src_rope)
 
