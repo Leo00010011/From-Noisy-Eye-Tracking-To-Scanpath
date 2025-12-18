@@ -232,14 +232,10 @@ class MixerModel(nn.Module):
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
         return summ
-
-    def forward(self, src, image_src, tgt, src_mask=None, tgt_mask=None, **kwargs):
-        # src, tgt shape (B,L,F)
+    
+    
+    def encode_context(self, src, image_src, src_mask, **kwargs):
         src_coords = src[:,:,:2].clone()
-        if tgt is not None:
-            tgt_coords = tgt[:,:,:2].clone()
-        else:
-            tgt_coords = None
         if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum' or self.input_encoder == 'nerf_fourier':
             enc_coords = src[:,:,:2]
             enc_time = src[:,:,2]
@@ -265,19 +261,16 @@ class MixerModel(nn.Module):
                 tgt = self.dec_inputs_pe(tgt)
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
-        
         # apply the order positional encodings
+        start = self.start_token.expand(src.size(0),-1,-1)
         if tgt is not None:
-            enc_pe = self.time_enc_pe.pe.unsqueeze(0)
-            src = src + enc_pe[:,:src.size()[1],:]
-            dec_pe = self.time_dec_pe.pe.unsqueeze(0)
-            start = self.start_token.expand(tgt.size(0),-1,-1)
             tgt = torch.cat([start, tgt], dim = 1)
-            tgt = tgt + dec_pe[:,:tgt.size()[1],:]
         else:
-            dec_pe = self.time_dec_pe.pe.unsqueeze(0)
-            tgt = self.start_token.expand(src.size(0),-1,-1)
-            tgt = tgt + dec_pe[:,:tgt.size()[1],:]
+            tgt = start
+        enc_pe = self.time_enc_pe.pe.unsqueeze(0)
+        dec_pe = self.time_dec_pe.pe.unsqueeze(0)
+        src = src + enc_pe[:,:src.size()[1],:]
+        tgt = tgt + dec_pe[:,:tgt.size()[1],:]
             
         
         # encoding path
@@ -310,6 +303,22 @@ class MixerModel(nn.Module):
             if self.norm_first:
                 image_src = self.final_fenh_norm_image(image_src)
                 
+        self.src = src
+        self.image_src = image_src
+        self.src_coords = src_coords
+        
+
+    def forward(self, src, image_src, tgt, src_mask=None, tgt_mask=None, **kwargs):
+        # src, tgt shape (B,L,F)
+        self.encode_context(src, image_src, src_mask, tgt, tgt_mask, **kwargs)
+        src = self.src
+        image_src = self.image_src
+        src_coords = self.src_coords
+        
+        if tgt is not None:
+            tgt_coords = tgt[:,:,:2].clone()
+        else:
+            tgt_coords = None
         if self.input_encoder == 'image_features_concat' and tgt_coords is not None:
             visual_tokens = image_src[:,1:,:]
             B = visual_tokens.size(0)

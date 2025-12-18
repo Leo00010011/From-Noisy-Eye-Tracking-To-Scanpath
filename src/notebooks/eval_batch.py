@@ -99,12 +99,13 @@ def slim_input_output(input, output):
 # ## Review Metrics
 
 # %%
-names = ['path model', 'mixer model RoPE', 'mixer model no RoPE']
+names = ['path model', 'mixer model RoPE', 'mixer model no RoPE', 'Fixed Feature Enhancer']
 
 
 ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
              os.path.join('outputs','2025-12-12','19-18-29'),
-             os.path.join('outputs','2025-12-15','11-50-27')]
+             os.path.join('outputs','2025-12-15','11-50-27'),
+             os.path.join('outputs','2025-12-18','12-35-29')]
 
 # %% [markdown]
 # ## Checkout Output
@@ -125,60 +126,57 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
             print('rope reg: ', model.image_encoder.model.rope_embed.training)
         else:
             print('No rope reg')
-        for only_last, sufix in zip([True, False], ['only last', 'whole seq']):
-            current_name = f'{name} {sufix}'
-            print(f'EVAL: Model {current_name}')
-            current_model = {
-                'checkpoint_path': ckpt_path,
-                'model_name': current_name,
-                'inputs': [],
-                'outputs': [],
-            }
-            acc_acum = 0
-            cls_loss_acum = 0
-            reg_loss_acum = 0
-            pre_pos_acum = 0
-            rec_pos_acum = 0
-            pre_neg_acum = 0
-            rec_neg_acum = 0
-            outliers_count_acum = 0
-            coord_error_acum = 0
-            duration_error_acum = 0
-            count = 0
-            
-            for batch in tqdm(test_dataloader):
-                input = move_data_to_device(batch, device)
-                output = eval_autoregressive(model, input)
-                input, output = slim_input_output(input, output)
-                input, output = invert_transforms(input, output, test_dataloader, remove_outliers = True)
-                current_model['inputs'].append(input)
-                current_model['outputs'].append(output)
-                reg_out, cls_out = output['reg'], output['cls']
-                y, y_mask, fixation_len = input['tgt'], input['tgt_mask'], input['fixation_len']
-                cls_loss, reg_loss = compute_loss(input, output)
-                outliers_count_acum += output['outliers_count']
-                cls_loss_acum += cls_loss.item()
-                reg_loss_acum += reg_loss.item()
-                coord_error, dur_error = eval_reg(reg_out, y, y_mask)
-                coord_error_acum += coord_error
-                duration_error_acum += dur_error
-                cls_targets = create_cls_targets(cls_out, fixation_len)
-                acc_acum += accuracy(cls_out, y_mask, cls_targets)
-                pre_pos_acum += precision(cls_out, y_mask, cls_targets)
-                rec_pos_acum += recall(cls_out, y_mask, cls_targets)
-                pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
-                rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
-                count += 1
-            inputs_outputs.append(current_model)
-            # print(f'Cls Loss: {cls_loss_acum/count:.4f}, Reg Loss: {reg_loss_acum/count:.4f}')
-            print(f'Outliers count: {outliers_count_acum}')
-            print('accuracy: ',acc_acum/count)
-            print('precision_pos: ',pre_pos_acum/count)
-            print('recall_pos: ',rec_pos_acum/count)
-            print('precision_neg: ',pre_neg_acum/count)
-            print('recall_neg: ',rec_neg_acum/count)
-            print(f'Regression error (pixels): {coord_error_acum/count:.4f}, Duration error ({duration_error_acum/count:.4f})')
-            print('--------------------------------')
+        current_model = {
+            'checkpoint_path': ckpt_path,
+            'model_name': name,
+            'inputs': [],
+            'outputs': [],
+        }
+        acc_acum = 0
+        cls_loss_acum = 0
+        reg_loss_acum = 0
+        pre_pos_acum = 0
+        rec_pos_acum = 0
+        pre_neg_acum = 0
+        rec_neg_acum = 0
+        outliers_count_acum = 0
+        coord_error_acum = 0
+        duration_error_acum = 0
+        count = 0
+        
+        for batch in tqdm(test_dataloader):
+            input = move_data_to_device(batch, device)
+            output = eval_autoregressive(model, input, only_last = True)
+            input, output = slim_input_output(input, output)
+            input, output = invert_transforms(input, output, test_dataloader, remove_outliers = True)
+            current_model['inputs'].append(input)
+            current_model['outputs'].append(output)
+            reg_out, cls_out = output['reg'], output['cls']
+            y, y_mask, fixation_len = input['tgt'], input['tgt_mask'], input['fixation_len']
+            cls_loss, reg_loss = compute_loss(input, output)
+            outliers_count_acum += output['outliers_count']
+            cls_loss_acum += cls_loss.item()
+            reg_loss_acum += reg_loss.item()
+            coord_error, dur_error = eval_reg(reg_out, y, y_mask)
+            coord_error_acum += coord_error
+            duration_error_acum += dur_error
+            cls_targets = create_cls_targets(cls_out, fixation_len)
+            acc_acum += accuracy(cls_out, y_mask, cls_targets)
+            pre_pos_acum += precision(cls_out, y_mask, cls_targets)
+            rec_pos_acum += recall(cls_out, y_mask, cls_targets)
+            pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
+            rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
+            count += 1
+        inputs_outputs.append(current_model)
+        # print(f'Cls Loss: {cls_loss_acum/count:.4f}, Reg Loss: {reg_loss_acum/count:.4f}')
+        print(f'Outliers count: {outliers_count_acum}')
+        print('accuracy: ',acc_acum/count)
+        print('precision_pos: ',pre_pos_acum/count)
+        print('recall_pos: ',rec_pos_acum/count)
+        print('precision_neg: ',pre_neg_acum/count)
+        print('recall_neg: ',rec_neg_acum/count)
+        print(f'Regression error (pixels): {coord_error_acum/count:.4f}, Duration error ({duration_error_acum/count:.4f})')
+        print('--------------------------------')
     if i < len(names) - 1:
         print(f'Model {names[i + 1]}')
     del model
