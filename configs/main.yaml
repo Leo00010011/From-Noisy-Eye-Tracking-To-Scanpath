@@ -1,7 +1,7 @@
 defaults:
   - scheduler: multistep_lr
   - data: default
-  - model: PathModel
+  - model: path_model
   - loss: entire_loss
   - _self_
 
