@@ -170,7 +170,8 @@ class AddRandomCenterCorrelatedRadialNoise:
                  center_noise_std, 
                  center_corr,
                  center_delta_norm,
-                 center_delta_r ):
+                 center_delta_r,
+                 return_center_path=False):
         self.initial_center = initial_center
         self.ptoa = ptoa
         self.radial_corr = radial_corr
@@ -181,10 +182,12 @@ class AddRandomCenterCorrelatedRadialNoise:
         self.center_delta_norm = center_delta_norm
         self.center_delta_r = center_delta_r
         self.modify_y = False
+        self.return_center_path = return_center_path
 
     def __call__(self, input):
-
-        x, _ = add_random_center_correlated_radial_noise(
+        if self.return_center_path:
+            clean_x = input['x'].copy()
+        x, center_path = add_random_center_correlated_radial_noise(
             input['x'], 
             self.initial_center, 
             self.ptoa, 
@@ -197,6 +200,9 @@ class AddRandomCenterCorrelatedRadialNoise:
             self.center_delta_r
         )
         input['x'] = x
+        if self.return_center_path:
+            input['center_path'] = center_path
+            input['clean_x'] = clean_x
         return input
     
     def __repr__(self):

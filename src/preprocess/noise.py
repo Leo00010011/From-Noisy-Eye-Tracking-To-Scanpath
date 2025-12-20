@@ -266,7 +266,7 @@ def generate_correlated_radial_noise_numba(
         final_noise[0, i] = unit_x * mag
         final_noise[1, i] = unit_y * mag
         
-    return final_noise
+    return final_noise, center_path
 
 def generate_correlated_radial_noise(samples, initial_center, ptoa, radial_corr,
                                      radial_avg_norm, radial_std,
@@ -312,7 +312,7 @@ def add_correlated_radial_noise(gaze_list, initial_center, ptoa,
     for gaze in gaze_list:
         new_gaze = gaze.copy()
         # Use the new, more capable function to generate the noise
-        noise = generate_correlated_radial_noise(
+        noise, center_path = generate_correlated_radial_noise(
             samples=new_gaze[:2],
             initial_center=initial_center,
             ptoa=ptoa,
@@ -325,8 +325,7 @@ def add_correlated_radial_noise(gaze_list, initial_center, ptoa,
         
         new_gaze[:2] += noise
         noisy_gaze.append(new_gaze)
-        
-    return noisy_gaze
+    return noisy_gaze, center_path
 
 def add_random_center_correlated_radial_noise(gaze, initial_center, ptoa,
                                    radial_corr, 
@@ -349,9 +348,10 @@ def add_random_center_correlated_radial_noise(gaze, initial_center, ptoa,
     center_delta = gen_bivariate_normal(len(gaze),x_std,y_std)
     initial_center = center_delta + initial_center
     noisy_gaze = []
+    center_path_list = []
     for i, single_gaze in enumerate(gaze):
         # Use the new, more capable function to generate the noise
-        noise = generate_correlated_radial_noise(
+        noise, center_path = generate_correlated_radial_noise(
             samples=single_gaze[:2],
             initial_center=initial_center[:,i].reshape(2, 1),
             ptoa=ptoa,
@@ -361,13 +361,14 @@ def add_random_center_correlated_radial_noise(gaze, initial_center, ptoa,
             center_noise_std=center_noise_std,
             center_corr=center_corr
         )
-
+        center_path_list.append(center_path)
         single_gaze[:2] += noise
         noisy_gaze.append(single_gaze)
 
     if boxed:
         noisy_gaze = noisy_gaze[0]
-    return noisy_gaze, initial_center
+        center_path = center_path_list[0]
+    return noisy_gaze, center_path
 
 
 def discretization_noise(image_shape, gaze):

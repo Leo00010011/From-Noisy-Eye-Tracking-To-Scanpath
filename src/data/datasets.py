@@ -258,7 +258,7 @@ class FreeViewInMemory(Dataset):
         input = {'x': x, 'y': y, 'fixation_mask': fixation_mask}
         for transform in self.transforms:
             input = transform(input)
-        return input['x'], input['y']
+        return input
     
 
 def build_attn_mask(input_lengths, allow_start = False, return_none = True):
