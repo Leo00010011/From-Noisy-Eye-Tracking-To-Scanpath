@@ -68,7 +68,7 @@ class MixerModel(nn.Module):
         
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
-        self.word_dropout = LearnableCoordinateDropout(model_dim=model_dim, dropout_prob=word_dropout_prob)
+        self.word_dropout = LearnableCoordinateDropout(model_dim=model_dim, dropout_prob=word_dropout_prob, **factory_mode)
         # input processing
         self.time_dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
         self.time_enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)

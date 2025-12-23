@@ -457,11 +457,11 @@ class ArgMaxRegressor(nn.Module):
     
 
 class LearnableCoordinateDropout(nn.Module):
-    def __init__(self, model_dim, dropout_prob=0.2):
+    def __init__(self, model_dim, dropout_prob=0.2, device='cpu', dtype=torch.float32):
         super().__init__()
         self.dropout_prob = dropout_prob
         self.model_dim = model_dim
-        self.mask_token = nn.Parameter(torch.randn(1, 1, model_dim))
+        self.mask_token = nn.Parameter(torch.randn(1, 1, model_dim, device=device, dtype=dtype))
 
     def forward(self, x):
         """
