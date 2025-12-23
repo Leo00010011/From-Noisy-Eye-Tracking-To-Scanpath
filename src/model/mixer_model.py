@@ -89,6 +89,10 @@ class MixerModel(nn.Module):
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
             self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
             self.mix_image_features = nn.Linear(model_dim*2, model_dim, **factory_mode)
+        elif input_encoder == "shared_gaussian":
+            self.pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 **factory_mode)
+            self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 **factory_mode)
+            self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 **factory_mode)
         else:
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         
@@ -230,6 +234,8 @@ class MixerModel(nn.Module):
             summ += f"        NeRF Fourier Input Encoder: True\n"
         elif self.input_encoder == 'image_features_concat':
             summ += f"        Image Features Concat Input Encoder: True\n"
+        elif self.input_encoder == 'sharded_gaussian':
+            summ += f"        Sharded Gaussian Input Encoder: True\n"
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
         return summ
@@ -250,9 +256,15 @@ class MixerModel(nn.Module):
         elif self.input_encoder == 'fourier_concat':
             # apply the fourier encodings
             src = self.enc_inputs_pe(src)
+        elif self.input_encoder == 'sharded_gaussian':
+            enc_coords = src[:,:,:2]
+            enc_time = src[:,:,2]
+            enc_coords = self.pos_proj(enc_coords)
+            enc_time = self.time_proj(enc_time)
+            src = enc_coords + enc_time
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
-      
+        
         enc_pe = self.time_enc_pe.pe.unsqueeze(0)
         src = src + enc_pe[:,:src.size()[1],:]
         
@@ -270,7 +282,12 @@ class MixerModel(nn.Module):
         if self.image_encoder is not None:
             image_src = self.image_encoder(image_src)
             image_src = self.img_input_proj(image_src)
-        
+            if self.input_encoder == 'sharded_gaussian':
+                # pos_enc [1,H*W,model_dim]
+                pos_enc = self.pos_proj.forward_features().unsqueeze(0)
+                prefix = image_src.size(1) - pos_enc.shape[0]
+                image_src[:,prefix:,:] = image_src[:,prefix:,:] + pos_enc
+
             # enhancing features
             if self.n_feature_enhancer > 0:
                 
@@ -316,6 +333,12 @@ class MixerModel(nn.Module):
             elif self.input_encoder == 'fourier_concat':
                 # apply the fourier encodings
                 tgt = self.dec_inputs_pe(tgt)
+            elif self.input_encoder == 'sharded_gaussian':
+                dec_coords = tgt[:,:,:2]
+                dec_dur = tgt[:,:,2]
+                dec_coords = self.pos_proj(dec_coords)
+                dec_dur = self.dur_proj(dec_dur)
+                tgt = dec_coords + dec_dur
             else:
                 raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
             # apply the order positional encodings

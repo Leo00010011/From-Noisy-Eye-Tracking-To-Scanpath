@@ -3,16 +3,19 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
-def draw_scanpath_mpl(ax, x, y, color='green', end_color='red', linewidth=2, marker_size=50, label=None):
+def draw_scanpath_mpl(ax, x, y, color='green', end_color='red', linewidth=2, marker_size=50, label=None, linestyle = None):
     x = [float(coord) for coord in x]
     y = [float(coord) for coord in y]
-    
     # Draw lines connecting points
     for i in range(len(x)-1):
-        ax.plot([x[i], x[i+1]], [y[i], y[i+1]], color=color, linewidth=linewidth, label =label if i == 0 else "")
+        if not linestyle:
+            ax.plot([x[i], x[i+1]], [y[i], y[i+1]], color=color, linewidth=linewidth, label =label if i == 0 else "")
+        else:
+            ax.plot([x[i], x[i+1]], [y[i], y[i+1]], color=color, linewidth=linewidth, label =label if i == 0 else "", linestyle = linestyle)
     
     # Draw start point
-    ax.scatter(x[0], y[0], s=marker_size, c=end_color, zorder=5)
+    if end_color:
+        ax.scatter(x[-1], y[-1], s=marker_size, c=end_color, zorder=5)
     
     return ax
 

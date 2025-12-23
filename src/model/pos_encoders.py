@@ -14,7 +14,7 @@ class PositionalEncoding:
         pe[:,0::2] = np.sin(position*div)
         pe[:,1::2] = np.cos(position*div)
         self.pe = torch.from_numpy(pe).to(device = device)
-        
+
 class FourierPosEncoder(nn.Module):
     def __init__(self, input_dim, num_freq_bands, hidden_dim, output_dim, device = 'cpu', dtype = torch.float32):
         """
@@ -59,8 +59,9 @@ class FourierPosEncoder(nn.Module):
         x_flat = x_cat.flatten(start_dim=-2)
         
         return self.mlp(x_flat)
+    
 class GaussianFourierPosEncoder(nn.Module):
-    def __init__(self, input_dim, mapping_size, hidden_dim, output_dim, sigma=1.0, device='cpu', dtype=torch.float32):
+    def __init__(self, input_dim, mapping_size, hidden_dim, output_dim, input_encoder = 'fourier', patch_size = 16, sigma=1.0, device='cpu', dtype=torch.float32):
         """
         Args:
             mapping_size: Number of random Fourier features (output will be input_dim * mapping_size * 2).
@@ -71,6 +72,10 @@ class GaussianFourierPosEncoder(nn.Module):
         super().__init__()
         self.input_dim = input_dim
         
+        if input_encoder == 'sharded_gaussian':
+            coords = torch.arange(.5,patch_size)/patch_size
+            ii,jj = torch.meshgrid(coords,coords, indexing = 'xy')
+            self.coords = torch.stack([ii,jj], dim = -1).flatten(start_dim=1)
         # 1. Create the random matrix B *once*
         # We sample from a Normal distribution N(0, sigma^2)
         # Size: [input_dim, mapping_size]
@@ -78,6 +83,7 @@ class GaussianFourierPosEncoder(nn.Module):
             B = torch.randn((mapping_size), device=device, dtype=dtype) * sigma
         else:
             B = torch.randn((input_dim, mapping_size), device=device, dtype=dtype) * sigma
+        
         
         # 2. Register it as a buffer. 
         # It is NOT a parameter (no gradients), but it IS part of state_dict.
@@ -93,9 +99,9 @@ class GaussianFourierPosEncoder(nn.Module):
 
     def forward(self, x):
         # x shape: (Batch, Seq_Len, Input_Dim)
-        # 1. Project input: (2*pi*x) @ B
-        # (B, L, input_dim) @ (input_dim, mapping_size) -> (B, L, mapping_size)
+        # 1. Project input: (2*pi*x) * B
         x = x.unsqueeze(-1)
+        # (B, L, input_dim,1) * (input_dim, mapping_size) -> (B, L, mapping_size)
         if self.input_dim == 1:
             projected = (2 * torch.pi * x) * self.B
         else:
@@ -106,3 +112,6 @@ class GaussianFourierPosEncoder(nn.Module):
         # -> (B, L, mapping_size * 2)
         x_proj = torch.cat([torch.sin(projected), torch.cos(projected)], dim=-1)
         return self.mlp(x_proj)
+    
+    def forward_features(self):
+        self.forward(self.coords)
