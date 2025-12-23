@@ -475,6 +475,6 @@ class LearnableCoordinateDropout(nn.Module):
         
         drop_mask = torch.rand(B, L, 1, device=x.device) < self.dropout_prob
         drop_mask[:, 0, :] = False
-        x_dropped = torch.where(drop_mask, self.mask_token.expand(B, L, -1), x)
+        x_dropped = torch.where(drop_mask, self.mask_token.expand(B, L, C), x)
 
         return x_dropped
