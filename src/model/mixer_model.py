@@ -66,6 +66,7 @@ class MixerModel(nn.Module):
         
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
+        self.mask_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         # input processing
         self.time_dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
         self.time_enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
@@ -392,7 +393,16 @@ class MixerModel(nn.Module):
 
     def forward(self, **kwargs):
         # src, tgt shape (B,L,F)
+        word_dropout_mask = kwargs.get('word_dropout_mask', None)
+        if word_dropout_mask is not None:
+            old_tgt = kwargs['tgt']
+            new_tgt = old_tgt.clone()
+            new_tgt[word_dropout_mask] = self.mask_token
+            kwargs['tgt'] = new_tgt
         self.encode(**kwargs)
-        return self.decode(**kwargs)
+        output = self.decode(**kwargs)
+        if word_dropout_mask is not None:
+            kwargs['tgt'] = old_tgt
+        return output
         
     
