@@ -98,7 +98,7 @@ class PipelineBuilder:
                 elif transform_str == 'LogNormalizeDuration':
                     transforms.append(build_log_normalize_duration(transform_config))
                 elif transform_str == 'WordDropout':
-                    transforms.append(WordDropout(transform_config))
+                    transforms.append(build_word_dropout(transform_config))
                 else:
                     raise ValueError(f"Transform {transform_str} not supported.")
         else:
