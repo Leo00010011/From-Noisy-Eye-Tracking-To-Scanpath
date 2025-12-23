@@ -234,7 +234,7 @@ class MixerModel(nn.Module):
             summ += f"        NeRF Fourier Input Encoder: True\n"
         elif self.input_encoder == 'image_features_concat':
             summ += f"        Image Features Concat Input Encoder: True\n"
-        elif self.input_encoder == 'sharded_gaussian':
+        elif self.input_encoder == 'shared_gaussian':
             summ += f"        Sharded Gaussian Input Encoder: True\n"
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
