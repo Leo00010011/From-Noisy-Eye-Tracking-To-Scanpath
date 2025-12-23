@@ -6,7 +6,7 @@ import numpy as np
 from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.data.parsers import CocoFreeView
 from src.data.transforms import (ExtractRandomPeriod, Normalize, StandarizeTime, LogNormalizeDuration,
-                                 AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise, WordDropout)
+                                 AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise)
 from src.model.path_model import PathModel
 from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
@@ -60,8 +60,7 @@ def build_normalize_time(config):
 def build_log_normalize_duration(config):
     return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale, use_tan=config.get('use_tan', False))
 
-def build_word_dropout(config):
-    return WordDropout(dropout_prob=config.dropout_prob)
+
 
 class PipelineBuilder:
     def __init__(self, config):
