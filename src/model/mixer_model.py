@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import copy
 import numpy as np
-from src.model.blocks import TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer, ArgMaxRegressor
+from src.model.blocks import TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer, ArgMaxRegressor, LearnableCoordinateDropout
 from src.model.pos_encoders import PositionalEncoding, GaussianFourierPosEncoder, FourierPosEncoder
 from src.model.rope_positional_embeddings import RopePositionEmbedding
 
@@ -63,11 +63,12 @@ class MixerModel(nn.Module):
         self.pos_enc_sigma = pos_enc_sigma
         self.use_rope = use_rope
         self.use_enh_img_features = use_enh_img_features
+        self.word_dropout_prob = word_dropout_prob
         
         
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
-        self.mask_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
+        self.word_dropout = LearnableCoordinateDropout(dropout_prob=word_dropout_prob)
         # input processing
         self.time_dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
         self.time_enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
@@ -347,7 +348,7 @@ class MixerModel(nn.Module):
             tgt = torch.cat([start, tgt], dim = 1)
         else:
             tgt = start
-        
+        tgt = self.word_dropout(tgt)
         dec_pe = self.time_dec_pe.pe.unsqueeze(0)
         tgt = tgt + dec_pe[:,:tgt.size()[1],:]
         
@@ -394,16 +395,7 @@ class MixerModel(nn.Module):
 
     def forward(self, **kwargs):
         # src, tgt shape (B,L,F)
-        
-        if word_dropout_mask is not None:
-            old_tgt = kwargs['tgt']
-            new_tgt = old_tgt.clone()
-            new_tgt[word_dropout_mask] = self.mask_token
-            kwargs['tgt'] = new_tgt
         self.encode(**kwargs)
-        output = self.decode(**kwargs)
-        if word_dropout_mask is not None:
-            kwargs['tgt'] = old_tgt
-        return output
+        return self.decode(**kwargs)
         
     
