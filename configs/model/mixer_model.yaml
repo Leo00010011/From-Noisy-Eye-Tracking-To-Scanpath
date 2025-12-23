@@ -1,9 +1,9 @@
 name: "MixerModel"
 input_dim: 3
 output_dim: 3
-n_encoder: 8
-n_decoder: 8
-n_feature_enhancer: 3
+n_encoder: 4
+n_decoder: 4
+n_feature_enhancer: 8
 model_dim: 512
 total_dim: 512
 n_heads: 8
@@ -22,7 +22,7 @@ use_rope: False
 compilate: False
 head_type: "linear"
 activation:  "gelu"
-word_dropout_prob: 0.5
+word_dropout_prob: 0.1
 device: "cuda"
 image_encoder:
   enabled: True
