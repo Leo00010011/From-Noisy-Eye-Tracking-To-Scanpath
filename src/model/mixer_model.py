@@ -38,6 +38,7 @@ class MixerModel(nn.Module):
                        pos_enc_sigma = 1.0,
                        use_rope = False,
                        dtype = torch.float32,
+                       word_dropout_prob = 0.3,
                        device = 'cpu'):
         super().__init__()
         factory_mode = {'device':device, 'dtype': dtype}
@@ -393,7 +394,7 @@ class MixerModel(nn.Module):
 
     def forward(self, **kwargs):
         # src, tgt shape (B,L,F)
-        word_dropout_mask = kwargs.get('word_dropout_mask', None)
+        
         if word_dropout_mask is not None:
             old_tgt = kwargs['tgt']
             new_tgt = old_tgt.clone()

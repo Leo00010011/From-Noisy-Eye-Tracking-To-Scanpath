@@ -97,8 +97,6 @@ class PipelineBuilder:
                     transforms.append(StandarizeTime())
                 elif transform_str == 'LogNormalizeDuration':
                     transforms.append(build_log_normalize_duration(transform_config))
-                elif transform_str == 'WordDropout':
-                    transforms.append(build_word_dropout(transform_config))
                 else:
                     raise ValueError(f"Transform {transform_str} not supported.")
         else:
@@ -304,6 +302,7 @@ class PipelineBuilder:
                               mlp_head_hidden_dim = self.config.model.get('mlp_head_hidden_dim', None),
                               pos_enc_sigma = self.config.model.get('pos_enc_sigma', None),
                               use_rope = self.config.model.get('use_rope', False),
+                              word_dropout_prob = self.config.model.get('word_dropout_prob', 0),
                               activation = activation,
                               device = self.device,
                               image_encoder = image_encoder,

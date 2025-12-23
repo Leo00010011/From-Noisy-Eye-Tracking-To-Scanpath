@@ -235,22 +235,3 @@ class DiscretizationNoise:
         return f'''+ DiscretizationNoise
         image_shape={self.image_shape}'''
         
-        
-class WordDropout:
-    def __init__(self, dropout_prob):
-        self.dropout_prob = dropout_prob
-        self.modify_y = False
-    
-    
-    def __call__(self, input):
-        tgt = input['tgt']
-        mask = torch.rand(tgt.shape[:2]) < self.dropout_prob
-        mask = mask.unsqueeze(-1).expand(*tgt.shape)   
-        input['word_dropout_mask'] = mask
-        return input
-    
-    def __repr__(self):
-        return f'WordDropout'
-    def __str__(self):
-        return f'''+ WordDropout
-        dropout_prob={self.dropout_prob}'''

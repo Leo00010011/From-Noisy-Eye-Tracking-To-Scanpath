@@ -22,6 +22,7 @@ use_rope: False
 compilate: False
 head_type: "linear"
 activation:  "gelu"
+word_dropout_prob: 0.3
 device: "cuda"
 image_encoder:
   enabled: True
