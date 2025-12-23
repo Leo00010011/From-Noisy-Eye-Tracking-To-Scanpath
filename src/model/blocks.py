@@ -457,16 +457,16 @@ class ArgMaxRegressor(nn.Module):
     
 
 class LearnableCoordinateDropout(nn.Module):
-    def __init__(self, dropout_prob=0.2):
+    def __init__(self, model_dim, dropout_prob=0.2):
         super().__init__()
         self.dropout_prob = dropout_prob
-        
-        self.mask_token = nn.Parameter(torch.randn(1, 1, 3))
+        self.model_dim = model_dim
+        self.mask_token = nn.Parameter(torch.randn(1, 1, model_dim))
 
     def forward(self, x):
         """
-        x shape: (B, L, 3)
-        Returns: (B, L, 3) with some steps replaced by self.mask_token
+        x shape: (B, L, model_dim)
+        Returns: (B, L, model_dim) with some steps replaced by self.mask_token
         """
         if not self.training or self.dropout_prob <= 0:
             return x
@@ -475,6 +475,6 @@ class LearnableCoordinateDropout(nn.Module):
         
         drop_mask = torch.rand(B, L, 1, device=x.device) < self.dropout_prob
         drop_mask[:, 0, :] = False
-        x_dropped = torch.where(drop_mask, self.mask_token.expand(B, L, C), x)
+        x_dropped = torch.where(drop_mask, self.mask_token.expand(B, L, -1), x)
 
         return x_dropped
