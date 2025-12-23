@@ -256,7 +256,7 @@ class MixerModel(nn.Module):
         elif self.input_encoder == 'fourier_concat':
             # apply the fourier encodings
             src = self.enc_inputs_pe(src)
-        elif self.input_encoder == 'sharded_gaussian':
+        elif self.input_encoder == 'shared_gaussian':
             enc_coords = src[:,:,:2]
             enc_time = src[:,:,2]
             enc_coords = self.pos_proj(enc_coords)
@@ -333,7 +333,7 @@ class MixerModel(nn.Module):
             elif self.input_encoder == 'fourier_concat':
                 # apply the fourier encodings
                 tgt = self.dec_inputs_pe(tgt)
-            elif self.input_encoder == 'sharded_gaussian':
+            elif self.input_encoder == 'shared_gaussian':
                 dec_coords = tgt[:,:,:2]
                 dec_dur = tgt[:,:,2]
                 dec_coords = self.pos_proj(dec_coords)
