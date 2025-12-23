@@ -16,7 +16,7 @@ load:
   log: True
 transforms:
   transform_list: ['ExtractRandomPeriod', 'StandarizeTime', 'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
-                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration', 'WordDropout']
+                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration']
 #  transform_list: ['ExtractRandomPeriod', 'StandarizeTime', 'AddRandomCenterCorrelatedRadialNoise', 
 #                   'DiscretizationNoise']
   ExtractRandomPeriod:
@@ -58,5 +58,3 @@ transforms:
     std: 0.5076
     scale: 0.3333
     use_tan: True
-  WordDropout:
-    dropout_prob: 0.3
