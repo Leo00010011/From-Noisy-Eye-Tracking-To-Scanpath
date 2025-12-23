@@ -109,7 +109,7 @@ names = ['path model',
 ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
              os.path.join('outputs','2025-12-18','12-35-29'),
              os.path.join('outputs','2025-12-18','16-20-34'),
-             os.path.join('outputs','2025-12-18','17-24-07')]
+             os.path.join('outputs','2025-12-23','11-51-44')]
 
 
 # %% [markdown]
