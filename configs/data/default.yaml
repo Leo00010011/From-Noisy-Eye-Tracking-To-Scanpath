@@ -58,3 +58,5 @@ transforms:
     std: 0.5076
     scale: 0.3333
     use_tan: True
+  WordDropout:
+    dropout_prob: 0.3
