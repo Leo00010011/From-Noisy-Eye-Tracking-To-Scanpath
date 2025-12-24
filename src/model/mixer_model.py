@@ -37,8 +37,9 @@ class MixerModel(nn.Module):
                        image_dim = None,
                        pos_enc_sigma = 1.0,
                        use_rope = False,
-                       dtype = torch.float32,
                        word_dropout_prob = 0.3,
+                       phases = None,
+                       dtype = torch.float32,
                        device = 'cpu'):
         super().__init__()
         factory_mode = {'device':device, 'dtype': dtype}
@@ -67,14 +68,13 @@ class MixerModel(nn.Module):
         
         self.denoise_modules = []
         self.self.fixation_modules = []
-        
-        # special token
+        # SPECIAL TOKENS
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         self.fixation_modules.append(self.start_token)
         if word_dropout_prob > 0:
             self.word_dropout = LearnableCoordinateDropout(model_dim=model_dim, dropout_prob=word_dropout_prob, **factory_mode)
             self.fixation_modules.append(self.word_dropout)
-        # input processing
+        # INPUT PROCESSING
         self.time_dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
         self.time_enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
         if input_encoder == 'linear':
@@ -146,7 +146,7 @@ class MixerModel(nn.Module):
                                                       jitter_coords  = image_encoder.model.rope_embed.jitter_coords,
                                                       rescale_coords  = image_encoder.model.rope_embed.rescale_coords ,
                                                       **factory_mode)
-        # encoding
+        # ENCODER
         
         path_layer = TransformerEncoder(model_dim = model_dim,
                                            total_dim = total_dim,
@@ -172,7 +172,7 @@ class MixerModel(nn.Module):
             for mod in self.feature_enhancer:
                 self.denoise_modules.append(mod)
         
-        # decoding
+        # DECODER
         decoder_layer = DoubleInputDecoder(model_dim = model_dim,
                                            total_dim = total_dim,
                                            n_heads = n_heads,
@@ -193,6 +193,8 @@ class MixerModel(nn.Module):
             self.denoise_modules.append(self.final_fenh_norm_src)
             self.final_fenh_norm_image = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
             self.denoise_modules.append(self.final_fenh_norm_image)
+        
+        # HEADS
         if head_type == 'mlp':
             self.regression_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
@@ -202,9 +204,13 @@ class MixerModel(nn.Module):
                                      mlp_head_hidden_dim,
                                      1,
                                      **factory_mode)
+            self.fixation_modules.append(self.regression_head)
+            self.fixation_modules.append(self.end_head)
         elif head_type == 'linear':
             self.regression_head = nn.Linear(model_dim, output_dim,**factory_mode)
             self.end_head = nn.Linear(model_dim,1,**factory_mode)
+            self.fixation_modules.append(self.regression_head)
+            self.fixation_modules.append(self.end_head)
         elif head_type == 'multi_mlp':
             self.coord_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
@@ -219,6 +225,9 @@ class MixerModel(nn.Module):
                                      mlp_head_hidden_dim,
                                      1,
                                      **factory_mode)
+            self.fixation_modules.append(self.coord_head)
+            self.fixation_modules.append(self.dur_head)
+            self.fixation_modules.append(self.end_head)
         elif head_type == 'argmax_regressor':
             if image_encoder is None:
                 raise ValueError("Image encoder is required for argmax regressor")
@@ -237,8 +246,20 @@ class MixerModel(nn.Module):
                                      mlp_head_hidden_dim,
                                      1,
                                      **factory_mode)
+            self.fixation_modules.append(self.regressor_head)
+            self.fixation_modules.append(self.argmax_regressor)
+            self.fixation_modules.append(self.dur_head)
+            self.fixation_modules.append(self.end_head)
         else:
             raise ValueError(f"Unsupported head_type: {head_type}")
+        
+        # DENOISE HEADS
+        if phases is not None and 'Denoise' in phases:
+            denoise_head =  MLP(model_dim,
+                                mlp_head_hidden_dim,
+                                2,
+                                **factory_mode)
+            self.denoise_modules.append(denoise_head)
 
     def param_summary(self):
         summ = f"""MixerModel Summary:
