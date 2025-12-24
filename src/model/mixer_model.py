@@ -276,7 +276,21 @@ class MixerModel(nn.Module):
         return summ
     
     def set_phase(self, phase):
-        return
+        if phase == 'Denoise':
+            for mod in self.denoise_modules:
+                mod.requires_grad_(True)
+            for mod in self.fixation_modules:
+                mod.requires_grad_(False)
+        elif phase == 'Fixation':
+            for mod in self.fixation_modules:
+                mod.requires_grad_(True)
+            for mod in self.denoise_modules:
+                mod.requires_grad_(False)
+        elif phase == 'Combined':
+            for mod in self.fixation_modules:
+                mod.requires_grad_(True)
+            for mod in self.denoise_modules:
+                mod.requires_grad_(True)
     
     def encode(self, src, image_src, src_mask, **kwargs):
         src_coords = src[:,:,:2].clone()
