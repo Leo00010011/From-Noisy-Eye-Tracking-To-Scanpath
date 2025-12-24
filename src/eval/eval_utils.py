@@ -309,7 +309,7 @@ def eval_autoregressive(model, inputs, only_last = False):
     with torch.no_grad():
         for _ in range(tgt_mask.size(1)):
             inputs['tgt'] = output            
-            current_output = model.decode(**inputs)
+            current_output = model.decode_fixation(**inputs)
             
             reg = concat_reg(current_output)
             if only_last:

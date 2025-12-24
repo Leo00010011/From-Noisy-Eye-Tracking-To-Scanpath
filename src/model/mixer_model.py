@@ -65,7 +65,7 @@ class MixerModel(nn.Module):
         self.use_rope = use_rope
         self.use_enh_img_features = use_enh_img_features
         self.word_dropout_prob = word_dropout_prob
-        
+        self.phase = None
         self.denoise_modules = []
         self.self.fixation_modules = []
         # SPECIAL TOKENS
@@ -297,6 +297,7 @@ class MixerModel(nn.Module):
         return summ
     
     def set_phase(self, phase):
+        self.phase = phase
         if phase == 'Denoise':
             for mod in self.denoise_modules:
                 mod.requires_grad_(True)
@@ -381,7 +382,7 @@ class MixerModel(nn.Module):
         self.image_src = image_src
         self.src_coords = src_coords
     
-    def decode(self, tgt, tgt_mask, src_mask, **kwargs):
+    def decode_fixation(self, tgt, tgt_mask, src_mask, **kwargs):
         src = self.src
         image_src = self.image_src
         src_coords = self.src_coords
@@ -466,6 +467,6 @@ class MixerModel(nn.Module):
     def forward(self, **kwargs):
         # src, tgt shape (B,L,F)
         self.encode(**kwargs)
-        return self.decode(**kwargs)
+        return self.decode_fixation(**kwargs)
         
     
