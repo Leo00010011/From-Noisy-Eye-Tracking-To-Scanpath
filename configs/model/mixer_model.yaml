@@ -32,14 +32,3 @@ image_encoder:
   freeze: True
   regularization: True
   image_dim: 256
-phases: [Denoise]
-Denoise:
-  name: "Denoise"
-  epochs: 100
-Fixation:
-  name: "Fixation"
-  epochs: 50
-Combined:
-  name: "Combined"
-  fixation_weight: 0.7
-  epochs: 50

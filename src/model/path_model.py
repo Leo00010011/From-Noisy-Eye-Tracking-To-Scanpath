@@ -124,6 +124,8 @@ class PathModel(nn.Module):
         elif self.head_type == 'multi_mlp':
             summ += f"    MultiMLP Head Hidden Dimension: {resolved_dims}\n"
         return summ
+    def set_phase(self, phase):
+        return
 
     def encode(self, src, src_mask, **kwargs):
          # src, tgt shape (B,L,F)

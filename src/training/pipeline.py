@@ -5,7 +5,7 @@ from src.training.pipeline_builder import PipelineBuilder
 from src.model.model_io import save_checkpoint, save_splits
 
 def train(builder:PipelineBuilder):
-        num_epochs = builder.config.training.num_epochs
+        phases = builder.build_phases()
         needs_validate = builder.config.training.validate
         val_interval = builder.config.training.val_interval
         builder.load_dataset()
@@ -34,45 +34,48 @@ def train(builder:PipelineBuilder):
         metrics_storage = MetricsStorage(filepath=builder.config.training.metric_file, 
                                          decisive_metric=builder.config.training.decisive_metric)
         
-        for epoch in range(num_epochs):
-            model.train()  # Set the model to training mode
-            metrics_storage.init_epoch()
-            if first_time and builder.config.training.log:
-                print('starting data loading')
-            for batch in tqdm(train_dataloader):#
-                # LOAD DATA TO DEVICE
-                input = move_data_to_device(batch, device)
-                optimizer.zero_grad()  # Zero the gradients
-                if first_time and builder.config.training.log and builder.config.model.compilate:
-                    print('model compilation')
-                    first_time = False
-                # FORWARD PASS AND LOSS COMPUTATION
-                output = model(**input)  # Forward pass
-                loss, info = loss_fn(input, output) # Compute loss
-                # BACKWARD PASS AND OPTIMIZATION
-                loss.backward()
-                optimizer.step()
-                if builder.config.scheduler.batch_lr:
+        for phase, epochs in phases:
+            print(f"Training {phase} for {epochs} epochs")
+            model.set_phase(phase)
+            for epoch in range(epochs):
+                model.train()  # Set the model to training mode
+                metrics_storage.init_epoch()
+                if first_time and builder.config.training.log:
+                    print('starting data loading')
+                for batch in tqdm(train_dataloader):#
+                    # LOAD DATA TO DEVICE
+                    input = move_data_to_device(batch, device)
+                    optimizer.zero_grad()  # Zero the gradients
+                    if first_time and builder.config.training.log and builder.config.model.compilate:
+                        print('model compilation')
+                        first_time = False
+                    # FORWARD PASS AND LOSS COMPUTATION
+                    output = model(**input)  # Forward pass
+                    loss, info = loss_fn(input, output) # Compute loss
+                    # BACKWARD PASS AND OPTIMIZATION
+                    loss.backward()
+                    optimizer.step()
+                    if builder.config.scheduler.batch_lr:
+                        scheduler.step()
+                    metrics_storage.update_batch_loss(info)
+                    metrics_storage.compute_normalized_regression_metrics(input, output, train_dataloader)
+                loss_info = metrics_storage.finalize_epoch()
+                loss_str = ", ".join([f"{key}: {value:.4f}" for key, value in loss_info.items()])
+                print(f"Epoch {epoch+1}/{epoch}, {loss_str}, LR: {optimizer.param_groups[0]['lr']:.6f}")
+                if not builder.config.scheduler.batch_lr:
                     scheduler.step()
-                metrics_storage.update_batch_loss(info)
-                metrics_storage.compute_normalized_regression_metrics(input, output, train_dataloader)
-            loss_info = metrics_storage.finalize_epoch()
-            loss_str = ", ".join([f"{key}: {value:.4f}" for key, value in loss_info.items()])
-            print(f"Epoch {epoch+1}/{num_epochs}, {loss_str}, LR: {optimizer.param_groups[0]['lr']:.6f}")
-            if not builder.config.scheduler.batch_lr:
-                scheduler.step()
-            if needs_validate and ((epoch + 1) % val_interval == 0):
-                validate(model,loss_fn, val_dataloader, epoch, device, metrics_storage.metrics, log = builder.config.training.log)
-                metrics_storage.save_metrics()
-                is_best = metrics_storage.update_best()
-                if is_best:
-                    save_checkpoint(
-                        model=model,
-                        optimizer=optimizer,
-                        filepath=builder.config.training.checkpoint_file,
-                        epoch=epoch,
-                        log=builder.config.training.log,
-                        save_full_state= builder.config.training.save_full_state
-                    )
-        
+                if needs_validate and ((epoch + 1) % val_interval == 0):
+                    validate(model,loss_fn, val_dataloader, epoch, device, metrics_storage.metrics, log = builder.config.training.log)
+                    metrics_storage.save_metrics()
+                    is_best = metrics_storage.update_best()
+                    if is_best:
+                        save_checkpoint(
+                            model=model,
+                            optimizer=optimizer,
+                            filepath=builder.config.training.checkpoint_file,
+                            epoch=epoch,
+                            log=builder.config.training.log,
+                            save_full_state= builder.config.training.save_full_state
+                        )
+            
         print("Training finished!")

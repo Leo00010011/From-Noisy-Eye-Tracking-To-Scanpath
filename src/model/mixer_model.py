@@ -65,34 +65,53 @@ class MixerModel(nn.Module):
         self.use_enh_img_features = use_enh_img_features
         self.word_dropout_prob = word_dropout_prob
         
+        self.denoise_modules = []
+        self.self.fixation_modules = []
         
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
+        self.fixation_modules.append(self.start_token)
         if word_dropout_prob > 0:
             self.word_dropout = LearnableCoordinateDropout(model_dim=model_dim, dropout_prob=word_dropout_prob, **factory_mode)
+            self.fixation_modules.append(self.word_dropout)
         # input processing
         self.time_dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
         self.time_enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
         if input_encoder == 'linear':
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
+            self.denoise_modules.append(self.enc_input_proj)
             self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
+            self.fixation_modules.append(self.dec_input_proj)
         elif input_encoder == 'fourier' or input_encoder == 'fourier_sum':
             self.enc_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
             self.enc_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
+            self.denoise_modules.append(self.enc_coords_pe)
+            self.denoise_modules.append(self.enc_time_pe)
             self.dec_coords_pe = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
             self.dec_time_pe = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
+            self.fixation_modules.append(self.dec_coords_pe)
+            self.fixation_modules.append(self.dec_time_pe)
         elif input_encoder == 'nerf_fourier':
             self.enc_coords_pe = FourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
             self.enc_time_pe = FourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
+            self.denoise_modules.append(self.enc_coords_pe)
+            self.denoise_modules.append(self.enc_time_pe)
             self.dec_coords_pe = FourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
             self.dec_time_pe = FourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, **factory_mode)
+            self.fixation_modules.append(self.dec_coords_pe)
+            self.fixation_modules.append(self.dec_time_pe)
         elif input_encoder == 'fourier_concat':
             self.enc_inputs_pe = GaussianFourierPosEncoder(3, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
             self.dec_inputs_pe = GaussianFourierPosEncoder(3, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma, **factory_mode)
+            self.denoise_modules.append(self.enc_inputs_pe)
+            self.fixation_modules.append(self.dec_inputs_pe)
         elif input_encoder == 'image_features_concat':
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
+            self.denoise_modules.append(self.enc_input_proj)
             self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
             self.mix_image_features = nn.Linear(model_dim*2, model_dim, **factory_mode)
+            self.fixation_modules.append(self.dec_input_proj)
+            self.fixation_modules.append(self.mix_image_features)
         elif input_encoder == "shared_gaussian":
             self.pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
             self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
@@ -114,6 +133,8 @@ class MixerModel(nn.Module):
                                            model_dim,
                                            hidden_dropout_p = image_features_dropout,
                                            **factory_mode)
+            self.fixation_modules.append(self.img_input_proj)
+            self.denoise_modules.append(self.img_input_proj)
             if use_rope:
                 self.rope_pos = RopePositionEmbedding(embed_dim = self.model_dim,
                                                       num_heads = self.n_heads,
@@ -126,6 +147,7 @@ class MixerModel(nn.Module):
                                                       rescale_coords  = image_encoder.model.rope_embed.rescale_coords ,
                                                       **factory_mode)
         # encoding
+        
         path_layer = TransformerEncoder(model_dim = model_dim,
                                            total_dim = total_dim,
                                            n_heads = n_heads,
@@ -135,6 +157,8 @@ class MixerModel(nn.Module):
                                            norm_first= norm_first,
                                            **factory_mode)
         self.path_encoder = _get_clones(path_layer,n_encoder) 
+        for mod in self.path_encoder:
+            self.denoise_modules.append(mod)
         if n_feature_enhancer > 0:
             feature_enhancer_layer = FeatureEnhancer(model_dim = model_dim,
                                             total_dim = total_dim,
@@ -145,6 +169,8 @@ class MixerModel(nn.Module):
                                             norm_first= norm_first,
                                             **factory_mode)
             self.feature_enhancer = _get_clones(feature_enhancer_layer,n_feature_enhancer)
+            for mod in self.feature_enhancer:
+                self.denoise_modules.append(mod)
         
         # decoding
         decoder_layer = DoubleInputDecoder(model_dim = model_dim,
@@ -156,12 +182,17 @@ class MixerModel(nn.Module):
                                            norm_first= norm_first,
                                            **factory_mode)
         self.decoder = _get_clones(decoder_layer,n_decoder)
-        
+        for mod in self.decoder:
+            self.fixation_modules.append(mod)
         if  norm_first:
             self.final_dec_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
+            self.fixation_modules.append(self.final_dec_norm)
             self.final_enc_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
+            self.denoise_modules.append(self.final_enc_norm)
             self.final_fenh_norm_src = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
+            self.denoise_modules.append(self.final_fenh_norm_src)
             self.final_fenh_norm_image = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
+            self.denoise_modules.append(self.final_fenh_norm_image)
         if head_type == 'mlp':
             self.regression_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
@@ -244,6 +275,8 @@ class MixerModel(nn.Module):
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
         return summ
     
+    def set_phase(self, phase):
+        return
     
     def encode(self, src, image_src, src_mask, **kwargs):
         src_coords = src[:,:,:2].clone()

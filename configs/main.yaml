@@ -14,3 +14,14 @@ training:
   save_best_only: True
   save_full_state: True
   log: True
+  Phases: [Denoise]
+  Denoise:
+    name: "Denoise"
+    epochs: 100
+  Fixation:
+    name: "Fixation"
+    epochs: 50
+  Combined:
+    name: "Combined"
+    fixation_weight: 0.7
+    epochs: 50
