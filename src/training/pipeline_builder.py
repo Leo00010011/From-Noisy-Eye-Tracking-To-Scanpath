@@ -1,5 +1,5 @@
 import torch
-from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction
+from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction, DenoiseRegLoss
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
 import numpy as np
@@ -375,6 +375,11 @@ class PipelineBuilder:
                                          coord_func = STR_TO_LOSS_FUNC[self.config.loss.coord_func],
                                          dur_func = STR_TO_LOSS_FUNC[self.config.loss.dur_func],
                                          dur_weight = self.config.loss.dur_weight)
+        elif self.config.loss.type == 'combined':
+            print("Using Combined Loss Function")
+            return CombinedLossFunction(denoise_loss = DenoiseRegLoss(STR_TO_LOSS_FUNC[self.config.loss.denoise_loss]),
+                                         fixation_loss = self.config.loss.fixation_loss,
+                                         denoise_weight = self.config.loss.denoise_weight)
         else:
             raise ValueError(f"Loss type {self.config.loss.type} not supported.")
         

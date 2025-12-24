@@ -91,3 +91,41 @@ class SeparatedRegLossFunction(torch.nn.Module):
         }
         loss = cls_loss + self.cls_weight * (((1-self.dur_weight) * coord_loss + self.dur_weight * dur_loss))
         return loss, info
+
+class DenoiseRegLoss(torch.nn.Module):
+    def __init__(self, denoise_loss):
+        super().__init__()
+        self.denoise_loss = denoise_loss
+    
+    def forward(self, input, output):
+        return self.denoise_loss(output['denoise'], input['clean_x']), {}
+class CombinedLossFunction(torch.nn.Module):
+    def __init__(self, denoise_loss, fixation_loss, denoise_weight):
+        super().__init__()
+        self.denoise_loss = denoise_loss
+        self.fixation_loss = fixation_loss
+        self.denoise_weight = denoise_weight
+    
+    def forward(self, input, output):
+        denoise_loss = 0
+        fixation_loss = 0
+        if self.denoise_weight > 0:
+            denoise_loss, denoise_info = self.denoise_loss(input, output)
+        
+        if (1 - self.denoise_weight) > 0:
+            fixation_loss, fixation_info = self.fixation_loss(input, output)
+        
+        loss = self.denoise_weight * denoise_loss + (1 - self.denoise_weight) * fixation_loss
+        # Build info dict only with relevant losses and subdicts
+        info = {}
+        if self.denoise_weight > 0:
+            info['denoise_loss'] = float(denoise_loss.item())
+            info.update(denoise_info)
+        if (1 - self.denoise_weight) > 0:
+            info['fixation_loss'] = float(fixation_loss.item())
+            info.update(fixation_info)
+        return loss, info
+    
+
+    
+    
