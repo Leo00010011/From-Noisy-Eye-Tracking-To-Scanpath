@@ -379,8 +379,12 @@ class PipelineBuilder:
             raise ValueError(f"Loss type {self.config.loss.type} not supported.")
         
     def build_phases(self):
-        if hasattr(self.config.data, 'Phases'):
-            return [(phase.name, phase.epochs) for phase in self.config.data.Phases]
+        if hasattr(self.config, 'Phases'):
+            output = []
+            for phase in self.config.Phases:
+                phase = self.config.get(phase)
+                output.append((phase.name, phase.epochs))
+            return output
         else:
             return [('Combined', self.config.training.num_epochs)]
 
