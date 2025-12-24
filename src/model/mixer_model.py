@@ -255,11 +255,11 @@ class MixerModel(nn.Module):
         
         # DENOISE HEADS
         if phases is not None and 'Denoise' in phases:
-            denoise_head =  MLP(model_dim,
+            self.denoise_head =  MLP(model_dim,
                                 mlp_head_hidden_dim,
                                 2,
                                 **factory_mode)
-            self.denoise_modules.append(denoise_head)
+            self.denoise_modules.append(self.denoise_head)
 
     def param_summary(self):
         summ = f"""MixerModel Summary:
@@ -463,10 +463,23 @@ class MixerModel(nn.Module):
             reg_out = self.regression_head(output)
             cls_out = self.end_head(output)
             return {'reg': reg_out, 'cls': cls_out}
-
+        
+    def decode_denoise(self, **kwargs):
+        src = self.src
+        
+        output = self.denoise_head(src)
+        return {'denoise': output}
+        
+        
     def forward(self, **kwargs):
         # src, tgt shape (B,L,F)
         self.encode(**kwargs)
+        if self.phase == 'Denoise':
+            return self.decode_denoise(**kwargs)
+        elif self.phase == 'Fixation':
+            return self.decode_fixation(**kwargs)
+        elif self.phase == 'Combined':
+            return self.decode_fixation(**kwargs)
         return self.decode_fixation(**kwargs)
         
     
