@@ -390,7 +390,6 @@ class PipelineBuilder:
                                          denoise_weight = 0)
         else:
             raise ValueError(f"Loss type {loss_type} not supported.")
-        loss_fn.summary()
         return loss_fn
         
     def build_phases(self):

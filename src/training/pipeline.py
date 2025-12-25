@@ -38,6 +38,7 @@ def train(builder:PipelineBuilder):
             print(f"Training {phase} for {epochs} epochs, Denoise Weight: {denoise_weight}")
             model.set_phase(phase)
             loss_fn.set_denoise_weight(denoise_weight)
+            loss_fn.summary()
             for epoch in range(epochs):
                 model.train()  # Set the model to training mode
                 metrics_storage.init_epoch()
