@@ -17,11 +17,16 @@ training:
   Phases: [Denoise]
   Denoise:
     name: "Denoise"
+    denoise_weight: 1 #
     epochs: 100
   Fixation:
     name: "Fixation"
+    denoise_weight: 0
     epochs: 50
   Combined:
     name: "Combined"
-    fixation_weight: 0.7
+    denoise_weight: 0.3
     epochs: 50
+  loss:
+    denoise_loss_type: "l1"
+    fixation_loss_type: "entire_loss"

@@ -361,24 +361,24 @@ class PipelineBuilder:
             raise ValueError(f"Scheduler type {self.config.scheduler.type} not supported.")
         return scheduler
 
-    def build_loss_fn(self):
+    def build_loss_fn(self, primary_loss = None):
         if not hasattr(self.config, 'loss') or self.config.loss.type == 'entire_reg':
             print("Using Entire Regression Loss Function")
             return EntireRegLossFunction(cls_weight = self.config.loss.cls_weight,
                                          cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
                                          reg_func = STR_TO_LOSS_FUNC[self.config.loss.reg_func])
-            
-        elif self.config.loss.type == 'separated_reg':
+        loss_type = primary_loss if primary_loss is not None else self.config.loss.type
+        if loss_type == 'separated_reg':
             print("Using Separated Regression Loss Function")
             return SeparatedRegLossFunction(cls_weight = self.config.loss.cls_weight,
                                          cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
                                          coord_func = STR_TO_LOSS_FUNC[self.config.loss.coord_func],
                                          dur_func = STR_TO_LOSS_FUNC[self.config.loss.dur_func],
                                          dur_weight = self.config.loss.dur_weight)
-        elif self.config.loss.type == 'combined':
+        elif loss_type == 'combined':
             print("Using Combined Loss Function")
-            return CombinedLossFunction(denoise_loss = DenoiseRegLoss(STR_TO_LOSS_FUNC[self.config.loss.denoise_loss]),
-                                         fixation_loss = self.config.loss.fixation_loss,
+            return CombinedLossFunction(denoise_loss = DenoiseRegLoss(STR_TO_LOSS_FUNC[self.config.loss.denoise_loss_type]),
+                                         fixation_loss = self.build_loss_fn(primary_loss = self.config.loss.fixation_loss_type),
                                          denoise_weight = self.config.loss.denoise_weight)
         else:
             raise ValueError(f"Loss type {self.config.loss.type} not supported.")
