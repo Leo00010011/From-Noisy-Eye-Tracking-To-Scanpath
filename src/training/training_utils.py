@@ -133,9 +133,9 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True)
             if key_str not in metrics:
                 metrics[key_str] = []
             metrics[key_str].append(value / cnt)
+        metrics['epoch'].append(epoch + 1)
         if coord_error_acum > 0:
             metrics['accuracy'].append(acc_acum / cnt)
-            metrics['epoch'].append(epoch + 1)
             metrics['reg_error_val'].append(coord_error_acum / cnt)
             metrics['duration_error_val'].append(duration_error_acum / cnt)
             metrics['outliers_count_val'].append(outliers_count_acum)
