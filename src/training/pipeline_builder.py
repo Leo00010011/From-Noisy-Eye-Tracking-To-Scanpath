@@ -44,16 +44,20 @@ def build_discretization_noise(config):
     return DiscretizationNoise((config.get('image_H',320),
                                 config.get('image_W',512)))
 
-def build_normalize_coords(config):
+def build_normalize_coords(config, key = None):
     max_value = torch.tensor([config.image_W,config.image_H])
     if not hasattr(config, 'mode'):
         return Normalize(key='x', mode=config.key, max_value=max_value) 
+    elif key is not None:
+        return Normalize(key = key, mode=config.mode, max_value=max_value)
     else:       
         return Normalize(key=config.key, mode=config.mode, max_value=max_value)
 
-def build_normalize_time(config):
+def build_normalize_time(config, key = None):
     if not hasattr(config, 'mode'):
         return Normalize(key='x', mode=config.key, max_value=config.period_duration)
+    elif key is not None:
+        return Normalize(key = key, mode=config.mode, max_value=config.period_duration)
     else:
         return Normalize(key=config.key, mode=config.mode, max_value=config.period_duration)
 
@@ -80,6 +84,7 @@ class PipelineBuilder:
         transforms = []
         # check if self.config.data.transforms exits
         if hasattr(self.config.data, 'transforms'):
+            has_save_clean_x = False
             for transform_str in self.config.data.transforms.transform_list:
                 transform_config = self.config.data.transforms.get(transform_str)
                 if transform_str == 'ExtractRandomPeriod':
@@ -88,16 +93,23 @@ class PipelineBuilder:
                     transforms.append(build_add_random_center_correlated_radial_noise(transform_config))
                 elif transform_str == 'DiscretizationNoise':
                     transforms.append(build_discretization_noise(transform_config))
-                elif transform_str == 'NormalizeCoords' or transform_str == 'NormalizeFixationCoords':
+                elif transform_str == 'NormalizeCoords':
                     transforms.append(build_normalize_coords(transform_config))
+                    if has_save_clean_x:
+                        transforms.append(build_normalize_coords(transform_config, key = 'clean_x'))
+                elif transform_str == 'NormalizeFixationCoords':
+                    transforms.append(build_normalize_coords(transform_config, key = 'y'))
                 elif transform_str == 'NormalizeTime':
                     transforms.append(build_normalize_time(transform_config))
+                    if has_save_clean_x:
+                        transforms.append(build_normalize_time(transform_config, key = 'clean_x'))
                 elif transform_str == 'StandarizeTime':
                     transforms.append(StandarizeTime())
                 elif transform_str == 'LogNormalizeDuration':
                     transforms.append(build_log_normalize_duration(transform_config))
                 elif transform_str == 'SaveCleanX':
                     transforms.append(SaveCleanX())
+                    has_save_clean_x = True
                 else:
                     raise ValueError(f"Transform {transform_str} not supported.")
         else:

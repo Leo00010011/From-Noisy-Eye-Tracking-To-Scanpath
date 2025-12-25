@@ -48,10 +48,6 @@ class Normalize:
         # shape (F,L)
         x = input[self.key]
         if isinstance(x, torch.Tensor):
-            mask = (x == PAD_TOKEN_ID).all(dim=0).unsqueeze(0)
-        else:
-            mask = np.all(x == PAD_TOKEN_ID, axis=-1)[..., np.newaxis]
-        if isinstance(x, torch.Tensor):
             if isinstance(self.max_value, torch.Tensor):
                 self.max_value = self.max_value.to(x.device)
             else:
@@ -67,11 +63,6 @@ class Normalize:
             
         elif self.mode == 'time':
             x[2] = x[2] / self.max_value
-        if isinstance(x, torch.Tensor):
-            x = x.masked_fill(mask, PAD_TOKEN_ID)
-        else:
-            mask = np.broadcast_to(mask, x.shape)
-            x[mask] = PAD_TOKEN_ID
         input[self.key] = x
         return input
     
