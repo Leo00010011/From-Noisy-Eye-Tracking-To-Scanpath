@@ -34,7 +34,7 @@ class MLP(nn.Module):
             layers.append(nn.Dropout(output_dropout_p))
         self.head = nn.Sequential(*layers)
     
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         return self.head(x)
 # RoPE-related functions:
 def rope_rotate_half(x: Tensor) -> Tensor:
