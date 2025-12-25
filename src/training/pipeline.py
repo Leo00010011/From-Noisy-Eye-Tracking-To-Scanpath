@@ -34,10 +34,11 @@ def train(builder:PipelineBuilder):
         metrics_storage = MetricsStorage(filepath=builder.config.training.metric_file, 
                                          decisive_metric=builder.config.training.decisive_metric)
         
-        for phase, denoise_weight, epochs in phases:
+        for phase, denoise_weight, decisive_metric, epochs in phases:
             print(f"Training {phase} for {epochs} epochs, Denoise Weight: {denoise_weight}")
             model.set_phase(phase)
             loss_fn.set_denoise_weight(denoise_weight)
+            metrics_storage.decisive_metric = decisive_metric
             loss_fn.summary()
             for epoch in range(epochs):
                 model.train()  # Set the model to training mode

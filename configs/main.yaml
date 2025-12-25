@@ -18,14 +18,17 @@ training:
   Denoise:
     name: "Denoise"
     denoise_weight: 1 
+    decisive_metric: "denoise_error_val"
     epochs: 100
   Fixation:
     name: "Fixation"
     denoise_weight: 0
+    decisive_metric: ${training.decisive_metric}
     epochs: 50
   Combined:
     name: "Combined"
     denoise_weight: 0.3
+    decisive_metric: ${training.decisive_metric}
     epochs: 50
 loss:
   complex_type: "combined"
