@@ -124,8 +124,9 @@ def invert_transforms_clean_x(inputs, outputs, transforms):
     gt_clean_x = inputs['clean_x']
         
     for transform in reversed(transforms):
-        pred_clean_x = transform.inverse(pred_clean_x, None, 'clean_x')
-        gt_clean_x = transform.inverse(gt_clean_x, None, 'clean_x')
+        if hasattr(transform, 'mode') and transform.mode == 'coords':
+            pred_clean_x = transform.inverse(pred_clean_x, None, 'clean_x')
+            gt_clean_x = transform.inverse(gt_clean_x, None, 'clean_x')
     
     inputs['clean_x'] = gt_clean_x
     outputs['denoise'] = pred_clean_x
