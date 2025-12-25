@@ -387,7 +387,7 @@ class PipelineBuilder:
                                          fixation_loss = self.build_loss_fn(primary_loss = self.config.loss.fixation_loss_type),
                                          denoise_weight = self.config.loss.denoise_weight)
         else:
-            raise ValueError(f"Loss type {self.config.loss.type} not supported.")
+            raise ValueError(f"Loss type {loss_type} not supported.")
         loss_fn.summary()
         return loss_fn
         

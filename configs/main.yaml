@@ -30,4 +30,4 @@ training:
   loss:
     complex_type: "combined"
     denoise_loss_type: "l1"
-    fixation_loss_type: "entire_loss"
+    fixation_loss_type: "entire_reg"
