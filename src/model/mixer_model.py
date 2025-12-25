@@ -67,7 +67,7 @@ class MixerModel(nn.Module):
         self.word_dropout_prob = word_dropout_prob
         self.phase = None
         self.denoise_modules = []
-        self.self.fixation_modules = []
+        self.fixation_modules = []
         # SPECIAL TOKENS
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         self.fixation_modules.append(self.start_token)
