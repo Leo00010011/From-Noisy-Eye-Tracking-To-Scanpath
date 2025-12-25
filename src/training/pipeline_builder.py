@@ -394,8 +394,8 @@ class PipelineBuilder:
     def build_phases(self):
         if hasattr(self.config.training, 'Phases'):
             output = []
-            for phase in self.config.Phases:
-                phase = self.config.get(phase)
+            for phase in self.config.training.Phases:
+                phase = self.config.training.get(phase)
                 output.append((phase.name, phase.denoise_weight, phase.epochs))
             return output
         else:
