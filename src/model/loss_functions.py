@@ -116,7 +116,7 @@ class DenoiseRegLoss(torch.nn.Module):
     def forward(self, input, output):
         return self.denoise_loss(output['denoise'], input['clean_x']), {}
 class CombinedLossFunction(torch.nn.Module):
-    def __init__(self, denoise_loss, fixation_loss, denoise_weight):
+    def __init__(self, denoise_loss, fixation_loss, denoise_weight = 0):
         super().__init__()
         self.denoise_loss = denoise_loss
         self.fixation_loss = fixation_loss

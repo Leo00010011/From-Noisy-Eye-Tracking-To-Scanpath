@@ -387,7 +387,7 @@ class PipelineBuilder:
         elif loss_type == 'combined':
             loss_fn = CombinedLossFunction(denoise_loss = DenoiseRegLoss(STR_TO_LOSS_FUNC[self.config.loss.denoise_loss_type]),
                                          fixation_loss = self.build_loss_fn(primary_loss = self.config.loss.fixation_loss_type),
-                                         denoise_weight = self.config.loss.denoise_weight)
+                                         denoise_weight = 0)
         else:
             raise ValueError(f"Loss type {loss_type} not supported.")
         loss_fn.summary()
