@@ -362,6 +362,7 @@ class PipelineBuilder:
         return scheduler
 
     def build_loss_fn(self, primary_loss = None):
+        print(f'Loss type: {self.config.loss.type}')
         if not hasattr(self.config, 'loss') or self.config.loss.type == 'entire_reg':
             print("Using Entire Regression Loss Function")
             return EntireRegLossFunction(cls_weight = self.config.loss.cls_weight,
@@ -384,7 +385,7 @@ class PipelineBuilder:
             raise ValueError(f"Loss type {self.config.loss.type} not supported.")
         
     def build_phases(self):
-        if hasattr(self.config, 'Phases'):
+        if hasattr(self.config.training, 'Phases'):
             output = []
             for phase in self.config.Phases:
                 phase = self.config.get(phase)
