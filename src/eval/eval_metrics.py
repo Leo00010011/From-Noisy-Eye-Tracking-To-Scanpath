@@ -45,9 +45,6 @@ def eval_reg(reg, y, y_mask):
     return reg_error, dur_error
 
 def eval_denoise(denoise, clean_x):
-    print(denoise.shape, clean_x.shape)
-    print(denoise[0,:,:])
-    print(clean_x[0,:,:])
     diff = denoise - clean_x[:, :, :2]
     denoise_error = torch.sqrt(torch.sum(diff**2, dim=-1))
     denoise_error = denoise_error.sum().item() / denoise_error.numel()

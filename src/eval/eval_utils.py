@@ -142,10 +142,8 @@ def invert_transforms(inputs, outputs, dataloader, remove_outliers = False):
         transforms = dataloader.dataset.dataset.transforms
         
     if 'coords' in outputs or 'reg' in outputs:
-        print('inverting fixations')
         inputs, outputs = invert_transforms_fixations(inputs, outputs, transforms, remove_outliers)
     if 'denoise' in outputs:
-        print('inverting clean_x')
         inputs, outputs = invert_transforms_clean_x(inputs, outputs, transforms)
     
     return inputs, outputs
