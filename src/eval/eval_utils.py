@@ -95,7 +95,7 @@ def plot_amplitude_dist(gaze_list, label_list, ptoa_list, bin_count=30, bin_min=
     plt.legend()
     plt.title('Amplitude Distribution in Degrees')
 
-def _invert_transforms_fixations(inputs, outputs, transforms, remove_outliers = False):
+def invert_transforms_fixations(inputs, outputs, transforms, remove_outliers = False):
     pred_reg = None
     if 'reg' in outputs:
         pred_reg = outputs['reg']
@@ -120,9 +120,9 @@ def _invert_transforms_fixations(inputs, outputs, transforms, remove_outliers = 
     return inputs, outputs
 
 def invert_transforms_clean_x(inputs, outputs, transforms):
-    if 'denoise' in outputs:
-        pred_clean_x = outputs['denoise']
-        gt_clean_x = inputs['clean_x']
+
+    pred_clean_x = outputs['denoise']
+    gt_clean_x = inputs['clean_x']
         
     for transform in reversed(transforms):
         if transform.modify_y:
@@ -143,8 +143,10 @@ def invert_transforms(inputs, outputs, dataloader, remove_outliers = False):
         transforms = dataloader.dataset.dataset.transforms
         
     if 'coords' in outputs or 'reg' in outputs:
-        inputs, outputs = _invert_transforms_fixations(inputs, outputs, transforms, remove_outliers)
+        print('inverting fixations')
+        inputs, outputs = invert_transforms_fixations(inputs, outputs, transforms, remove_outliers)
     if 'denoise' in outputs:
+        print('inverting clean_x')
         inputs, outputs = invert_transforms_clean_x(inputs, outputs, transforms)
     
     return inputs, outputs
