@@ -8,7 +8,7 @@ defaults:
 training:
   num_epochs: 100
   validate: True
-  val_interval: 10
+  val_interval: 2
   learning_rate: 0.001
   decisive_metric: "reg_loss_val"
   save_best_only: True
