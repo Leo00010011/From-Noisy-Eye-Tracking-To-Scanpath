@@ -362,13 +362,20 @@ class PipelineBuilder:
         return scheduler
 
     def build_loss_fn(self, primary_loss = None):
-        print(f'Loss type: {self.config.loss.type}')
-        if not hasattr(self.config, 'loss') or self.config.loss.type == 'entire_reg':
+        if primary_loss is not None:
+            loss_type = primary_loss
+        elif hasattr(self.config, 'loss'):
+            if hasattr(self.config.loss, 'complex_type') and self.config.loss.complex_type is not None:
+                loss_type = self.config.loss.complex_type
+            else:
+                loss_type = self.config.loss.type 
+        else:
+            loss_type = 'entire_reg'
+        if loss_type == 'entire_reg':
             print("Using Entire Regression Loss Function")
             return EntireRegLossFunction(cls_weight = self.config.loss.cls_weight,
                                          cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
                                          reg_func = STR_TO_LOSS_FUNC[self.config.loss.reg_func])
-        loss_type = primary_loss if primary_loss is not None else self.config.loss.type
         if loss_type == 'separated_reg':
             print("Using Separated Regression Loss Function")
             return SeparatedRegLossFunction(cls_weight = self.config.loss.cls_weight,

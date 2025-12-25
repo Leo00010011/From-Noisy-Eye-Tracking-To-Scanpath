@@ -28,6 +28,6 @@ training:
     denoise_weight: 0.3
     epochs: 50
   loss:
-    type: "combined"
+    complex_type: "combined"
     denoise_loss_type: "l1"
     fixation_loss_type: "entire_loss"
