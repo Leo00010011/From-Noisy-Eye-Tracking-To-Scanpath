@@ -22,6 +22,9 @@ class EntireRegLossFunction(torch.nn.Module):
         self.cls_func = cls_func
         self.reg_func = reg_func
     
+    def set_denoise_weight(self, denoise_weight: float):
+        return
+    
     def forward(self, input, output):
         reg_out = output['reg']
         cls_out = output['cls']
@@ -60,6 +63,9 @@ class SeparatedRegLossFunction(torch.nn.Module):
         self.cls_func = cls_func
         self.coord_func = coord_func
         self.dur_func = dur_func
+        
+    def set_denoise_weight(self, denoise_weight: float):
+        return
     
     def forward(self, input, output):
         coord_out = output['coord']
@@ -104,6 +110,9 @@ class CombinedLossFunction(torch.nn.Module):
         super().__init__()
         self.denoise_loss = denoise_loss
         self.fixation_loss = fixation_loss
+        self.denoise_weight = denoise_weight
+        
+    def set_denoise_weight(self, denoise_weight: float):
         self.denoise_weight = denoise_weight
     
     def forward(self, input, output):

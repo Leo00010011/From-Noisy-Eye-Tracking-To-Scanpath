@@ -388,10 +388,10 @@ class PipelineBuilder:
             output = []
             for phase in self.config.Phases:
                 phase = self.config.get(phase)
-                output.append((phase.name, phase.epochs))
+                output.append((phase.name, phase.denoise_weight, phase.epochs))
             return output
         else:
-            return [('Combined', self.config.training.num_epochs)]
+            return [('Combined', .3 ,self.config.training.num_epochs)]
 
 
 

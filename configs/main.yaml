@@ -17,7 +17,7 @@ training:
   Phases: [Denoise]
   Denoise:
     name: "Denoise"
-    denoise_weight: 1 #
+    denoise_weight: 1 
     epochs: 100
   Fixation:
     name: "Fixation"
