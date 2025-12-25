@@ -62,7 +62,7 @@ def build_normalize_time(config, key = None):
         return Normalize(key=config.key, mode=config.mode, max_value=config.period_duration)
 
 def build_log_normalize_duration(config):
-    return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale, use_tan=config.get('use_tan', False))
+    return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale, use_tan=config.get('use_tan', False), key = 'y')
 
 
 

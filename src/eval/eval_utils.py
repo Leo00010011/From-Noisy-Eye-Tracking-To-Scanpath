@@ -95,21 +95,21 @@ def plot_amplitude_dist(gaze_list, label_list, ptoa_list, bin_count=30, bin_min=
     plt.legend()
     plt.title('Amplitude Distribution in Degrees')
 
-def invert_transforms(inputs, outputs, dataloader, remove_outliers = False):
+def _invert_transforms_fixations(inputs, outputs, transforms, remove_outliers = False):
+    pred_reg = None
     if 'reg' in outputs:
         pred_reg = outputs['reg']
-    else:
+    elif 'coord' in outputs and 'dur' in outputs:
         pred_reg = torch.concat([outputs['coord'], outputs['dur']], dim=2)
-    gt_reg = inputs['tgt']
-    if hasattr(dataloader, 'path_dataset'):
-        transforms = dataloader.path_dataset.transforms
-    else:
-        transforms = dataloader.dataset.dataset.transforms
+    if pred_reg is not None:
+        gt_reg = inputs['tgt']
+        
     # reverse the transforms
     for transform in reversed(transforms):
         if transform.modify_y:
-            pred_reg = transform.inverse(pred_reg, inputs['tgt_mask'].unsqueeze(-1))
-            gt_reg = transform.inverse(gt_reg, inputs['tgt_mask'][:,1:].unsqueeze(-1))
+            pred_reg = transform.inverse(pred_reg, inputs['tgt_mask'].unsqueeze(-1), 'y')
+            gt_reg = transform.inverse(gt_reg, inputs['tgt_mask'][:,1:].unsqueeze(-1), 'y')
+            
     if remove_outliers:
         y_mask = inputs['tgt_mask'][:,1:].unsqueeze(-1)
         outliers = (pred_reg[:,:-1,2:] > 1200) & y_mask
@@ -117,6 +117,36 @@ def invert_transforms(inputs, outputs, dataloader, remove_outliers = False):
         outputs['outliers_count'] = outliers.sum().item()
     outputs['reg'] = pred_reg
     inputs['tgt'] = gt_reg
+    return inputs, outputs
+
+def invert_transforms_clean_x(inputs, outputs, transforms):
+    if 'denoise' in outputs:
+        pred_clean_x = outputs['denoise']
+        gt_clean_x = inputs['clean_x']
+        
+    for transform in reversed(transforms):
+        if transform.modify_y:
+            pred_clean_x = transform.inverse(pred_clean_x, None, 'clean_x')
+            gt_clean_x = transform.inverse(gt_clean_x, None, 'clean_x')
+    
+    inputs['clean_x'] = gt_clean_x
+    outputs['denoise'] = pred_clean_x
+    return inputs, outputs
+                
+    # save in input and output
+
+def invert_transforms(inputs, outputs, dataloader, remove_outliers = False):
+    # building invert batch for fixations
+    if hasattr(dataloader, 'path_dataset'):
+        transforms = dataloader.path_dataset.transforms
+    else:
+        transforms = dataloader.dataset.dataset.transforms
+        
+    if 'coords' in outputs or 'reg' in outputs:
+        inputs, outputs = _invert_transforms_fixations(inputs, outputs, transforms, remove_outliers)
+    if 'denoise' in outputs:
+        inputs, outputs = invert_transforms_clean_x(inputs, outputs, transforms)
+    
     return inputs, outputs
 
 def compute_angles(gaze):

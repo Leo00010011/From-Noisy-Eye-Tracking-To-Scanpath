@@ -66,7 +66,9 @@ class Normalize:
         input[self.key] = x
         return input
     
-    def inverse(self, y, tgt_mask):
+    def inverse(self, y, tgt_mask, key):
+        if key != self.key:
+            return y
         # shape (B,L,F)
         if isinstance(y, torch.Tensor):
             if isinstance(self.max_value, torch.Tensor):
@@ -75,9 +77,9 @@ class Normalize:
                 self.max_value = torch.tensor(self.max_value).to(y.device)
         if self.mode == 'coords':
             y[:,:,:2] = y[:,:,:2] * self.max_value
-            y.masked_fill(~tgt_mask, PAD_TOKEN_ID)
         elif self.mode == 'time':
             y[:,:,2] = y[:,:,2] * self.max_value
+        if tgt_mask is not None:
             y.masked_fill(~tgt_mask, PAD_TOKEN_ID)
         return y
 
@@ -90,17 +92,18 @@ class Normalize:
         max_value={self.max_value}'''
         
 class LogNormalizeDuration:
-    def __init__(self, mean, std, scale, use_tan):
+    def __init__(self, mean, std, scale, use_tan, key):
         self.mean = mean
         self.std = std
         self.scale = scale
+        self.key = key
         self.use_tan = use_tan
         self.modify_y = True
         
         
     def __call__(self,input):
         # shape (F,L)
-        d = input['y'][2]
+        d = input[self.key][2]
         mask = d == PAD_TOKEN_ID
         # atan normalization
         if self.use_tan:
@@ -110,11 +113,13 @@ class LogNormalizeDuration:
             d = (np.log1p(d) - self.mean) / self.std
             d = d * self.scale
         d[mask] = PAD_TOKEN_ID
-        input['y'][2] = d
+        input[self.key][2] = d
         return input
     
-    def inverse(self, y, tgt_mask):
+    def inverse(self, y, tgt_mask, key):
         # shape (B,L,F)
+        if key != self.key:
+            return y
         d = y[:,:,2]
         if self.use_tan == True:
             d = torch.tan(torch.pi*(d - 0.5))
