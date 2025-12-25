@@ -258,6 +258,8 @@ class FreeViewInMemory(Dataset):
         input = {'x': x, 'y': y, 'fixation_mask': fixation_mask}
         for transform in self.transforms:
             input = transform(input)
+        if 'clean_x' in input:
+            return input['x'], input['y'], input['clean_x']
         return input['x'], input['y']
     
 
@@ -281,7 +283,16 @@ def seq2seq_padded_collate_fn(batch):
 
     input_sequences = [torch.from_numpy(item[0].T).float() for item in batch]
     target_sequences = [torch.from_numpy(item[1].T).float() for item in batch]
-
+    output = {}
+    if len(batch[0]) == 3:
+        clean_x_sequences = [torch.from_numpy(item[2].T).float() for item in batch]
+        padded_clean_x = torch.nn.utils.rnn.pad_sequence(
+            clean_x_sequences, 
+            batch_first=True, 
+            padding_value=PAD_TOKEN_ID
+        )
+        output['clean_x'] = padded_clean_x
+    
 
     
     padded_inputs = torch.nn.utils.rnn.pad_sequence(
@@ -295,11 +306,12 @@ def seq2seq_padded_collate_fn(batch):
         batch_first=True, 
         padding_value=PAD_TOKEN_ID
     )
-    return {'src':padded_inputs,
-    'src_mask':input_mask,
-    'tgt':padded_targets,
-    'tgt_mask':target_mask,
-    'fixation_len':fixation_len}
+    output['src'] = padded_inputs
+    output['src_mask'] = input_mask
+    output['tgt'] = padded_targets
+    output['tgt_mask'] = target_mask
+    output['fixation_len'] = fixation_len
+    return output
 
 
 def seq2seq_jagged_collate_fn(batch):
