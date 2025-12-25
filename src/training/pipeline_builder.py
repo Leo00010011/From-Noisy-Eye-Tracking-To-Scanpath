@@ -6,7 +6,7 @@ import numpy as np
 from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.data.parsers import CocoFreeView
 from src.data.transforms import (ExtractRandomPeriod, Normalize, StandarizeTime, LogNormalizeDuration,
-                                 AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise)
+                                 AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise, SaveCleanX)
 from src.model.path_model import PathModel
 from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
@@ -96,6 +96,8 @@ class PipelineBuilder:
                     transforms.append(StandarizeTime())
                 elif transform_str == 'LogNormalizeDuration':
                     transforms.append(build_log_normalize_duration(transform_config))
+                elif transform_str == 'SaveCleanX':
+                    transforms.append(SaveCleanX())
                 else:
                     raise ValueError(f"Transform {transform_str} not supported.")
         else:

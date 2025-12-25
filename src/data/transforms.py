@@ -160,7 +160,18 @@ class StandarizeTime:
         return f'''+ StandarizeTime'''
 
 # >>>>  NOISE
+class SaveCleanX:
+    def __init__(self):
+        self.modify_y = False
     
+    def __call__(self, input):
+        input['clean_x'] = input['x'].copy()
+        return input
+    
+    def __repr__(self):
+        return f'SaveCleanX'
+    def __str__(self):
+        return f'''+ SaveCleanX'''
     
 class AddRandomCenterCorrelatedRadialNoise:
     def __init__(self, initial_center, ptoa,
@@ -185,7 +196,6 @@ class AddRandomCenterCorrelatedRadialNoise:
         self.return_center_path = return_center_path
 
     def __call__(self, input):
-        clean_x = input['x'].copy()
         x, center_path = add_random_center_correlated_radial_noise(
             input['x'], 
             self.initial_center, 
@@ -199,7 +209,7 @@ class AddRandomCenterCorrelatedRadialNoise:
             self.center_delta_r
         )
         input['x'] = x
-        input['clean_x'] = clean_x
+        
         if self.return_center_path:
             input['center_path'] = center_path
         return input

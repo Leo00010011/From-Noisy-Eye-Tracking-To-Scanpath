@@ -15,7 +15,7 @@ load:
   coord_width: 512
   log: True
 transforms:
-  transform_list: ['ExtractRandomPeriod', 'StandarizeTime', 'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
+  transform_list: ['ExtractRandomPeriod', 'StandarizeTime', 'SaveCleanX' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
                    'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration']
 #  transform_list: ['ExtractRandomPeriod', 'StandarizeTime', 'AddRandomCenterCorrelatedRadialNoise', 
 #                   'DiscretizationNoise']
