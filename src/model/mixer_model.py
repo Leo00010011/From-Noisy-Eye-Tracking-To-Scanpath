@@ -467,7 +467,7 @@ class MixerModel(nn.Module):
     def decode_denoise(self, **kwargs):
         src = self.src
         
-        output = self.denoise_head(src)
+        output = self.denoise_head(src, **kwargs)
         return {'denoise': output}
         
         

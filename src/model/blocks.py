@@ -478,3 +478,12 @@ class LearnableCoordinateDropout(nn.Module):
         x_dropped = torch.where(drop_mask, self.mask_token.expand(B, L, -1), x)
 
         return x_dropped
+
+
+class ResidualRegressor(nn.Module):
+    def __init__(self, model_dim):
+        super().__init__()
+        self.regressor = MLP(model_dim, [model_dim, model_dim//2], 2, hidden_dropout_p = 0, output_dropout_p = 0, include_dropout = False)
+        
+    def forward(self, src_tokens, clean_x, **kwargs):
+        return self.regressor(src_tokens) + clean_x[:,:,:2]
