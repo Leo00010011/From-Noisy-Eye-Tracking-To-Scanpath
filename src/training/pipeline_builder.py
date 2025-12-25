@@ -371,25 +371,25 @@ class PipelineBuilder:
                 loss_type = self.config.loss.type 
         else:
             loss_type = 'entire_reg'
+        loss_fn = None
         if loss_type == 'entire_reg':
-            print("Using Entire Regression Loss Function")
-            return EntireRegLossFunction(cls_weight = self.config.loss.cls_weight,
+            loss_fn = EntireRegLossFunction(cls_weight = self.config.loss.cls_weight,
                                          cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
                                          reg_func = STR_TO_LOSS_FUNC[self.config.loss.reg_func])
         if loss_type == 'separated_reg':
-            print("Using Separated Regression Loss Function")
-            return SeparatedRegLossFunction(cls_weight = self.config.loss.cls_weight,
+            loss_fn = SeparatedRegLossFunction(cls_weight = self.config.loss.cls_weight,
                                          cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
                                          coord_func = STR_TO_LOSS_FUNC[self.config.loss.coord_func],
                                          dur_func = STR_TO_LOSS_FUNC[self.config.loss.dur_func],
                                          dur_weight = self.config.loss.dur_weight)
         elif loss_type == 'combined':
-            print("Using Combined Loss Function")
-            return CombinedLossFunction(denoise_loss = DenoiseRegLoss(STR_TO_LOSS_FUNC[self.config.loss.denoise_loss_type]),
+            loss_fn = CombinedLossFunction(denoise_loss = DenoiseRegLoss(STR_TO_LOSS_FUNC[self.config.loss.denoise_loss_type]),
                                          fixation_loss = self.build_loss_fn(primary_loss = self.config.loss.fixation_loss_type),
                                          denoise_weight = self.config.loss.denoise_weight)
         else:
             raise ValueError(f"Loss type {self.config.loss.type} not supported.")
+        loss_fn.summary()
+        return loss_fn
         
     def build_phases(self):
         if hasattr(self.config.training, 'Phases'):

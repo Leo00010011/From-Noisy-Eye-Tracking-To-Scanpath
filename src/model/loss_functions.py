@@ -25,6 +25,9 @@ class EntireRegLossFunction(torch.nn.Module):
     def set_denoise_weight(self, denoise_weight: float):
         return
     
+    def summary(self):
+        print(f"EntireRegLossFunction: cls_weight={self.cls_weight}, cls_func={self.cls_func.__name__}, reg_func={self.reg_func.__name__}")
+
     def forward(self, input, output):
         reg_out = output['reg']
         cls_out = output['cls']
@@ -67,6 +70,9 @@ class SeparatedRegLossFunction(torch.nn.Module):
     def set_denoise_weight(self, denoise_weight: float):
         return
     
+    def summary(self):
+        print(f"SeparatedRegLossFunction: cls_weight={self.cls_weight}, dur_weight={self.dur_weight}, cls_func={self.cls_func.__name__}, coord_func={self.coord_func.__name__}, dur_func={self.dur_func.__name__}")
+
     def forward(self, input, output):
         coord_out = output['coord']
         dur_out = output['dur']
@@ -103,6 +109,10 @@ class DenoiseRegLoss(torch.nn.Module):
         super().__init__()
         self.denoise_loss = denoise_loss
     
+    def summary(self):
+        loss_name = self.denoise_loss.__name__ if hasattr(self.denoise_loss, '__name__') else type(self.denoise_loss).__name__
+        print(f"DenoiseRegLoss: denoise_loss={loss_name}")
+
     def forward(self, input, output):
         return self.denoise_loss(output['denoise'], input['clean_x']), {}
 class CombinedLossFunction(torch.nn.Module):
@@ -115,6 +125,19 @@ class CombinedLossFunction(torch.nn.Module):
     def set_denoise_weight(self, denoise_weight: float):
         self.denoise_weight = denoise_weight
     
+    def summary(self):
+        print(f"CombinedLossFunction: denoise_weight={self.denoise_weight}")
+        print("  Denoise Loss:")
+        if hasattr(self.denoise_loss, 'summary'):
+            self.denoise_loss.summary()
+        else:
+            print(f"    {self.denoise_loss}")
+        print("  Fixation Loss:")
+        if hasattr(self.fixation_loss, 'summary'):
+            self.fixation_loss.summary()
+        else:
+            print(f"    {self.fixation_loss}")
+
     def forward(self, input, output):
         denoise_loss = 0
         fixation_loss = 0
