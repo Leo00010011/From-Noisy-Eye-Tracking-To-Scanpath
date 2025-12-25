@@ -302,6 +302,7 @@ class PipelineBuilder:
                               pos_enc_sigma = self.config.model.get('pos_enc_sigma', None),
                               use_rope = self.config.model.get('use_rope', False),
                               word_dropout_prob = self.config.model.get('word_dropout_prob', 0),
+                              phases = self.config.training.Phases if hasattr(self.config.training, 'Phases') else [],
                               activation = activation,
                               device = self.device,
                               image_encoder = image_encoder,
