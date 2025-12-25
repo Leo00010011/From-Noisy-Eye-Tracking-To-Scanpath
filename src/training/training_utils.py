@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import json
-from src.eval.eval_metrics import create_cls_targets, accuracy, precision, recall, eval_reg
+from src.eval.eval_metrics import create_cls_targets, accuracy, precision, recall, eval_reg, eval_denoise
 from src.eval.eval_utils import invert_transforms
 
 class MetricsStorage:
@@ -29,10 +29,21 @@ class MetricsStorage:
         
     def compute_normalized_regression_metrics(self,input, output, dataloadeer ):
         input, output = invert_transforms(input, output, dataloadeer)
-        reg_out = output['reg']
-        y, y_mask = input['tgt'], input['tgt_mask']
-        coord_error, dur_error = eval_reg(reg_out, y, y_mask)
-        for key, value in zip(['coord_error', 'dur_error'], [coord_error, dur_error]):
+        results_dict = {}
+        if 'reg' in output:
+            reg_out = output['reg']
+            y, y_mask = input['tgt'], input['tgt_mask']
+            coord_error, dur_error = eval_reg(reg_out, y, y_mask)
+            results_dict['coord_error'] = coord_error
+            results_dict['dur_error'] = dur_error
+        
+        if 'denoise' in output:
+            denoise_out = output['denoise']
+            clean_x = input['clean_x']
+            coord_error = eval_denoise(denoise_out, clean_x)
+            results_dict['denoise_error'] = coord_error
+        
+        for key, value in results_dict.items():
             if key not in self.loss_info:
                 self.loss_info[key] = value
             else:
