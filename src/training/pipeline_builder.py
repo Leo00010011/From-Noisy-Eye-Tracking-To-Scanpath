@@ -371,12 +371,13 @@ class PipelineBuilder:
                 loss_type = self.config.loss.type 
         else:
             loss_type = 'entire_reg'
+            
         loss_fn = None
         if loss_type == 'entire_reg':
             loss_fn = EntireRegLossFunction(cls_weight = self.config.loss.cls_weight,
                                          cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
                                          reg_func = STR_TO_LOSS_FUNC[self.config.loss.reg_func])
-        if loss_type == 'separated_reg':
+        elif loss_type == 'separated_reg':
             loss_fn = SeparatedRegLossFunction(cls_weight = self.config.loss.cls_weight,
                                          cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
                                          coord_func = STR_TO_LOSS_FUNC[self.config.loss.coord_func],
