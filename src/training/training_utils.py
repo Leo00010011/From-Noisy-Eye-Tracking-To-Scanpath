@@ -15,7 +15,8 @@ class MetricsStorage:
             'precision_pos': [],
             'recall_pos': [],
             'precision_neg': [],
-            'recall_neg': []
+            'recall_neg': [],
+            'denoise_error_val': []
         }
         self.loss_info = {}
         self.num_batches = 0
@@ -82,6 +83,7 @@ class MetricsStorage:
 def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True):
     model.eval()
     with torch.no_grad():
+        denoise_coord_error_acum = 0
         acc_acum = 0
         pre_pos_acum = 0
         rec_pos_acum = 0
@@ -103,48 +105,61 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True)
                 else:
                     loss_info[key] += value
             input, output = invert_transforms(input, output, val_dataloader, remove_outliers = True)
-            reg_out = output['reg']
-            cls_out = output['cls']
-            y = input['tgt']
-            y_mask = input['tgt_mask']
-            fixation_len = input['fixation_len']
-            
-            reg_error, duration_error = eval_reg(reg_out, y, y_mask)
-            coord_error_acum += reg_error
-            duration_error_acum += duration_error
-            outliers_count_acum += output['outliers_count']
-            cls_targets = create_cls_targets(cls_out, fixation_len)
-            acc_acum += accuracy(cls_out, y_mask, cls_targets)
-            pre_pos_acum += precision(cls_out, y_mask, cls_targets)
-            rec_pos_acum += recall(cls_out, y_mask, cls_targets)
-            pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
-            rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
+            if 'reg' in output:
+                reg_out = output['reg']
+                cls_out = output['cls']
+                y = input['tgt']
+                y_mask = input['tgt_mask']
+                fixation_len = input['fixation_len']
+                
+                reg_error, duration_error = eval_reg(reg_out, y, y_mask)
+                coord_error_acum += reg_error
+                duration_error_acum += duration_error
+                outliers_count_acum += output['outliers_count']
+                cls_targets = create_cls_targets(cls_out, fixation_len)
+                acc_acum += accuracy(cls_out, y_mask, cls_targets)
+                pre_pos_acum += precision(cls_out, y_mask, cls_targets)
+                rec_pos_acum += recall(cls_out, y_mask, cls_targets)
+                pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
+                rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
+            if 'denoise' in output:
+                denoise_out = output['denoise']
+                clean_x = input['clean_x']
+                coord_error = eval_denoise(denoise_out, clean_x)
+                denoise_coord_error_acum += coord_error
             cnt += 1
         for key, value in loss_info.items():
             key_str = f'{key}_val'
             if key_str not in metrics:
                 metrics[key_str] = []
             metrics[key_str].append(value / cnt)
-        metrics['accuracy'].append(acc_acum / cnt)
-        metrics['epoch'].append(epoch + 1)
-        metrics['reg_error_val'].append(coord_error_acum / cnt)
-        metrics['duration_error_val'].append(duration_error_acum / cnt)
-        metrics['outliers_count_val'].append(outliers_count_acum)
-        metrics['precision_pos'].append(pre_pos_acum / cnt)
-        metrics['recall_pos'].append(rec_pos_acum / cnt)
-        metrics['precision_neg'].append(pre_neg_acum / cnt)
-        metrics['recall_neg'].append(rec_neg_acum / cnt)
+        if coord_error_acum > 0:
+            metrics['accuracy'].append(acc_acum / cnt)
+            metrics['epoch'].append(epoch + 1)
+            metrics['reg_error_val'].append(coord_error_acum / cnt)
+            metrics['duration_error_val'].append(duration_error_acum / cnt)
+            metrics['outliers_count_val'].append(outliers_count_acum)
+            metrics['precision_pos'].append(pre_pos_acum / cnt)
+            metrics['recall_pos'].append(rec_pos_acum / cnt)
+            metrics['precision_neg'].append(pre_neg_acum / cnt)
+            metrics['recall_neg'].append(rec_neg_acum / cnt)
+        if denoise_coord_error_acum > 0:
+            metrics['denoise_error_val'].append(denoise_coord_error_acum / cnt)
         if log:
             print(f'>>>>>>> Validation results at epoch {metrics["epoch"][-1]}:')
             for key, value in info.items():
                 print(f'{key}_val: {value}')
-            print('coordinate_error_val: ',metrics['reg_error_val'][-1])
-            print('duration_error_val: ',metrics['duration_error_val'][-1])
-            print('accuracy: ',metrics['accuracy'][-1])
-            print('precision_pos: ',metrics['precision_pos'][-1])
-            print('recall_pos: ',metrics['recall_pos'][-1])
-            print('precision_neg: ',metrics['precision_neg'][-1])
-            print('recall_neg: ',metrics['recall_neg'][-1])
+            if 'reg_error_val' in metrics:
+                print('coordinate_error_val: ',metrics['reg_error_val'][-1])
+                print('duration_error_val: ',metrics['duration_error_val'][-1])
+                print('accuracy: ',metrics['accuracy'][-1])
+                print('precision_pos: ',metrics['precision_pos'][-1])
+                print('recall_pos: ',metrics['recall_pos'][-1])
+                print('precision_neg: ',metrics['precision_neg'][-1])
+                print('recall_neg: ',metrics['recall_neg'][-1])
+            if 'denoise_error_val' in metrics:
+                print('denoise_error_val: ',metrics['denoise_error_val'][-1])
+            
             print('<<<<<<<<<<<<<<<<<<')
     model.train()
 
