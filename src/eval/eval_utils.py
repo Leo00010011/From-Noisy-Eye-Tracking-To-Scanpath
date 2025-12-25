@@ -106,9 +106,8 @@ def invert_transforms_fixations(inputs, outputs, transforms, remove_outliers = F
         
     # reverse the transforms
     for transform in reversed(transforms):
-        if transform.modify_y:
-            pred_reg = transform.inverse(pred_reg, inputs['tgt_mask'].unsqueeze(-1), 'y')
-            gt_reg = transform.inverse(gt_reg, inputs['tgt_mask'][:,1:].unsqueeze(-1), 'y')
+        pred_reg = transform.inverse(pred_reg, inputs['tgt_mask'].unsqueeze(-1), 'y')
+        gt_reg = transform.inverse(gt_reg, inputs['tgt_mask'][:,1:].unsqueeze(-1), 'y')
             
     if remove_outliers:
         y_mask = inputs['tgt_mask'][:,1:].unsqueeze(-1)
@@ -125,9 +124,8 @@ def invert_transforms_clean_x(inputs, outputs, transforms):
     gt_clean_x = inputs['clean_x']
         
     for transform in reversed(transforms):
-        if transform.modify_y:
-            pred_clean_x = transform.inverse(pred_clean_x, None, 'clean_x')
-            gt_clean_x = transform.inverse(gt_clean_x, None, 'clean_x')
+        pred_clean_x = transform.inverse(pred_clean_x, None, 'clean_x')
+        gt_clean_x = transform.inverse(gt_clean_x, None, 'clean_x')
     
     inputs['clean_x'] = gt_clean_x
     outputs['denoise'] = pred_clean_x
