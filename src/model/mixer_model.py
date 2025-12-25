@@ -479,7 +479,9 @@ class MixerModel(nn.Module):
         elif self.phase == 'Fixation':
             return self.decode_fixation(**kwargs)
         elif self.phase == 'Combined':
-            return self.decode_fixation(**kwargs)
+            denoise_output = self.decode_denoise(**kwargs)  
+            fixation_output = self.decode_fixation(**kwargs)
+            return {**denoise_output, **fixation_output}
         return self.decode_fixation(**kwargs)
         
     
