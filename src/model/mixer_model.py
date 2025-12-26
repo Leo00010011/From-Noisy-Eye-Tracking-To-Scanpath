@@ -255,11 +255,11 @@ class MixerModel(nn.Module):
         
         # DENOISE HEADS
         if phases is not None and 'Denoise' in phases:
-            #self.denoise_head = ResidualRegressor(model_dim, **factory_mode)
-            self.denoise_head =  MLP(model_dim,
-                                        mlp_head_hidden_dim,
-                                        2,
-                                        **factory_mode)
+            self.denoise_head = ResidualRegressor(model_dim, **factory_mode)
+            # self.denoise_head =  MLP(model_dim,
+            #                             mlp_head_hidden_dim,
+            #                             2,
+            #                             **factory_mode)
             self.denoise_modules.append(self.denoise_head)
 
     def param_summary(self):
