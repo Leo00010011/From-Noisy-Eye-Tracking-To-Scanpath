@@ -82,14 +82,14 @@ class PathModel(nn.Module):
             self.final_enc_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
         if head_type == 'mlp':
             self.regression_head = MLP(model_dim,
-                                           model_dim//2,
+                                           model_dim//2 if input_encoder == 'shared_gaussian' else mlp_head_hidden_dim,
                                            output_dim,
                                            hidden_dropout_p = 0.1,
                                            output_dropout_p = 0.1,
                                            include_dropout = True,
                                            **factory_mode)
             self.end_head = MLP(model_dim,
-                                     model_dim//2,
+                                     model_dim//2 if input_encoder == 'shared_gaussian' else mlp_head_hidden_dim,
                                      1,
                                      include_dropout = False,
                                      **factory_mode)
