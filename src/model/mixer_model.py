@@ -39,6 +39,7 @@ class MixerModel(nn.Module):
                        use_rope = False,
                        word_dropout_prob = 0.3,
                        dur_head_dropout = 0,
+                       reg_head_dropout = 0,
                        end_dropout = 0,
                        phases = None,
                        src_dropout = 0,
@@ -74,6 +75,7 @@ class MixerModel(nn.Module):
         self.tgt_dropout = tgt_dropout
         self.dur_head_dropout = dur_head_dropout
         self.end_dropout = end_dropout
+        self.reg_head_dropout = reg_head_dropout
         self.denoise_modules = []
         self.fixation_modules = []
         # SPECIAL TOKENS
@@ -213,6 +215,7 @@ class MixerModel(nn.Module):
             self.regression_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
                                            output_dim,
+                                           hidden_dropout_p = reg_head_dropout,
                                            **factory_mode)
             self.end_head = MLP(model_dim,
                                      mlp_head_hidden_dim,
@@ -222,7 +225,10 @@ class MixerModel(nn.Module):
             self.fixation_modules.append(self.regression_head)
             self.fixation_modules.append(self.end_head)
         elif head_type == 'linear':
-            self.regression_head = nn.Linear(model_dim, output_dim,**factory_mode)
+            self.regression_head = nn.Sequential(
+                nn.Dropout(reg_head_dropout),
+                nn.Linear(model_dim, output_dim, **factory_mode)
+            )
             self.end_head = nn.Sequential(
                 nn.Dropout(end_dropout),
                 nn.Linear(model_dim, 1, **factory_mode)
@@ -233,6 +239,7 @@ class MixerModel(nn.Module):
             self.coord_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
                                            2,
+                                           hidden_dropout_p = reg_head_dropout,
                                            **factory_mode)
             self.dur_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
