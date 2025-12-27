@@ -167,7 +167,7 @@ class PathModel(nn.Module):
         self.memory = memory
         self.src_mask = src_mask
         
-    def decode(self, tgt, tgt_mask, src_mask, **kwargs):
+    def decode_fixation(self, tgt, tgt_mask, src_mask, **kwargs):
         memory = self.memory
         src_mask = self.src_mask
         start = self.start_token.expand(memory.size(0),-1,-1)
@@ -208,6 +208,6 @@ class PathModel(nn.Module):
 
     def forward(self, **kwargs):
         self.encode(**kwargs)
-        return self.decode(**kwargs)
+        return self.decode_fixation(**kwargs)
        
     
