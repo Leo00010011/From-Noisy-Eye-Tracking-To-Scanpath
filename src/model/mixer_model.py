@@ -38,6 +38,8 @@ class MixerModel(nn.Module):
                        pos_enc_sigma = 1.0,
                        use_rope = False,
                        word_dropout_prob = 0.3,
+                       dur_head_dropout = 0,
+                       end_dropout = 0,
                        phases = None,
                        src_dropout = 0,
                        tgt_dropout = 0,
@@ -70,6 +72,8 @@ class MixerModel(nn.Module):
         self.phase = None
         self.src_dropout = src_dropout
         self.tgt_dropout = tgt_dropout
+        self.dur_head_dropout = dur_head_dropout
+        self.end_dropout = end_dropout
         self.denoise_modules = []
         self.fixation_modules = []
         # SPECIAL TOKENS
@@ -213,12 +217,16 @@ class MixerModel(nn.Module):
             self.end_head = MLP(model_dim,
                                      mlp_head_hidden_dim,
                                      1,
+                                     hidden_dropout_p = end_dropout,
                                      **factory_mode)
             self.fixation_modules.append(self.regression_head)
             self.fixation_modules.append(self.end_head)
         elif head_type == 'linear':
             self.regression_head = nn.Linear(model_dim, output_dim,**factory_mode)
-            self.end_head = nn.Linear(model_dim,1,**factory_mode)
+            self.end_head = nn.Sequential(
+                nn.Dropout(end_dropout),
+                nn.Linear(model_dim, 1, **factory_mode)
+            )
             self.fixation_modules.append(self.regression_head)
             self.fixation_modules.append(self.end_head)
         elif head_type == 'multi_mlp':
@@ -229,11 +237,13 @@ class MixerModel(nn.Module):
             self.dur_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
                                            1,
+                                           hidden_dropout_p = dur_head_dropout,
                                            **factory_mode)
             
             self.end_head = MLP(model_dim,
                                      mlp_head_hidden_dim,
                                      1,
+                                     hidden_dropout_p = end_dropout,
                                      **factory_mode)
             self.fixation_modules.append(self.coord_head)
             self.fixation_modules.append(self.dur_head)
@@ -255,6 +265,7 @@ class MixerModel(nn.Module):
             self.end_head = MLP(model_dim,
                                      mlp_head_hidden_dim,
                                      1,
+                                     hidden_dropout_p = end_dropout,
                                      **factory_mode)
             self.fixation_modules.append(self.regressor_head)
             self.fixation_modules.append(self.argmax_regressor)
