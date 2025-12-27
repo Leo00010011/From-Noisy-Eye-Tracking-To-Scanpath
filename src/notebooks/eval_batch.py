@@ -99,17 +99,27 @@ def slim_input_output(input, output):
 # ## Review Metrics
 
 # %%
+# names = ['path model',
+#         'W/o Image -> Eye attn',
+#         'Mixer model with enh img features',
+#         'W Image-> Eye attn']
+# 
+# 
+# 
+# ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
+#              os.path.join('outputs','2025-12-18','12-35-29'),
+#              os.path.join('outputs','2025-12-18','16-20-34'),
+#              os.path.join('outputs','2025-12-23','15-57-34')]
+
+
+# %%
 names = ['path model',
-        'W/o Image -> Eye attn',
-        'Mixer model with enh img features',
-        'W Image-> Eye attn']
+        'latest path model']
 
 
 
 ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
-             os.path.join('outputs','2025-12-18','12-35-29'),
-             os.path.join('outputs','2025-12-18','16-20-34'),
-             os.path.join('outputs','2025-12-23','15-57-34')]
+             os.path.join('outputs','2025-12-27','19-45-53')]
 
 
 # %% [markdown]
