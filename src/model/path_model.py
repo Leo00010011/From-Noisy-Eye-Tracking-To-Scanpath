@@ -81,7 +81,7 @@ class PathModel(nn.Module):
             self.final_enc_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
         if head_type == 'mlp':
             self.regression_head = MLP(model_dim,
-                                           mlp_head_hidden_dim,
+                                           model_dim//2,
                                            output_dim,
                                            include_dropout = False,
                                            **factory_mode)
