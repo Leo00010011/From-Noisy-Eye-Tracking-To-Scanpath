@@ -27,7 +27,8 @@ class MLP(nn.Module):
             layers.append(nn.Linear(prev_dim, hidden_dim, **factory_kwargs))
             layers.append(nn.ReLU())
             prev_dim = hidden_dim
-        
+        if include_dropout:
+            layers.append(nn.Dropout(output_dropout_p))
         # Output layer
         layers.append(nn.Linear(prev_dim, out_dim, **factory_kwargs))
         
