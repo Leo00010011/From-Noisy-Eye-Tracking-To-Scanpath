@@ -7,8 +7,8 @@ model_dim: 512
 total_dim: 512
 n_heads: 8
 ff_dim: 2048
-src_dropout: 0
-tgt_dropout: 0.3
+src_dropout: 0.3
+tgt_dropout: 0.1
 max_pos_enc: 15
 max_pos_dec: 26
 norm_first: True
