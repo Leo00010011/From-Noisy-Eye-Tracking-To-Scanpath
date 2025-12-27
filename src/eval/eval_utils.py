@@ -128,7 +128,7 @@ def invert_transforms_clean_x(inputs, outputs, transforms):
         if hasattr(transform, 'mode') and transform.mode == 'coords':
             pred_clean_x = transform.inverse(pred_clean_x, None, 'clean_x')
             gt_clean_x = transform.inverse(gt_clean_x, None, 'clean_x')
-    
+
     inputs['clean_x'] = gt_clean_x
     outputs['denoise'] = pred_clean_x
     return inputs, outputs
@@ -142,7 +142,7 @@ def invert_transforms(inputs, outputs, dataloader, remove_outliers = False):
     else:
         transforms = dataloader.dataset.dataset.transforms
         
-    if 'coords' in outputs or 'reg' in outputs:
+    if 'coord' in outputs or 'reg' in outputs:
         inputs, outputs = invert_transforms_fixations(inputs, outputs, transforms, remove_outliers)
     if 'denoise' in outputs:
         inputs, outputs = invert_transforms_clean_x(inputs, outputs, transforms)
