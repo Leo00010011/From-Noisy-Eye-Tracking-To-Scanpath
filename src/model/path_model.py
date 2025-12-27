@@ -48,10 +48,8 @@ class PathModel(nn.Module):
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         if src_dropout > 0:
             self.src_dropout = nn.Dropout(src_dropout)
-            self.denoise_modules.append(self.src_dropout)
         if tgt_dropout > 0:
             self.tgt_dropout = nn.Dropout(tgt_dropout)
-            self.fixation_modules.append(self.tgt_dropout)
         # input processing
         if input_encoder == 'linear':
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
