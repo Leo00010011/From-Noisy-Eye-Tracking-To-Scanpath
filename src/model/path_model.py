@@ -44,6 +44,7 @@ class PathModel(nn.Module):
         self.input_encoder = input_encoder
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
+        self.fixation_dropout = nn.Dropout(0.3)
         # input processing
         if input_encoder == 'linear':
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
@@ -83,7 +84,7 @@ class PathModel(nn.Module):
             self.regression_head = MLP(model_dim,
                                            model_dim//2,
                                            output_dim,
-                                           hidden_dropout_p = 0.3,
+                                           hidden_dropout_p = 0.1,
                                            output_dropout_p = 0.1,
                                            include_dropout = True,
                                            **factory_mode)
@@ -148,6 +149,7 @@ class PathModel(nn.Module):
             enc_coords = self.pos_proj(enc_coords)
             enc_time = self.time_proj(enc_time)
             src = enc_coords + enc_time
+            src = self.fixation_dropout(src)
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
         # add the start to tgt
