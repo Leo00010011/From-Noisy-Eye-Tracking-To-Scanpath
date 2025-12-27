@@ -44,12 +44,14 @@ class PathModel(nn.Module):
         self.head_type = head_type
         self.mlp_head_hidden_dim = mlp_head_hidden_dim
         self.input_encoder = input_encoder
+        self.src_dropout = src_dropout
+        self.tgt_dropout = tgt_dropout
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         if src_dropout > 0:
-            self.src_dropout = nn.Dropout(src_dropout)
+            self.src_dropout_nn = nn.Dropout(src_dropout)
         if tgt_dropout > 0:
-            self.tgt_dropout = nn.Dropout(tgt_dropout)
+            self.tgt_dropout_nn = nn.Dropout(tgt_dropout)
         # input processing
         if input_encoder == 'linear':
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
@@ -159,7 +161,7 @@ class PathModel(nn.Module):
         # add the start to tgt
         
         if self.src_dropout > 0:
-            src = self.src_dropout(src)
+            src = self.src_dropout_nn(src)
         # sum up the positional encodings (max_pos, model_dim) -> (L, model_dim)
         enc_pe = self.enc_pe.pe.unsqueeze(0)
         src = src + enc_pe[:,:src.size()[1],:]
@@ -192,7 +194,7 @@ class PathModel(nn.Module):
         else:
             tgt = start
         if self.tgt_dropout > 0:
-            tgt = self.tgt_dropout(tgt)
+            tgt = self.tgt_dropout_nn(tgt)
         dec_pe = self.dec_pe.pe.unsqueeze(0)
         tgt = tgt + dec_pe[:,:tgt.size()[1],:]
         # decoding
