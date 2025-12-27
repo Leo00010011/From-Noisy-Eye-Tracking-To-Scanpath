@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import copy
 import numpy as np
 from src.model.blocks import TransformerEncoder, TransformerDecoder, MLP
-from src.model.pos_encoders import PositionalEncoding
+from src.model.pos_encoders import PositionalEncoding, GaussianFourierPosEncoder
 
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
@@ -22,6 +22,7 @@ class PathModel(nn.Module):
                        max_pos_enc = 8,
                        max_pos_dec = 4,
                        activation = F.relu,
+                       input_encoder = 'linear',
                        norm_first = False ,
                        head_type = None,
                        mlp_head_hidden_dim = None,
@@ -40,11 +41,19 @@ class PathModel(nn.Module):
         self.norm_first = norm_first
         self.head_type = head_type
         self.mlp_head_hidden_dim = mlp_head_hidden_dim
+        self.input_encoder = input_encoder
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         # input processing
-        self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
-        self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
+        if input_encoder == 'linear':
+            self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
+            self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
+        elif input_encoder == "shared_gaussian":
+            self.pos_proj = GaussianFourierPosEncoder(2, 15, mlp_head_hidden_dim, model_dim, 15,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
+            self.time_proj = GaussianFourierPosEncoder(1, 15, mlp_head_hidden_dim, model_dim, 15,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
+            self.dur_proj = GaussianFourierPosEncoder(1, 15, mlp_head_hidden_dim, model_dim, 15,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
+        else:
+            raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         self.enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
         self.dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
         # encoding
@@ -129,7 +138,16 @@ class PathModel(nn.Module):
 
     def encode(self, src, src_mask, **kwargs):
          # src, tgt shape (B,L,F)
-        src = self.enc_input_proj(src)
+        if self.input_encoder == 'linear':
+            src = self.enc_input_proj(src)
+        elif self.input_encoder == 'shared_gaussian':
+            enc_coords = src[:,:,:2]
+            enc_time = src[:,:,2]
+            enc_coords = self.pos_proj(enc_coords)
+            enc_time = self.time_proj(enc_time)
+            src = enc_coords + enc_time
+        else:
+            raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
         # add the start to tgt
         
         # sum up the positional encodings (max_pos, model_dim) -> (L, model_dim)
@@ -150,7 +168,16 @@ class PathModel(nn.Module):
         src_mask = self.src_mask
         start = self.start_token.expand(memory.size(0),-1,-1)
         if tgt is not None:
-            tgt = self.dec_input_proj(tgt)
+            if self.input_encoder == 'linear':
+                tgt = self.dec_input_proj(tgt)
+            elif self.input_encoder == 'shared_gaussian':
+                dec_coords = tgt[:,:,:2]
+                dec_dur = tgt[:,:,2]
+                dec_coords = self.pos_proj(dec_coords)
+                dec_dur = self.dur_proj(dec_dur)
+                tgt = dec_coords + dec_dur
+            else:
+                raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
             tgt = torch.cat([start, tgt], dim = 1)
         else:
             tgt = start

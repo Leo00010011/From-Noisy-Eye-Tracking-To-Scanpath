@@ -11,6 +11,7 @@ max_pos_enc: 15
 max_pos_dec: 26
 norm_first: True
 dropout_p: 0
+input_encoder: "shared_gaussian"
 compilate: False
 head_type: "linear"
 activation:  "gelu"

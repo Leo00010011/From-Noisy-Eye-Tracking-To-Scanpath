@@ -117,6 +117,7 @@ class DenoiseRegLoss(torch.nn.Module):
         loss = self.denoise_loss(output['denoise'], input['clean_x'][:,:,:2])
         info = {'denoise_loss': float(loss.item())}
         return loss, info
+    
 class CombinedLossFunction(torch.nn.Module):
     def __init__(self, denoise_loss, fixation_loss, denoise_weight = 0):
         super().__init__()

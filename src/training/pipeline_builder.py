@@ -335,6 +335,7 @@ class PipelineBuilder:
                               max_pos_dec = self.config.model.max_pos_dec,
                               norm_first = self.config.model.norm_first,
                               dropout_p= self.config.model.dropout_p,
+                              input_encoder = self.config.model.get('input_encoder', 'linear'),
                               head_type = self.config.model.get('head_type', 'linear'),
                               mlp_head_hidden_dim = self.config.model.get('mlp_head_hidden_dim', None),
                               activation = activation,
