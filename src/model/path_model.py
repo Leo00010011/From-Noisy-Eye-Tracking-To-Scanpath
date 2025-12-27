@@ -86,7 +86,7 @@ class PathModel(nn.Module):
                                            include_dropout = False,
                                            **factory_mode)
             self.end_head = MLP(model_dim,
-                                     mlp_head_hidden_dim,
+                                     model_dim//2,
                                      1,
                                      include_dropout = False,
                                      **factory_mode)
