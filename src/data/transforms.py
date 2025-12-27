@@ -4,13 +4,14 @@ from src.preprocess.noise import add_random_center_correlated_radial_noise, disc
 import numpy as np
 
 class ExtractRandomPeriod:
-    def __init__(self, start_index, period_duration, sampling_rate, downsample_period, random_offset):
+    def __init__(self, start_index, period_duration, sampling_rate, downsample_period, random_offset, key = 'x'):
         self.start_index = start_index
         self.period_duration = period_duration
         self.sampling_rate = sampling_rate
         self.downsample_period = downsample_period
         self.random_offset = random_offset
-        self.modify_y = False
+        self.modify_y = key == 'y'
+        self.key = key
 
     def __call__(self,input):
         x, y, _, _ = extract_random_period(
@@ -92,19 +93,18 @@ class Normalize:
         max_value={self.max_value}'''
         
 class LogNormalizeDuration:
-    def __init__(self, mean, std, scale, use_tan, key):
+    def __init__(self, mean, std, scale, use_tan, key = 'y'):
         self.mean = mean
         self.std = std
         self.scale = scale
         self.key = key
         self.use_tan = use_tan
-        self.modify_y = True
+        self.modify_y = key == 'y'
         
         
     def __call__(self,input):
         # shape (F,L)
         d = input[self.key][2]
-        mask = d == PAD_TOKEN_ID
         # atan normalization
         if self.use_tan:
             d = (np.log1p(d) - self.mean) / self.std
@@ -112,7 +112,6 @@ class LogNormalizeDuration:
         else:
             d = (np.log1p(d) - self.mean) / self.std
             d = d * self.scale
-        d[mask] = PAD_TOKEN_ID
         input[self.key][2] = d
         return input
     
@@ -140,7 +139,8 @@ class LogNormalizeDuration:
         scale={self.scale}'''
         
 class StandarizeTime:
-    def __init__(self) -> None:
+    def __init__(self, key = 'x') -> None:
+        self.key = key
         self.modify_y = False
         
     def __call__(self,input):
@@ -157,7 +157,8 @@ class StandarizeTime:
 
 # >>>>  NOISE
 class SaveCleanX:
-    def __init__(self):
+    def __init__(self, key = 'clean_x'):
+        self.key = key
         self.modify_y = False
     
     def __call__(self, input):
@@ -178,7 +179,8 @@ class AddRandomCenterCorrelatedRadialNoise:
                  center_corr,
                  center_delta_norm,
                  center_delta_r,
-                 return_center_path=False):
+                 return_center_path=False,
+                 key = 'x'):
         self.initial_center = initial_center
         self.ptoa = ptoa
         self.radial_corr = radial_corr
@@ -190,6 +192,7 @@ class AddRandomCenterCorrelatedRadialNoise:
         self.center_delta_r = center_delta_r
         self.modify_y = False
         self.return_center_path = return_center_path
+        self.key = key
 
     def __call__(self, input):
         x, center_path = add_random_center_correlated_radial_noise(
