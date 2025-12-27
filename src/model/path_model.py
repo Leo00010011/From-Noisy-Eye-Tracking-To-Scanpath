@@ -86,7 +86,7 @@ class PathModel(nn.Module):
                                            output_dim,
                                            hidden_dropout_p = 0.1,
                                            output_dropout_p = 0.1,
-                                           include_dropout = True,
+                                           include_dropout = input_encoder == 'shared_gaussian',
                                            **factory_mode)
             self.end_head = MLP(model_dim,
                                      model_dim//2 if input_encoder == 'shared_gaussian' else mlp_head_hidden_dim,
