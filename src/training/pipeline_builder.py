@@ -323,6 +323,7 @@ class PipelineBuilder:
                               n_feature_enhancer = self.config.model.n_feature_enhancer,
                               image_dim = image_dim,
                               src_dropout = self.config.model.get('src_dropout', 0),
+                              reg_head_dropout = self.config.model.get('reg_head_dropout', 0),
                               tgt_dropout = self.config.model.get('tgt_dropout', 0),
                               dur_head_dropout = self.config.model.get('dur_head_dropout', 0),
                               end_dropout = self.config.model.get('end_dropout', 0))
