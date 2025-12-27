@@ -106,8 +106,9 @@ def invert_transforms_fixations(inputs, outputs, transforms, remove_outliers = F
         
     # reverse the transforms
     for transform in reversed(transforms):
-        pred_reg = transform.inverse(pred_reg, inputs['tgt_mask'].unsqueeze(-1), 'y')
-        gt_reg = transform.inverse(gt_reg, inputs['tgt_mask'][:,1:].unsqueeze(-1), 'y')
+        if transform.key == 'y':
+            pred_reg = transform.inverse(pred_reg, inputs['tgt_mask'].unsqueeze(-1), 'y')
+            gt_reg = transform.inverse(gt_reg, inputs['tgt_mask'][:,1:].unsqueeze(-1), 'y')
             
     if remove_outliers:
         y_mask = inputs['tgt_mask'][:,1:].unsqueeze(-1)

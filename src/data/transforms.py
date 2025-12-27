@@ -225,13 +225,14 @@ class AddRandomCenterCorrelatedRadialNoise:
         center_delta_r={self.center_delta_r}'''
 
 class DiscretizationNoise:
-    def __init__(self, image_shape):
+    def __init__(self, image_shape, key = 'x'):
+        self.key = key
         self.image_shape = image_shape
         self.modify_y = False
 
     def __call__(self, input):
-        x = discretization_noise(self.image_shape, input['x'])
-        input['x'] = x
+        x = discretization_noise(self.image_shape, input[self.key])
+        input[self.key] = x
         return input
     
     def __repr__(self):
