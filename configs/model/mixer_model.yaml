@@ -8,7 +8,7 @@ model_dim: 512
 total_dim: 512
 n_heads: 8
 ff_dim: 2048
-max_pos_enc: 15
+max_pos_enc: 15 
 max_pos_dec: 26
 image_features_dropout: 0.1
 src_dropout: 0.3

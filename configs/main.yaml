@@ -14,7 +14,7 @@ training:
   save_best_only: True
   save_full_state: True
   log: True
-  Phases: [Combined]
+  Phases: [Fixation]
   Denoise:
     name: "Denoise"
     denoise_weight: 1 
@@ -24,7 +24,7 @@ training:
     name: "Fixation"
     denoise_weight: 0
     decisive_metric: ${training.decisive_metric}
-    epochs: 50
+    epochs: 100
   Combined:
     name: "Combined"
     denoise_weight: 0.3
