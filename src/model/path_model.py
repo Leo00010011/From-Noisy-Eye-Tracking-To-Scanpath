@@ -49,11 +49,9 @@ class PathModel(nn.Module):
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
             self.dec_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
         elif input_encoder == "shared_gaussian":
-            print("GaussianFourierPosEncoder parameters:",
-                  f"mlp_head_hidden_dim={mlp_head_hidden_dim}, model_dim={model_dim}, input_encoder={input_encoder}, patch_size={16}")
-            self.pos_proj = GaussianFourierPosEncoder(2, 15, mlp_head_hidden_dim, model_dim, 1,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
-            self.time_proj = GaussianFourierPosEncoder(1, 15, mlp_head_hidden_dim, model_dim, 1,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
-            self.dur_proj = GaussianFourierPosEncoder(1, 15, mlp_head_hidden_dim, model_dim, 1,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
+            self.pos_proj = GaussianFourierPosEncoder(2, 15, model_dim//2, model_dim, 1,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
+            self.time_proj = GaussianFourierPosEncoder(1, 15, model_dim//2, model_dim, 1,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
+            self.dur_proj = GaussianFourierPosEncoder(1, 15, model_dim//2, model_dim, 1,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
         else:
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         self.enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
