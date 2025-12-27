@@ -39,6 +39,7 @@ class MixerModel(nn.Module):
                        use_rope = False,
                        word_dropout_prob = 0.3,
                        phases = None,
+                       src_dropout = 0,
                        dtype = torch.float32,
                        device = 'cpu'):
         super().__init__()
@@ -66,6 +67,7 @@ class MixerModel(nn.Module):
         self.use_enh_img_features = use_enh_img_features
         self.word_dropout_prob = word_dropout_prob
         self.phase = None
+        self.src_dropout = src_dropout
         self.denoise_modules = []
         self.fixation_modules = []
         # SPECIAL TOKENS
@@ -74,6 +76,9 @@ class MixerModel(nn.Module):
         if word_dropout_prob > 0:
             self.word_dropout = LearnableCoordinateDropout(model_dim=model_dim, dropout_prob=word_dropout_prob, **factory_mode)
             self.fixation_modules.append(self.word_dropout)
+        if src_dropout > 0:
+            self.src_dropout = nn.Dropout(src_dropout)
+            self.denoise_modules.append(self.src_dropout)
         # INPUT PROCESSING
         self.time_dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
         self.time_enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)

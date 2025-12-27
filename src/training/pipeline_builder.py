@@ -338,6 +338,8 @@ class PipelineBuilder:
                               input_encoder = self.config.model.get('input_encoder', 'linear'),
                               head_type = self.config.model.get('head_type', 'linear'),
                               mlp_head_hidden_dim = self.config.model.get('mlp_head_hidden_dim', None),
+                              src_dropout = self.config.model.get('src_dropout', 0),
+                              tgt_dropout = self.config.model.get('tgt_dropout', 0),
                               activation = activation,
                               device = self.device)
         else:

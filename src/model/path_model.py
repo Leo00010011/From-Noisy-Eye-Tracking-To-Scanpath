@@ -26,6 +26,8 @@ class PathModel(nn.Module):
                        norm_first = False ,
                        head_type = None,
                        mlp_head_hidden_dim = None,
+                       src_dropout = 0,
+                       tgt_dropout = 0,
                        device = 'cpu',
                        dtype = torch.float32):
         super().__init__()
@@ -44,7 +46,12 @@ class PathModel(nn.Module):
         self.input_encoder = input_encoder
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
-        self.fixation_dropout = nn.Dropout(0.3)
+        if src_dropout > 0:
+            self.src_dropout = nn.Dropout(src_dropout)
+            self.denoise_modules.append(self.src_dropout)
+        if tgt_dropout > 0:
+            self.tgt_dropout = nn.Dropout(tgt_dropout)
+            self.fixation_modules.append(self.tgt_dropout)
         # input processing
         if input_encoder == 'linear':
             self.enc_input_proj = nn.Linear(input_dim, model_dim, **factory_mode)
@@ -149,11 +156,12 @@ class PathModel(nn.Module):
             enc_coords = self.pos_proj(enc_coords)
             enc_time = self.time_proj(enc_time)
             src = enc_coords + enc_time
-            src = self.fixation_dropout(src)
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
         # add the start to tgt
         
+        if self.src_dropout > 0:
+            src = self.src_dropout(src)
         # sum up the positional encodings (max_pos, model_dim) -> (L, model_dim)
         enc_pe = self.enc_pe.pe.unsqueeze(0)
         src = src + enc_pe[:,:src.size()[1],:]
@@ -185,7 +193,8 @@ class PathModel(nn.Module):
             tgt = torch.cat([start, tgt], dim = 1)
         else:
             tgt = start
-       
+        if self.tgt_dropout > 0:
+            tgt = self.tgt_dropout(tgt)
         dec_pe = self.dec_pe.pe.unsqueeze(0)
         tgt = tgt + dec_pe[:,:tgt.size()[1],:]
         # decoding
