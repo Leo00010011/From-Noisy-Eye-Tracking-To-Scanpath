@@ -321,7 +321,9 @@ class PipelineBuilder:
                               device = self.device,
                               image_encoder = image_encoder,
                               n_feature_enhancer = self.config.model.n_feature_enhancer,
-                              image_dim = image_dim)
+                              image_dim = image_dim,
+                              src_dropout = self.config.model.get('src_dropout', 0),
+                              tgt_dropout = self.config.model.get('tgt_dropout', 0))
         elif model_name == 'PathModel':
             model = PathModel(input_dim = self.config.model.input_dim,
                               output_dim = self.config.model.output_dim,

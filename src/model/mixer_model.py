@@ -40,6 +40,7 @@ class MixerModel(nn.Module):
                        word_dropout_prob = 0.3,
                        phases = None,
                        src_dropout = 0,
+                       tgt_dropout = 0,
                        dtype = torch.float32,
                        device = 'cpu'):
         super().__init__()
@@ -68,6 +69,7 @@ class MixerModel(nn.Module):
         self.word_dropout_prob = word_dropout_prob
         self.phase = None
         self.src_dropout = src_dropout
+        self.tgt_dropout = tgt_dropout
         self.denoise_modules = []
         self.fixation_modules = []
         # SPECIAL TOKENS
@@ -77,8 +79,11 @@ class MixerModel(nn.Module):
             self.word_dropout = LearnableCoordinateDropout(model_dim=model_dim, dropout_prob=word_dropout_prob, **factory_mode)
             self.fixation_modules.append(self.word_dropout)
         if src_dropout > 0:
-            self.src_dropout = nn.Dropout(src_dropout)
-            self.denoise_modules.append(self.src_dropout)
+            self.src_dropout_nn = nn.Dropout(src_dropout)
+            self.denoise_modules.append(self.src_dropout_nn)
+        if tgt_dropout > 0:
+            self.tgt_dropout_nn = nn.Dropout(tgt_dropout)
+            self.fixation_modules.append(self.tgt_dropout_nn)
         # INPUT PROCESSING
         self.time_dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
         self.time_enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
@@ -346,7 +351,9 @@ class MixerModel(nn.Module):
         
         enc_pe = self.time_enc_pe.pe.unsqueeze(0)
         src = src + enc_pe[:,:src.size()[1],:]
-        
+        if self.src_dropout > 0:
+            src = self.src_dropout_nn(src)
+
         # encoding path
         for mod in self.path_encoder:
             src_rope = None
@@ -428,8 +435,9 @@ class MixerModel(nn.Module):
             tgt = self.word_dropout(tgt)
         dec_pe = self.time_dec_pe.pe.unsqueeze(0)
         tgt = tgt + dec_pe[:,:tgt.size()[1],:]
-        
-        
+        if self.tgt_dropout > 0:
+            tgt = self.tgt_dropout_nn(tgt)
+
         if self.input_encoder == 'image_features_concat' and tgt_coords is not None:
             visual_tokens = image_src[:,1:,:]
             B = tgt_coords.size(0)

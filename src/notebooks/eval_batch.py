@@ -114,12 +114,14 @@ def slim_input_output(input, output):
 
 # %%
 names = ['path model',
-        'latest path model']
+        'src dropout path model',
+        'src andtgt dropout path model']
 
 
 
 ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
-             os.path.join('outputs','2025-12-27','19-45-53')]
+             os.path.join('outputs','2025-12-27','19-45-53'),
+             os.path.join('outputs','2025-12-27','20-31-18')]
 
 
 # %% [markdown]
