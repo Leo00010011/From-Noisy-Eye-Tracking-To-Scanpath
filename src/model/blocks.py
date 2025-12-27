@@ -22,16 +22,15 @@ class MLP(nn.Module):
         
         # Build hidden layers
         for hidden_dim in hidden_dims:
-            layers.append(nn.Linear(prev_dim, hidden_dim, **factory_kwargs))
-            layers.append(nn.ReLU())
             if include_dropout:
                 layers.append(nn.Dropout(hidden_dropout_p))
+            layers.append(nn.Linear(prev_dim, hidden_dim, **factory_kwargs))
+            layers.append(nn.ReLU())
             prev_dim = hidden_dim
         
         # Output layer
         layers.append(nn.Linear(prev_dim, out_dim, **factory_kwargs))
-        if include_dropout:
-            layers.append(nn.Dropout(output_dropout_p))
+        
         self.head = nn.Sequential(*layers)
     
     def forward(self, x, **kwargs):

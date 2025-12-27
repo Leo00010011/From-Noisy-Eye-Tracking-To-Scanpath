@@ -83,7 +83,8 @@ class PathModel(nn.Module):
             self.regression_head = MLP(model_dim,
                                            model_dim//2,
                                            output_dim,
-                                           include_dropout = False,
+                                           hidden_dropout_p = 0.1,
+                                           include_dropout = True,
                                            **factory_mode)
             self.end_head = MLP(model_dim,
                                      model_dim//2,
