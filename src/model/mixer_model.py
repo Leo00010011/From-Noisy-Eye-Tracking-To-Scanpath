@@ -419,8 +419,8 @@ class MixerModel(nn.Module):
                 if self.norm_first:
                     src = self.final_fenh_norm_src(src)
             if self.norm_first:
-                image_src = self.final_fenh_norm_image(image_src)
-                img_enh = self.final_fsrc_norm_image(img_enh)
+                image_src = self.final_fsrc_norm_image(image_src)
+                img_enh = self.final_fenh_norm_image(img_enh)
             if self.enh_features_dropout > 0:
                 img_enh = self.enh_features_dropout_nn(img_enh)
             if self.use_enh_img_features:
