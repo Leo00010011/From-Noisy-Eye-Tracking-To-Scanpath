@@ -419,16 +419,17 @@ class MixerModel(nn.Module):
                 if self.norm_first:
                     src = self.final_fenh_norm_src(src)
             if self.norm_first:
-                
                 if self.mixed_image_features:
                     image_src = self.final_fsrc_norm_image(image_src)
                     img_enh = self.final_fenh_norm_image(img_enh)
-                else:
-                    image_src = self.final_fenh_norm_image(image_src)
+            if self.use_enh_img_features and self.norm_first:
+                image_src = self.final_fenh_norm_image(image_src)
             if self.enh_features_dropout > 0:
                 img_enh = self.enh_features_dropout_nn(img_enh)
             if self.use_enh_img_features:
                 image_src = img_enh
+            if self.norm_first and not self.mixed_image_features and not self.use_enh_img_features:
+                image_src = self.final_fenh_norm_image(image_src)
             if self.mixed_image_features:
                 image_src = self.mix_enh_image_features(torch.cat([image_src, img_enh], dim = -1))
                 
