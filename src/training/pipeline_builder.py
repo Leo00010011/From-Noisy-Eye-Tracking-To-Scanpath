@@ -322,6 +322,7 @@ class PipelineBuilder:
                               image_encoder = image_encoder,
                               n_feature_enhancer = self.config.model.n_feature_enhancer,
                               image_dim = image_dim,
+                              mixed_image_features = self.config.model.get('mixed_image_features', False),
                               src_dropout = self.config.model.get('src_dropout', 0),
                               reg_head_dropout = self.config.model.get('reg_head_dropout', 0),
                               tgt_dropout = self.config.model.get('tgt_dropout', 0),
