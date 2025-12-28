@@ -60,3 +60,5 @@ transforms:
     std: 0.5076
     scale: 0.3333
     use_tan: True
+  QuantileNormalizeDuration:
+    pkl_path: "quantile_transformer.pkl"

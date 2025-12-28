@@ -6,7 +6,7 @@ import numpy as np
 from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.data.parsers import CocoFreeView
 from src.data.transforms import (ExtractRandomPeriod, Normalize, StandarizeTime, LogNormalizeDuration,
-                                 AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise, SaveCleanX)
+                                 AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise, SaveCleanX, QuantileNormalizeDuration)
 from src.model.path_model import PathModel
 from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
@@ -64,7 +64,8 @@ def build_normalize_time(config, key = None):
 def build_log_normalize_duration(config):
     return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale, use_tan=config.get('use_tan', False), key = 'y')
 
-
+def build_quantile_normalize_duration(config):
+    return QuantileNormalizeDuration(key = 'y', pkl_path = config.get('pkl_path', 'quantile_transformer.pkl'))
 
 class PipelineBuilder:
     def __init__(self, config):
@@ -110,6 +111,8 @@ class PipelineBuilder:
                 elif transform_str == 'SaveCleanX':
                     transforms.append(SaveCleanX())
                     has_save_clean_x = True
+                elif transform_str == 'QuantileNormalizeDuration':
+                    transforms.append(build_quantile_normalize_duration(transform_config))
                 else:
                     raise ValueError(f"Transform {transform_str} not supported.")
         else:

@@ -1,4 +1,5 @@
 import torch
+import joblib
 from src.data.datasets import extract_random_period, PAD_TOKEN_ID
 from src.preprocess.noise import add_random_center_correlated_radial_noise, discretization_noise
 import numpy as np
@@ -137,6 +138,46 @@ class LogNormalizeDuration:
         mean={self.mean}, 
         std={self.std}, 
         scale={self.scale}'''
+        
+class QuantileNormalizeDuration:
+    def __init__(self, key = 'y', pkl_path = 'quantile_transformer.pkl'):
+        self.key = key
+        self.modify_y = key == 'y'
+        self.quantile_transformer = joblib.load(pkl_path)
+        
+    def __call__(self,input):
+        x = input[self.key][2]
+        x = self.quantile_transformer.transform(x)
+        input[self.key][2] = x
+        return input
+    
+    def inverse(self, y, tgt_mask, key):
+        if key != self.key:
+            return y
+            
+        # y is in range (0, 1)
+        d_pred = y[:, :, 2]
+        d_norm_clamped = torch.clamp(d_pred, 0.0, 1.0)
+        # Reshape for sklearn: (Batch * Len, 1)
+        b, l = d_pred.shape
+        d_flat = d_norm_clamped.detach().cpu().numpy().reshape(-1, 1)
+        
+        # Inverse Transform: Maps (0,1) -> Raw Durations
+        # No exp() needed, it recovers the raw scale directly!
+        d_raw = self.quantile_transformer.inverse_transform(d_flat)
+        
+        # Reshape back and fill
+        d_raw = torch.from_numpy(d_raw).view(b, l).to(d_pred.device)
+        
+        y[:, :, 2] = d_raw
+        y.masked_fill(~tgt_mask, PAD_TOKEN_ID)
+        return y
+    
+    def __repr__(self):
+        return f'QuantileNormalizeDuration'
+    def __str__(self):
+        return f'''+ QuantileNormalizeDuration'''
+    
         
 class StandarizeTime:
     def __init__(self, key = 'x') -> None:
