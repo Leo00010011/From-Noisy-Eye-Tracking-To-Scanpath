@@ -319,6 +319,7 @@ class PipelineBuilder:
                               phases = self.config.training.Phases if hasattr(self.config.training, 'Phases') else [],
                               activation = activation,
                               device = self.device,
+                              enh_features_dropout = self.config.model.get('enh_features_dropout', 0),
                               image_encoder = image_encoder,
                               n_feature_enhancer = self.config.model.n_feature_enhancer,
                               image_dim = image_dim,
@@ -328,6 +329,7 @@ class PipelineBuilder:
                               tgt_dropout = self.config.model.get('tgt_dropout', 0),
                               dur_head_dropout = self.config.model.get('dur_head_dropout', 0),
                               end_dropout = self.config.model.get('end_dropout', 0))
+            
         elif model_name == 'PathModel':
             model = PathModel(input_dim = self.config.model.input_dim,
                               output_dim = self.config.model.output_dim,
