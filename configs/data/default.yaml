@@ -19,11 +19,11 @@ transforms:
 #  transform_list: ['ExtractRandomPeriod', 'StandarizeTime', 'SaveCleanX' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
 #                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration']
 # Log Normalization of durations
-#  transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
-#                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration']
-# Quantile Normalization of durations
   transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
-                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'QuantileNormalizeDuration']                    
+                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration']
+# Quantile Normalization of durations
+#  transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
+#                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'QuantileNormalizeDuration']                    
   ExtractRandomPeriod:
     start_index: 2
     period_duration: 2600

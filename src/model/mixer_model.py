@@ -81,6 +81,7 @@ class MixerModel(nn.Module):
         self.end_dropout = end_dropout
         self.reg_head_dropout = reg_head_dropout
         self.mixed_image_features = mixed_image_features
+        self.mixer_dropout = mixer_dropout
         self.denoise_modules = []
         self.fixation_modules = []
         # SPECIAL TOKENS

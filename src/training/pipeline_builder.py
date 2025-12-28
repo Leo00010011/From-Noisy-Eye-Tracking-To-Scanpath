@@ -331,6 +331,7 @@ class PipelineBuilder:
                               reg_head_dropout = self.config.model.get('reg_head_dropout', 0),
                               tgt_dropout = self.config.model.get('tgt_dropout', 0),
                               dur_head_dropout = self.config.model.get('dur_head_dropout', 0),
+                              mixer_dropout = self.config.model.get('mixer_dropout', 0),
                               end_dropout = self.config.model.get('end_dropout', 0))
             
         elif model_name == 'PathModel':
