@@ -40,6 +40,7 @@ class MixerModel(nn.Module):
                        word_dropout_prob = 0.3,
                        dur_head_dropout = 0,
                        reg_head_dropout = 0,
+                       mixed_image_features = False,
                        end_dropout = 0,
                        phases = None,
                        src_dropout = 0,
@@ -76,6 +77,7 @@ class MixerModel(nn.Module):
         self.dur_head_dropout = dur_head_dropout
         self.end_dropout = end_dropout
         self.reg_head_dropout = reg_head_dropout
+        self.mixed_image_features = mixed_image_features
         self.denoise_modules = []
         self.fixation_modules = []
         # SPECIAL TOKENS

@@ -15,7 +15,7 @@ dur_head_dropout: 0.1
 end_dropout: 0.1
 src_dropout: 0.3
 tgt_dropout: 0
-reg_head_dropout: 0.1
+reg_head_dropout: 0
 use_enh_img_features: False
 norm_first: True
 dropout_p: 0
