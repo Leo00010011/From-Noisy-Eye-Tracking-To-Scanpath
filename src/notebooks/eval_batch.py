@@ -116,14 +116,16 @@ def slim_input_output(input, output):
 names = ['path model',
         'src dropout path model',
         'drop multi head',
-        'only decoder']
+        'only decoder',
+        'no word dropout'	]
 
 
 
 ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
              os.path.join('outputs','2025-12-27','19-45-53'),
              os.path.join('outputs','2025-12-28','11-30-12'),
-             os.path.join('outputs','2025-12-28','19-19-36')]
+             os.path.join('outputs','2025-12-28','19-19-36'),
+             os.path.join('outputs','2025-12-28','20-47-22')]
 
 
 # %% [markdown]
