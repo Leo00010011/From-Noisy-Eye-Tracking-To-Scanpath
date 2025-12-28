@@ -325,9 +325,8 @@ class DoubleInputDecoder(nn.Module):
         return x
     
 class FeatureEnhancer(nn.Module):
-    def __init__(self,model_dim = 1024, total_dim = 1024, n_heads = 8, ff_dim = 2048,dropout_p = .1,activation = F.relu,eps = 1e-5,norm_first = False,only_ff = False, device = 'cpu', dtype = torch.float32):
+    def __init__(self,model_dim = 1024, total_dim = 1024, n_heads = 8, ff_dim = 2048,dropout_p = .1,activation = F.relu,eps = 1e-5,norm_first = False, device = 'cpu', dtype = torch.float32):
         super().__init__()
-        self.only_ff = only_ff
         self.model_dim = model_dim
         self.total_dim = total_dim
         self.n_heads = n_heads
@@ -397,32 +396,21 @@ class FeatureEnhancer(nn.Module):
         x2 = src2
     
         if self.norm_first:
-            if self.only_ff:
-                x1 = self.first_attn_norm(x1)
-                x2 = self.second_attn_norm(x2)
-                x1 = x1 + self.__self_attention(x1,self.first_attn_dropout, self.first_self_attn, attn_mask=src1_mask, src_rope=src1_rope)
-                x2 = x2 + self.__self_attention(x2,self.second_attn_dropout, self.second_self_attn, attn_mask=src2_mask, src_rope=src2_rope)
-                
-                x1 = self.f2s_cross_attn_norm1(x1)
-                x2 = self.f2s_cross_attn_norm2(x2)
-                x1 = x1 + self.__cross_attention(x1, x2, self.f2s_cross_attn_dropout, self.f2s_cross_attn, attn_mask=src2_mask, src_rope=src1_rope, mem_rope=src2_rope)
-                
-                x1 = self.s2f_cross_attn_norm1(x1)
-                x2 = self.s2f_cross_attn_norm2(x2)
-                x2 = x2 + self.__cross_attention(x2, x1, self.s2f_cross_attn_dropout, self.s2f_cross_attn, attn_mask=src1_mask, src_rope=src2_rope, mem_rope=src1_rope)
-                
-                x1 = x1 + self.first_ff(self.first_ff_norm(x1))
-                x2 = x2 + self.second_ff(self.second_ff_norm(x2))
-            else:
-                x1 = self.first_attn_norm(x1)
-                x2 = self.second_attn_norm(x2)
-                x1 = x1 + self.__self_attention(x1,self.first_attn_dropout, self.first_self_attn, attn_mask=src1_mask, src_rope=src1_rope)                
-                x1 = self.f2s_cross_attn_norm1(x1)
-                x1 = x1 + self.__cross_attention(x1, x2, self.f2s_cross_attn_dropout, self.f2s_cross_attn, attn_mask=src2_mask, src_rope=src1_rope, mem_rope=src2_rope)
-                
-                x1 = self.s2f_cross_attn_norm1(x1)                
-                x1 = x1 + self.first_ff(self.first_ff_norm(x1))
-                x2 = x2 + self.second_ff(self.second_ff_norm(x2))
+            x1 = self.first_attn_norm(x1)
+            x2 = self.second_attn_norm(x2)
+            x1 = x1 + self.__self_attention(x1,self.first_attn_dropout, self.first_self_attn, attn_mask=src1_mask, src_rope=src1_rope)
+            x2 = x2 + self.__self_attention(x2,self.second_attn_dropout, self.second_self_attn, attn_mask=src2_mask, src_rope=src2_rope)
+            
+            x1 = self.f2s_cross_attn_norm1(x1)
+            x2 = self.f2s_cross_attn_norm2(x2)
+            x1 = x1 + self.__cross_attention(x1, x2, self.f2s_cross_attn_dropout, self.f2s_cross_attn, attn_mask=src2_mask, src_rope=src1_rope, mem_rope=src2_rope)
+            
+            x1 = self.s2f_cross_attn_norm1(x1)
+            x2 = self.s2f_cross_attn_norm2(x2)
+            x2 = x2 + self.__cross_attention(x2, x1, self.s2f_cross_attn_dropout, self.s2f_cross_attn, attn_mask=src1_mask, src_rope=src2_rope, mem_rope=src1_rope)
+            
+            x1 = x1 + self.first_ff(self.first_ff_norm(x1))
+            x2 = x2 + self.second_ff(self.second_ff_norm(x2))
         else:
             x1 = self.first_attn_norm(x1 + self.__self_attention(x1,self.first_attn_dropout, self.first_self_attn, attn_mask=src1_mask, src_rope=src1_rope))
             x2 = self.first_attn_norm(x2 + self.__self_attention(x2,self.second_attn_dropout, self.second_self_attn, attn_mask=src2_mask, src_rope=src2_rope))
