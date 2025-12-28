@@ -218,10 +218,12 @@ class MixerModel(nn.Module):
             self.final_enc_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
             self.denoise_modules.append(self.final_enc_norm)
             self.final_fenh_norm_src = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
-            self.denoise_modules.append(self.final_fenh_norm_src)
-            self.final_fsrc_norm_image = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
-            self.denoise_modules.append(self.final_fsrc_norm_image)
-            if self.use_enh_img_features or self.mixed_image_features:
+            if self.use_enh_img_features:
+                self.final_fenh_norm_image = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
+                self.denoise_modules.append(self.final_fenh_norm_image)
+            if self.mixed_image_features:
+                self.final_fsrc_norm_image = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
+                self.denoise_modules.append(self.final_fsrc_norm_image)
                 self.final_fenh_norm_image = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
                 self.denoise_modules.append(self.final_fenh_norm_image)
         
