@@ -438,6 +438,7 @@ class MixerModel(nn.Module):
                     src, img_enh = mod(src, img_enh, src1_mask = src_mask, src2_mask = None, src1_rope = src_rope, src2_rope = image_rope)
                 if self.norm_first:
                     src = self.final_fenh_norm_src(src)
+                    
             if self.mixed_image_features:
                 if self.norm_first:
                     image_src = self.final_fsrc_norm_image(image_src)
