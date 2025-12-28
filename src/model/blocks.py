@@ -345,15 +345,14 @@ class FeatureEnhancer(nn.Module):
                                             **factory_kwargs)
         self.first_attn_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
         self.first_attn_dropout = nn.Dropout(dropout_p)
-        if not self.only_ff:
-            self.second_self_attn = MultiHeadedAttention(model_dim,
-                                                total_dim,
-                                                n_heads,
-                                                is_self_attention=True,
-                                                is_causal= False,
-                                                **factory_kwargs)
-            self.second_attn_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
-            self.second_attn_dropout = nn.Dropout(dropout_p)
+        self.second_self_attn = MultiHeadedAttention(model_dim,
+                                            total_dim,
+                                            n_heads,
+                                            is_self_attention=True,
+                                            is_causal= False,
+                                            **factory_kwargs)
+        self.second_attn_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
+        self.second_attn_dropout = nn.Dropout(dropout_p)
         # ca1
         self.f2s_cross_attn = MultiHeadedAttention(model_dim,
                                             total_dim,
@@ -365,16 +364,15 @@ class FeatureEnhancer(nn.Module):
         self.f2s_cross_attn_norm2 = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
         self.f2s_cross_attn_dropout = nn.Dropout(dropout_p)
         # ca2
-        if not self.only_ff:
-            self.s2f_cross_attn = MultiHeadedAttention(model_dim,
-                                                total_dim,
-                                                n_heads,
-                                                is_self_attention=False,
-                                                is_causal= False,
-                                                **factory_kwargs)
-            self.s2f_cross_attn_norm1 = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
-            self.s2f_cross_attn_norm2 = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
-            self.s2f_cross_attn_dropout = nn.Dropout(dropout_p)
+        self.s2f_cross_attn = MultiHeadedAttention(model_dim,
+                                            total_dim,
+                                            n_heads,
+                                            is_self_attention=False,
+                                            is_causal= False,
+                                            **factory_kwargs)
+        self.s2f_cross_attn_norm1 = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
+        self.s2f_cross_attn_norm2 = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
+        self.s2f_cross_attn_dropout = nn.Dropout(dropout_p)
         # first ff
         self.first_ff = MLP(model_dim, ff_dim, hidden_dropout_p = dropout_p, 
                             output_dropout_p = dropout_p, out_dim = model_dim, **factory_kwargs)
