@@ -146,8 +146,9 @@ class QuantileNormalizeDuration:
         self.quantile_transformer = joblib.load(pkl_path)
         
     def __call__(self,input):
+        # shape (F,L)
         x = input[self.key][2]
-        x = x.reshape(1, -1)
+        x = x.reshape(-1, 1)
         x = self.quantile_transformer.transform(x)
         x = x.reshape(-1)
         input[self.key][2] = x
