@@ -458,7 +458,7 @@ class MixerModel(nn.Module):
                     for mod in self.decoder:
                         src = mod(src, image_src, src_mask, None)
                 if self.norm_first:
-                    src = self.final_dec_norm(src)
+                    src = self.final_fenh_norm_src(src)
                 
         self.src = src
         self.image_src = image_src
