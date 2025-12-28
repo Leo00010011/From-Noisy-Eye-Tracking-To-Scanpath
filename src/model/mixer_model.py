@@ -69,7 +69,7 @@ class MixerModel(nn.Module):
         self.input_encoder = input_encoder
         self.pos_enc_sigma = pos_enc_sigma
         self.use_rope = use_rope
-        self.use_enh_img_features = use_enh_img_features
+        self.use_enh_img_features = use_enh_img_features and not mixed_image_features
         self.word_dropout_prob = word_dropout_prob
         self.phase = None
         self.src_dropout = src_dropout
@@ -81,6 +81,9 @@ class MixerModel(nn.Module):
         self.denoise_modules = []
         self.fixation_modules = []
         # SPECIAL TOKENS
+        if mixed_image_features:
+            self.mix_image_features = nn.Linear(model_dim*2, model_dim, **factory_mode)
+            self.denoise_modules.append(self.mix_image_features)
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         self.fixation_modules.append(self.start_token)
         if word_dropout_prob > 0:
@@ -408,6 +411,8 @@ class MixerModel(nn.Module):
                     src = self.final_fenh_norm_src(src)
             if self.use_enh_img_features:
                 image_src = img_enh
+            if self.mixed_image_features:
+                image_src = self.mix_image_features(torch.cat([image_src, img_enh], dim = -1))
             if self.norm_first:
                 image_src = self.final_fenh_norm_image(image_src)
                 
