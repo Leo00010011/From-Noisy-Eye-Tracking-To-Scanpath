@@ -115,19 +115,15 @@ def slim_input_output(input, output):
 # %%
 names = ['path model',
         'src dropout path model',
-        'multi head mixer model',
         'drop multi head',
-        'enh image mixer model',
-        'linear enh mixer model']
+        'quantile normalize duration']
 
 
 
 ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
              os.path.join('outputs','2025-12-27','19-45-53'),
-             os.path.join('outputs','2025-12-27','23-44-04'),
              os.path.join('outputs','2025-12-28','11-30-12'),
-             os.path.join('outputs','2025-12-28','12-12-12'),
-             os.path.join('outputs','2025-12-28','12-49-51')]
+             os.path.join('outputs','2025-12-28','13-59-33')]
 
 
 # %% [markdown]
