@@ -218,15 +218,12 @@ class MixerModel(nn.Module):
             self.final_enc_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
             self.denoise_modules.append(self.final_enc_norm)
             self.final_fenh_norm_src = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
-            if self.use_enh_img_features:
-                self.final_fenh_norm_image = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
-                self.denoise_modules.append(self.final_fenh_norm_image)
+            
+            self.final_fenh_norm_image = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
+            self.denoise_modules.append(self.final_fenh_norm_image)
             if self.mixed_image_features:
                 self.final_fsrc_norm_image = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
                 self.denoise_modules.append(self.final_fsrc_norm_image)
-                self.final_fenh_norm_image = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
-                self.denoise_modules.append(self.final_fenh_norm_image)
-        
         # HEADS
         if head_type == 'mlp':
             self.regression_head = MLP(model_dim,
@@ -422,9 +419,12 @@ class MixerModel(nn.Module):
                 if self.norm_first:
                     src = self.final_fenh_norm_src(src)
             if self.norm_first:
-                image_src = self.final_fsrc_norm_image(image_src)
-                if self.use_enh_img_features or self.mixed_image_features:
+                
+                if self.mixed_image_features:
+                    image_src = self.final_fsrc_norm_image(image_src)
                     img_enh = self.final_fenh_norm_image(img_enh)
+                else:
+                    image_src = self.final_fenh_norm_image(image_src)
             if self.enh_features_dropout > 0:
                 img_enh = self.enh_features_dropout_nn(img_enh)
             if self.use_enh_img_features:
