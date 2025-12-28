@@ -204,7 +204,7 @@ class MixerModel(nn.Module):
                 self.denoise_modules.append(mod)
                 
         if self.n_eye_decoder > 0:
-            decoder_layer = TransformerDecoder(model_dim = model_dim,
+            eye_decoder_layer = TransformerDecoder(model_dim = model_dim,
                                             total_dim = total_dim,
                                             n_heads = n_heads,
                                             ff_dim = ff_dim,
@@ -212,8 +212,8 @@ class MixerModel(nn.Module):
                                             activation= activation,
                                             norm_first= norm_first,
                                             **factory_mode)
-            self.decoder = _get_clones(decoder_layer,n_eye_decoder)
-            for mod in self.decoder:
+            self.eye_decoder = _get_clones(eye_decoder_layer,n_eye_decoder)
+            for mod in self.eye_decoder:
                 self.denoise_modules.append(mod)
                 
         
@@ -438,24 +438,24 @@ class MixerModel(nn.Module):
                     src, img_enh = mod(src, img_enh, src1_mask = src_mask, src2_mask = None, src1_rope = src_rope, src2_rope = image_rope)
                 if self.norm_first:
                     src = self.final_fenh_norm_src(src)
-                if self.mixed_image_features:
-                    if self.norm_first:
-                        image_src = self.final_fsrc_norm_image(image_src)
-                        img_enh = self.final_fenh_norm_image(img_enh)
-                    if self.enh_features_dropout > 0:
-                        img_enh = self.enh_features_dropout_nn(img_enh)
-                    image_src = self.mix_enh_image_features(image_src, img_enh)
-                elif self.use_enh_img_features:
+            if self.mixed_image_features:
+                if self.norm_first:
+                    image_src = self.final_fsrc_norm_image(image_src)
                     img_enh = self.final_fenh_norm_image(img_enh)
-                    if self.enh_features_dropout > 0:
-                        img_enh = self.enh_features_dropout_nn(img_enh)
-                    image_src = img_enh
-                else:
-                    image_src = self.final_fenh_norm_image(image_src)
+                if self.enh_features_dropout > 0:
+                    img_enh = self.enh_features_dropout_nn(img_enh)
+                image_src = self.mix_enh_image_features(image_src, img_enh)
+            elif self.use_enh_img_features:
+                img_enh = self.final_fenh_norm_image(img_enh)
+                if self.enh_features_dropout > 0:
+                    img_enh = self.enh_features_dropout_nn(img_enh)
+                image_src = img_enh
+            else:
+                image_src = self.final_fenh_norm_image(image_src)
             
             if self.n_eye_decoder > 0:
-                for mod in self.decoder:
-                    for mod in self.decoder:
+                for mod in self.eye_decoder:
+                    for mod in self.eye_decoder:
                         src = mod(src, image_src, src_mask, None)
                 if self.norm_first:
                     src = self.final_fenh_norm_src(src)
