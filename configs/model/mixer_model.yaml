@@ -10,7 +10,7 @@ n_heads: 8
 ff_dim: 2048
 max_pos_enc: 15 
 max_pos_dec: 26
-image_features_dropout: 0.1
+image_features_dropout: 0
 dur_head_dropout: 0.1
 end_dropout: 0.1
 src_dropout: 0.3
@@ -18,7 +18,7 @@ tgt_dropout: 0
 reg_head_dropout: 0.1
 enh_features_dropout: 0
 use_enh_img_features: False
-mixed_image_features: True
+mixed_image_features: False
 norm_first: True
 dropout_p: 0
 num_freq_bands: 15
