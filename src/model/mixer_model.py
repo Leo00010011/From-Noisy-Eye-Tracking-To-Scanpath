@@ -45,6 +45,7 @@ class MixerModel(nn.Module):
                        phases = None,
                        src_dropout = 0,
                        tgt_dropout = 0,
+                       enh_features_dropout = 0,
                        dtype = torch.float32,
                        device = 'cpu'):
         super().__init__()
@@ -70,6 +71,7 @@ class MixerModel(nn.Module):
         self.pos_enc_sigma = pos_enc_sigma
         self.use_rope = use_rope
         self.use_enh_img_features = use_enh_img_features and not mixed_image_features
+        self.enh_features_dropout = enh_features_dropout
         self.word_dropout_prob = word_dropout_prob
         self.phase = None
         self.src_dropout = src_dropout
@@ -95,6 +97,9 @@ class MixerModel(nn.Module):
         if tgt_dropout > 0:
             self.tgt_dropout_nn = nn.Dropout(tgt_dropout)
             self.fixation_modules.append(self.tgt_dropout_nn)
+        if enh_features_dropout > 0:
+            self.enh_features_dropout_nn = nn.Dropout(enh_features_dropout)
+            self.denoise_modules.append(self.enh_features_dropout_nn)
         # INPUT PROCESSING
         self.time_dec_pe = PositionalEncoding(max_pos_dec, model_dim,**factory_mode)
         self.time_enc_pe = PositionalEncoding(max_pos_enc, model_dim,**factory_mode)
@@ -409,6 +414,8 @@ class MixerModel(nn.Module):
                     src, img_enh = mod(src, img_enh, src1_mask = src_mask, src2_mask = None, src1_rope = src_rope, src2_rope = image_rope)
                 if self.norm_first:
                     src = self.final_fenh_norm_src(src)
+            if self.enh_features_dropout > 0:
+                img_enh = self.enh_features_dropout_nn(img_enh)
             if self.use_enh_img_features:
                 image_src = img_enh
             if self.mixed_image_features:
