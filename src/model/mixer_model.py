@@ -47,6 +47,7 @@ class MixerModel(nn.Module):
                        src_dropout = 0,
                        tgt_dropout = 0,
                        enh_features_dropout = 0,
+                       n_adapter = 0,
                        n_eye_decoder = 0,
                        dtype = torch.float32,
                        device = 'cpu'):
@@ -83,6 +84,7 @@ class MixerModel(nn.Module):
         self.reg_head_dropout = reg_head_dropout
         self.mixed_image_features = mixed_image_features
         self.mixer_dropout = mixer_dropout
+        self.n_adapter = n_adapter
         self.denoise_modules = []
         self.fixation_modules = []
         self.n_eye_decoder = n_eye_decoder
@@ -215,7 +217,19 @@ class MixerModel(nn.Module):
             self.eye_decoder = _get_clones(eye_decoder_layer,n_eye_decoder)
             for mod in self.eye_decoder:
                 self.denoise_modules.append(mod)
-                
+            
+            if self.n_adapter > 0:
+                adapter_layer = TransformerEncoder(model_dim = model_dim,
+                                           total_dim = total_dim,
+                                           n_heads = n_heads,
+                                           ff_dim = ff_dim,
+                                           dropout_p = dropout_p,
+                                           activation= activation,
+                                           norm_first= norm_first,
+                                           **factory_mode)
+                self.adapter = _get_clones(adapter_layer,n_adapter) 
+                if self.norm_first:
+                    self.adapter_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
         
                 
         
@@ -455,6 +469,11 @@ class MixerModel(nn.Module):
                 image_src = self.final_fenh_norm_image(image_src)
             
             if self.n_eye_decoder > 0:
+                if self.n_adapter > 0:
+                    for mod in self.adapter:
+                        image_src = mod(image_src, None)
+                    if self.norm_first:
+                        image_src = self.adapter_norm(image_src)
                 for mod in self.eye_decoder:
                     for mod in self.eye_decoder:
                         src = mod(src, image_src, src_mask, None)
