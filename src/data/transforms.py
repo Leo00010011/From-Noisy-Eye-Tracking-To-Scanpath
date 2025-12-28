@@ -147,7 +147,9 @@ class QuantileNormalizeDuration:
         
     def __call__(self,input):
         x = input[self.key][2]
+        x = x.reshape(1, -1)
         x = self.quantile_transformer.transform(x)
+        x = x.reshape(-1)
         input[self.key][2] = x
         return input
     
