@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import copy
 import numpy as np
-from src.model.blocks import TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer, ArgMaxRegressor, LearnableCoordinateDropout, ResidualRegressor
+from src.model.blocks import TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer, ArgMaxRegressor, LearnableCoordinateDropout, ResidualRegressor, GatedFusion
 from src.model.pos_encoders import PositionalEncoding, GaussianFourierPosEncoder, FourierPosEncoder
 from src.model.rope_positional_embeddings import RopePositionEmbedding
 
@@ -86,7 +86,7 @@ class MixerModel(nn.Module):
         self.fixation_modules = []
         # SPECIAL TOKENS
         if mixed_image_features:
-            self.mix_enh_image_features = MLP(model_dim*2, model_dim, model_dim,hidden_dropout_p = mixer_dropout, **factory_mode)
+            self.mix_enh_image_features = GatedFusion(model_dim, dropout_p = mixer_dropout, **factory_mode)
             self.denoise_modules.append(self.mix_enh_image_features)
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         self.fixation_modules.append(self.start_token)
@@ -424,7 +424,7 @@ class MixerModel(nn.Module):
                     img_enh = self.final_fenh_norm_image(img_enh)
                 if self.enh_features_dropout > 0:
                     img_enh = self.enh_features_dropout_nn(img_enh)
-                image_src = self.mix_enh_image_features(torch.cat([image_src, img_enh], dim = -1))
+                image_src = self.mix_enh_image_features(image_src, img_enh)
             elif self.use_enh_img_features:
                 img_enh = self.final_fenh_norm_image(img_enh)
                 if self.enh_features_dropout > 0:

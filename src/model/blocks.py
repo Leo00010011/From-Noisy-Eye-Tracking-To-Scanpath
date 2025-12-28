@@ -488,3 +488,40 @@ class ResidualRegressor(nn.Module):
         
     def forward(self, src_tokens, src, **kwargs):
         return self.regressor(src_tokens) + src[:,:,:2]
+    
+class GatedFusion(nn.Module):
+    def __init__(self, input_dim, dropout_p=0.0, device='cpu', dtype=torch.float32):
+        """
+        Gated Fusion Network.
+        
+        Args:
+            input_dim (int): The dimensionality of the input feature vectors.
+                             Both inputs must have this dimension.
+            dropout_p (float): Dropout probability.
+        """
+        super(GatedFusion, self).__init__()
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        self.fc_gate = nn.Linear(input_dim * 2, input_dim, **factory_kwargs)
+        
+        self.dropout = nn.Dropout(dropout_p)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x, y):
+        """
+        Forward pass for Gated Fusion.
+
+        Args:
+            x (torch.Tensor): Input tensor 1 of shape (batch_size, input_dim) 
+                              or (batch_size, seq_len, input_dim).
+            y (torch.Tensor): Input tensor 2 of shape (batch_size, input_dim)
+                              or (batch_size, seq_len, input_dim).
+
+        Returns:
+            torch.Tensor: Fused output of same shape as inputs.
+        """
+        combined = torch.cat((x, y), dim=-1)
+        gate = self.sigmoid(self.fc_gate(combined))
+        output = gate * x + (1 - gate) * y
+        output = self.dropout(output)
+        
+        return output
