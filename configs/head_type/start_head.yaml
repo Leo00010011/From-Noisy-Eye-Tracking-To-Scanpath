@@ -1,0 +1,4 @@
+# @package _global_
+model: 
+  head_type: "start_head"
+  mlp_head_hidden_dim: ["${double:${model.model_dim}}","${model.model_dim}"]

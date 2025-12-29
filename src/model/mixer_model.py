@@ -330,8 +330,6 @@ class MixerModel(nn.Module):
             self.fixation_modules.append(self.coord_head)
             self.fixation_modules.append(self.dur_head)
             self.fixation_modules.append(self.end_head)
-            
-        
         elif head_type == 'argmax_regressor':
             if image_encoder is None:
                 raise ValueError("Image encoder is required for argmax regressor")
@@ -588,7 +586,6 @@ class MixerModel(nn.Module):
             reg_out = self.regressor_head(output)
             coord_out = self.argmax_regressor(reg_out, image_src)
             dur_out = self.dur_head(output)
-            
             cls_out = self.end_head(output)
             return {'coord': coord_out, 'dur': dur_out, 'cls': cls_out}
         elif self.head_type == 'mlp' or self.head_type == 'linear':
