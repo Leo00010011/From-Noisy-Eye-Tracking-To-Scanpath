@@ -288,3 +288,20 @@ class DiscretizationNoise:
         return f'''+ DiscretizationNoise
         image_shape={self.image_shape}'''
         
+
+
+class AddGaussianNoiseToFixations:
+    def __init__(self, std):
+        self.key = 'in_tgt'
+        self.std = std
+        
+    def __call__(self,input):
+        # shape (F,L)
+        y_clone = input['y'].copy()
+        noise = np.random.normal(0, self.std, (2, y_clone.shape[1]))
+        y_clone[:2] += noise
+        input['in_tgt'] = y_clone
+        return input
+
+    def inverse(self, y, tgt_mask, key):
+        return y

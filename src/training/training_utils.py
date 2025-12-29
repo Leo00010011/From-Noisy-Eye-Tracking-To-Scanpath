@@ -37,7 +37,7 @@ class MetricsStorage:
             coord_error, dur_error = eval_reg(reg_out, y, y_mask)
             results_dict['coord_error'] = coord_error
             results_dict['dur_error'] = dur_error
-        # FIX ME: Sub pixel average denoise error???
+        
         if 'denoise' in output:
             denoise_out = output['denoise']
             clean_x = input['clean_x']
