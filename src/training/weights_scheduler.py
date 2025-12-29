@@ -11,11 +11,9 @@ class WeightsScheduler:
         self.epoch = 0
         self.x = torch.arange(15, device = device, dtype = dtype)
         self.b = torch.linspace(0.8,0.999,epochs, device = device, dtype = dtype)
+        self.loss_function.set_weights(self.compute_weights())
     def compute_weights(self):
         return (self.b[self.epoch]**self.x) + 1
-    
-    def start(self):
-        self.loss_function.set_weights(self.compute_weights())
     
     def update_epoch(self):
         if self.epoch < self.epochs:
