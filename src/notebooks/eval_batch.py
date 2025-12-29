@@ -125,7 +125,7 @@ ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
              os.path.join('outputs','2025-12-27','19-45-53'),
              os.path.join('outputs','2025-12-28','11-30-12'),
              os.path.join('outputs','2025-12-28','19-19-36'),
-             os.path.join('outputs','2025-12-29','19-45-45')]
+             os.path.join('outputs','2025-12-29','20-13-43')]
 
 
 # %% [markdown]
