@@ -336,5 +336,19 @@ def get_coords_from_heatmaps(heatmaps):
 
 
 class AddHeatmaps:
-    def __init__(self, sigma=5.0, key = 'x'):
-        pass
+    def __init__(self, sigma=5.0):
+        self.sigma = sigma
+        self.key = 'y'
+        self.modify_y = True
+        
+    def __call__(self, input):
+        y = input[self.key]
+        heatmaps = generate_gaussian_heatmaps(y, self.image_size, self.sigma)
+        input[self.key] = heatmaps
+        return input
+    
+    def __repr__(self):
+        return f'AddHeatmaps'
+    def __str__(self):
+        return f'''+ AddHeatmaps
+        sigma={self.sigma}'''
