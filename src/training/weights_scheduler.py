@@ -9,7 +9,7 @@ class WeightsScheduler:
         self.device = device
         self.dtype = dtype
         self.epoch = 0
-        self.x = torch.arange(15, device = device, dtype = dtype)
+        self.x = torch.arange(26, device = device, dtype = dtype)
         self.b = torch.linspace(0.8,0.999,epochs, device = device, dtype = dtype)
         self.loss_function.set_weights(self.compute_weights())
     def compute_weights(self):
