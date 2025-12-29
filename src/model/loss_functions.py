@@ -66,9 +66,13 @@ class SeparatedRegLossFunction(torch.nn.Module):
         self.cls_func = cls_func
         self.coord_func = coord_func
         self.dur_func = dur_func
+        self.weights = None
         
     def set_denoise_weight(self, denoise_weight: float):
         return
+    
+    def set_weights(self, weights: torch.Tensor):
+        self.weights = weights
     
     def summary(self):
         print(f"SeparatedRegLossFunction: cls_weight={self.cls_weight}, dur_weight={self.dur_weight}, cls_func={self.cls_func.__name__}, coord_func={self.coord_func.__name__}, dur_func={self.dur_func.__name__}")
@@ -95,7 +99,11 @@ class SeparatedRegLossFunction(torch.nn.Module):
         attn_mask = attn_mask[:,1:,:]
         dur_loss = self.dur_func(dur_out[:,:-1,:][attn_mask], y[:,:,2:][attn_mask])
         attn_mask = attn_mask.expand(-1,-1,2)
-        coord_loss = self.coord_func(coord_out[:,:-1,:][attn_mask], y[:,:,:2][attn_mask])
+        coord_weights = None
+        if self.weights is not None:
+            coord_weights = self.weights[:attn_mask.size(1)]
+            coord_weights = coord_weights.unsqueeze(-1).unsqueeze(0).expand(-1,-1,2)
+        coord_loss = self.coord_func(coord_out[:,:-1,:][attn_mask], y[:,:,:2][attn_mask], weight=coord_weights[attn_mask])
         info = {
             'cls_loss': float(cls_loss.item()),
             'coord_loss': float(coord_loss.item()),
