@@ -14,7 +14,10 @@ class WeightsScheduler:
         self.b = torch.linspace(0.8,0.999,epochs, device = device, dtype = dtype)
         self.loss_function.set_weights(self.compute_weights())
     def compute_weights(self):
-        return (self.alpha* (self.b[self.epoch]**self.x) + 1)/(1 + self.alpha)
+        if self.epoch < self.epochs:
+            return (self.alpha* (self.b[self.epoch]**self.x) + 1)/(1 + self.alpha)
+        else:
+            return None
     
     def update_epoch(self):
         self.epoch += 1
