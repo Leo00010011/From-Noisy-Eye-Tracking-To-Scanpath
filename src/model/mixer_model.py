@@ -303,6 +303,35 @@ class MixerModel(nn.Module):
             self.fixation_modules.append(self.coord_head)
             self.fixation_modules.append(self.dur_head)
             self.fixation_modules.append(self.end_head)
+            
+        elif head_type == 'start_head':
+            self.coord_head = MLP(model_dim,
+                                           mlp_head_hidden_dim,
+                                           2,
+                                           hidden_dropout_p = reg_head_dropout,
+                                           **factory_mode)
+            
+            self.start_head = MLP(model_dim,
+                                           mlp_head_hidden_dim,
+                                           2,
+                                           hidden_dropout_p = reg_head_dropout,
+                                           **factory_mode)
+            self.dur_head = MLP(model_dim,
+                                           mlp_head_hidden_dim,
+                                           1,
+                                           hidden_dropout_p = dur_head_dropout,
+                                           **factory_mode)
+            
+            self.end_head = MLP(model_dim,
+                                     mlp_head_hidden_dim,
+                                     1,
+                                     hidden_dropout_p = end_dropout,
+                                     **factory_mode)
+            self.fixation_modules.append(self.coord_head)
+            self.fixation_modules.append(self.dur_head)
+            self.fixation_modules.append(self.end_head)
+            
+        
         elif head_type == 'argmax_regressor':
             if image_encoder is None:
                 raise ValueError("Image encoder is required for argmax regressor")
@@ -566,6 +595,13 @@ class MixerModel(nn.Module):
             reg_out = self.regression_head(output)
             cls_out = self.end_head(output)
             return {'reg': reg_out, 'cls': cls_out}
+        elif self.head_type == 'start_head':
+            start_out = self.start_head(output[:,0:1,:])
+            tail_out = self.coord_head(output[:,1:,:])
+            coord_out = torch.cat([start_out, tail_out], dim = 1)
+            dur_out = self.dur_head(output)
+            cls_out = self.end_head(output)
+            return {'start': start_out, 'coord': coord_out, 'dur': dur_out, 'cls': cls_out}
         
     def decode_denoise(self, **kwargs):
         src = self.src
