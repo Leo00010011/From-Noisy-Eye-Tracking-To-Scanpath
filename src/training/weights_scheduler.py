@@ -17,8 +17,8 @@ class WeightsScheduler:
         return (self.alpha* (self.b[self.epoch]**self.x) + 1)/(1 + self.alpha)
     
     def update_epoch(self):
+        self.epoch += 1
         if self.epoch < self.epochs:
-            self.epoch += 1
             self.loss_function.set_weights(self.compute_weights())
         
         
