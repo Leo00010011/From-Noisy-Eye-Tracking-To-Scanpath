@@ -102,7 +102,7 @@ class SeparatedRegLossFunction(torch.nn.Module):
         coord_weights = None
         if self.weights is not None:
             coord_weights = self.weights[:attn_mask.size(1)]
-            coord_weights = coord_weights.unsqueeze(-1).unsqueeze(0).expand(-1,-1,2)
+            coord_weights = coord_weights.unsqueeze(-1).unsqueeze(0).expand(attn_mask.size())
             coord_weights = coord_weights[attn_mask]
         coord_loss = self.coord_func(coord_out[:,:-1,:][attn_mask], y[:,:,:2][attn_mask], weight=coord_weights)
         info = {
