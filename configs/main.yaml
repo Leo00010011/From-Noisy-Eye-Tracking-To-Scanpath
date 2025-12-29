@@ -14,6 +14,11 @@ training:
   save_best_only: True
   save_full_state: True
   log: True
+  weights_scheduler:
+    enabled: True
+    init_b: 0.8
+    end_b: 0.999
+    epochs: 50
   Phases: [Fixation]
   Denoise:
     name: "Denoise"
