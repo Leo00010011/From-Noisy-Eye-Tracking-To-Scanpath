@@ -258,9 +258,15 @@ class FreeViewInMemory(Dataset):
         input = {'x': x, 'y': y, 'fixation_mask': fixation_mask}
         for transform in self.transforms:
             input = transform(input)
+        output = {
+            'x': input['x'],
+            'y': input['y']
+        }
         if 'clean_x' in input:
-            return input['x'], input['y'], input['clean_x']
-        return input['x'], input['y']
+            output['clean_x'] = input['clean_x']
+        if 'in_tgt' in input:
+            output['in_tgt'] = input['in_tgt']
+        return output
     
 
 def build_attn_mask(input_lengths, allow_start = False, return_none = True):
@@ -277,15 +283,15 @@ def build_attn_mask(input_lengths, allow_start = False, return_none = True):
     return attn_mask
 
 def seq2seq_padded_collate_fn(batch):
-    fixation_len = torch.asarray([item[1].shape[1] for item in batch], dtype=int)
-    input_mask = build_attn_mask([item[0].shape[1] for item in batch])
+    fixation_len = torch.asarray([item['y'].shape[1] for item in batch], dtype=int)
+    input_mask = build_attn_mask([item['x'].shape[1] for item in batch])
     target_mask = build_attn_mask(fixation_len, allow_start = True, return_none = False)
 
-    input_sequences = [torch.from_numpy(item[0].T).float() for item in batch]
-    target_sequences = [torch.from_numpy(item[1].T).float() for item in batch]
+    input_sequences = [torch.from_numpy(item['x'].T).float() for item in batch]
+    target_sequences = [torch.from_numpy(item['y'].T).float() for item in batch]
     output = {}
-    if len(batch[0]) == 3:
-        clean_x_sequences = [torch.from_numpy(item[2].T).float() for item in batch]
+    if 'clean_x' in batch[0]:
+        clean_x_sequences = [torch.from_numpy(item['clean_x'].T).float() for item in batch]
         padded_clean_x = torch.nn.utils.rnn.pad_sequence(
             clean_x_sequences, 
             batch_first=True, 
@@ -293,6 +299,14 @@ def seq2seq_padded_collate_fn(batch):
         )
         output['clean_x'] = padded_clean_x
     
+    if 'in_tgt' in batch[0]:
+        in_tgt_sequences = [torch.from_numpy(item['in_tgt'].T).float() for item in batch]
+        padded_in_tgt = torch.nn.utils.rnn.pad_sequence(
+            in_tgt_sequences, 
+            batch_first=True, 
+            padding_value=PAD_TOKEN_ID
+        )   
+        output['in_tgt'] = padded_in_tgt
 
     
     padded_inputs = torch.nn.utils.rnn.pad_sequence(
@@ -315,8 +329,8 @@ def seq2seq_padded_collate_fn(batch):
 
 
 def seq2seq_jagged_collate_fn(batch):
-    input_sequences = [torch.from_numpy(item[0].T).float() for item in batch]
-    target_sequences = [torch.from_numpy(item[1].T).float() for item in batch]
+    input_sequences = [torch.from_numpy(item['x'].T).float() for item in batch]
+    target_sequences = [torch.from_numpy(item['y'].T).float() for item in batch]
     
     inputs = torch.nested.nested_tensor(input_sequences,layout=torch.jagged)
     targets = torch.nested.nested_tensor(target_sequences,layout=torch.jagged)
