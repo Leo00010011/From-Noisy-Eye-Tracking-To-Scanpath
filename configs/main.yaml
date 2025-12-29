@@ -18,6 +18,7 @@ training:
     enabled: True
     init_b: 0.8
     end_b: 0.999
+    alpha: 10
     epochs: 50
   Phases: [Fixation]
   Denoise:
