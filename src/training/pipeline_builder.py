@@ -439,7 +439,7 @@ class PipelineBuilder:
         if hasattr(self.config.training, 'weights_scheduler') and self.config.training.weights_scheduler.enabled:
             return WeightsScheduler(init_b = self.config.training.weights_scheduler.init_b,
                                     end_b = self.config.training.weights_scheduler.end_b,
-                                    epochs = self.config.training.num_epochs,
+                                    epochs = self.config.training.weights_scheduler.epochs,
                                     alpha = self.config.training.weights_scheduler.alpha,
                                     loss_function = loss_fn,
                                     device = self.device)
