@@ -511,7 +511,9 @@ class MixerModel(nn.Module):
         self.image_src = image_src
         self.src_coords = src_coords
     
-    def decode_fixation(self, tgt, tgt_mask, src_mask, **kwargs):
+    def decode_fixation(self, tgt, tgt_mask, src_mask, in_tgt = None, **kwargs):
+        if in_tgt is not None:
+            tgt = in_tgt
         src = self.src
         image_src = self.image_src
         src_coords = self.src_coords
