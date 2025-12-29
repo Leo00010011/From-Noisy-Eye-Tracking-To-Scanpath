@@ -65,3 +65,5 @@ transforms:
     use_tan: True
   QuantileNormalizeDuration:
     pkl_path: "quantile_transformer.pkl"
+  AddGaussianNoiseToFixations:
+    std: 8.0
