@@ -297,6 +297,8 @@ class AddGaussianNoiseToFixations:
         
     def __call__(self,input):
         # shape (F,L)
+        if self.std == 0:
+            return input
         y_clone = input['y'].copy()
         noise = np.random.normal(0, self.std, (2, y_clone.shape[1]))
         y_clone[:2] += noise

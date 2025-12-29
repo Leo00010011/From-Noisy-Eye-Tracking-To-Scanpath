@@ -7,7 +7,7 @@ import numpy as np
 from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.data.parsers import CocoFreeView
 from src.data.transforms import (ExtractRandomPeriod, Normalize, StandarizeTime, LogNormalizeDuration,
-                                 AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise, SaveCleanX, QuantileNormalizeDuration)
+                                 AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise, SaveCleanX, QuantileNormalizeDuration, AddGaussianNoiseToFixations)
 from src.model.path_model import PathModel
 from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
@@ -62,10 +62,18 @@ def build_normalize_time(config, key = None):
     else:
         return Normalize(key=config.key, mode=config.mode, max_value=config.period_duration)
 
-def build_log_normalize_duration(config):
+def build_log_normalize_duration(config, key = None):
+    if key is not None:
+        return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale, use_tan=config.get('use_tan', False), key = key)
+    else:
+        return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale, use_tan=config.get('use_tan', False), key = 'y')
     return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale, use_tan=config.get('use_tan', False), key = 'y')
 
-def build_quantile_normalize_duration(config):
+def build_quantile_normalize_duration(config, key = None):
+    if key is not None:
+        return QuantileNormalizeDuration(key = key, pkl_path = config.get('pkl_path', 'quantile_transformer.pkl'))
+    else:
+        return QuantileNormalizeDuration(key = 'y', pkl_path = config.get('pkl_path', 'quantile_transformer.pkl'))
     return QuantileNormalizeDuration(key = 'y', pkl_path = config.get('pkl_path', 'quantile_transformer.pkl'))
 
 class PipelineBuilder:
@@ -87,6 +95,7 @@ class PipelineBuilder:
         # check if self.config.data.transforms exits
         if hasattr(self.config.data, 'transforms'):
             has_save_clean_x = False
+            has_in_tgt = False
             for transform_str in self.config.data.transforms.transform_list:
                 transform_config = self.config.data.transforms.get(transform_str)
                 if transform_str == 'ExtractRandomPeriod':
@@ -101,6 +110,8 @@ class PipelineBuilder:
                         transforms.append(build_normalize_coords(transform_config, key = 'clean_x'))
                 elif transform_str == 'NormalizeFixationCoords':
                     transforms.append(build_normalize_coords(transform_config, key = 'y'))
+                    if has_in_tgt:
+                        transforms.append(build_normalize_coords(transform_config, key = 'in_tgt'))
                 elif transform_str == 'NormalizeTime':
                     transforms.append(build_normalize_time(transform_config))
                     if has_save_clean_x:
@@ -109,11 +120,18 @@ class PipelineBuilder:
                     transforms.append(StandarizeTime())
                 elif transform_str == 'LogNormalizeDuration':
                     transforms.append(build_log_normalize_duration(transform_config))
+                    if has_in_tgt:
+                        transforms.append(build_log_normalize_duration(transform_config, key = 'in_tgt'))
                 elif transform_str == 'SaveCleanX':
                     transforms.append(SaveCleanX())
                     has_save_clean_x = True
                 elif transform_str == 'QuantileNormalizeDuration':
                     transforms.append(build_quantile_normalize_duration(transform_config))
+                    if has_in_tgt:
+                        transforms.append(build_quantile_normalize_duration(transform_config, key = 'in_tgt'))
+                elif transform_str == 'AddGaussianNoiseToFixations':
+                    transforms.append(AddGaussianNoiseToFixations(transform_config.get('std', 0)))
+                    has_in_tgt = True
                 else:
                     raise ValueError(f"Transform {transform_str} not supported.")
         else:
