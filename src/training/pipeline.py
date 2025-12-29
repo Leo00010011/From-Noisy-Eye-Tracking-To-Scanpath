@@ -34,6 +34,8 @@ def train(builder:PipelineBuilder):
         metrics_storage = MetricsStorage(filepath=builder.config.training.metric_file, 
                                          decisive_metric=builder.config.training.decisive_metric)
         
+        weights_scheduler = builder.build_weights_scheduler(loss_fn)
+        
         for phase, denoise_weight, decisive_metric, epochs in phases:
             print(f"Training {phase} for {epochs} epochs, Denoise Weight: {denoise_weight}")
             model.set_phase(phase)
@@ -67,6 +69,9 @@ def train(builder:PipelineBuilder):
                 print(f"Epoch {epoch+1}/{epochs}, {loss_str}, LR: {optimizer.param_groups[0]['lr']:.6f}")
                 if not builder.config.scheduler.batch_lr:
                     scheduler.step()
+                    
+                if weights_scheduler is not None:
+                    weights_scheduler.update_epoch()
                 if needs_validate and ((epoch + 1) % val_interval == 0):
                     validate(model,loss_fn, val_dataloader, epoch, device, metrics_storage.metrics, log = builder.config.training.log)
                     metrics_storage.save_metrics()

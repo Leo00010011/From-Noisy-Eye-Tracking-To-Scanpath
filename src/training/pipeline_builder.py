@@ -1,4 +1,5 @@
 import torch
+from src.training.weights_scheduler import WeightsScheduler
 from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction, DenoiseRegLoss
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
@@ -432,6 +433,16 @@ class PipelineBuilder:
             return output
         else:
             return [('Combined', .3 ,self.config.training.decisive_metric, self.config.training.num_epochs)]
+        
+        
+    def build_weights_scheduler(self, loss_fn: torch.nn.Module):
+        if hasattr(self.config.training, 'weights_scheduler') and self.config.training.weights_scheduler.enabled:
+            return WeightsScheduler(init_b = self.config.training.weights_scheduler.init_b,
+                                    end_b = self.config.training.weights_scheduler.end_b,
+                                    epochs = self.config.training.num_epochs,
+                                    loss_function = loss_fn)
+        else:
+            return None
 
 
 
