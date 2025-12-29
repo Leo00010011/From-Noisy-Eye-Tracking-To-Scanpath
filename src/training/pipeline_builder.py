@@ -440,7 +440,7 @@ class PipelineBuilder:
             return WeightsScheduler(init_b = self.config.training.weights_scheduler.init_b,
                                     end_b = self.config.training.weights_scheduler.end_b,
                                     epochs = self.config.training.num_epochs,
-                                    loss_function = loss_fn
+                                    loss_function = loss_fn,
                                     device = self.device)
         else:
             return None
