@@ -259,7 +259,7 @@ class ScheduledSampling:
                     next_token = current_step_pred.detach()
                     use_gt = False
                 else:
-                    next_token = ori_tgt[:, t, :]
+                    next_token = ori_tgt[:, t, :].unsqueeze(1)
                     use_gt = True
                 if input['tgt'] is None:
                     input['tgt'] = next_token
