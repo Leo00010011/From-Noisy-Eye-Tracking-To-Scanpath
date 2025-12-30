@@ -242,6 +242,8 @@ class ScheduledSampling:
         for t in range(seq_len):
             output = self.model(**input) 
             reg = concat_reg(output)
+            if t == seq_len - 1:
+                break
             current_step_pred = reg[:, -1, :] 
             if torch.random.random() < use_model_prob:
                 next_token = current_step_pred.detach()
@@ -251,3 +253,4 @@ class ScheduledSampling:
                 input['tgt'] = next_token
             else:
                 input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
+        return output
