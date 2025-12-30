@@ -212,7 +212,7 @@ class MixerModel(nn.Module):
                                             total_dim = total_dim,
                                             n_heads = n_heads,
                                             ff_dim = ff_dim,
-                                            dropout_p = dropout_p,
+                                            dropout_p = eye_encoder_dropout,
                                             activation= activation,
                                             norm_first= norm_first,
                                             **factory_mode)
