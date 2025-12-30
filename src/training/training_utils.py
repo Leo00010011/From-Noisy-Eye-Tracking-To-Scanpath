@@ -235,11 +235,12 @@ class ScheduledSampling:
         if 'in_tgt' in input:
             input['in_tgt'] = None
         output = None
+        print(input)
         tgt_mask = input['tgt_mask']
+        seq_len = tgt_mask.size(1)
         ori_tgt = input['tgt']
         input['tgt'] = None
         input['tgt_mask'] = None
-        seq_len = tgt_mask.size(1)
         self.model.encode(**input)
         use_gt = True
         t = 0
