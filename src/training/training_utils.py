@@ -215,8 +215,9 @@ class ScheduledSampling:
     def __init__(self, epochs, device, dtype = torch.float32):
         self.device = device
         self.epochs = epochs
-        probs = torch.arange(-epochs, 1, device = device, dtype = dtype)
-        self.probs = torch.exp(probs)
+        epoch_arange = torch.arange(0,epochs, device = device, dtype = dtype)
+        k = 6
+        self.probs = 1 - k / (k + torch.exp(epoch_arange / k))
         self.current_epoch = 1
         self.model = None
         
