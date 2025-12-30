@@ -330,9 +330,9 @@ def concat_reg(output):
         return torch.concat([output['coord'], output['dur']], dim=2)
 
 def eval_autoregressive(model, inputs, only_last = False):
+    model.eval()
     if 'in_tgt' in inputs:
         inputs['in_tgt'] = None
-    model.eval()
     output = None
     tgt_mask = inputs['tgt_mask']
     ori_tgt = inputs['tgt']

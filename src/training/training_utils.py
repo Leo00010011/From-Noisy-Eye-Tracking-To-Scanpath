@@ -212,4 +212,38 @@ def move_data_to_device(batch, device):
 
 
 class ScheduledSampling:
-    pass
+    def __init__(self, epochs, device, dtype = torch.float32):
+        self.device = device
+        self.epochs = epochs
+        probs = torch.arange(-50, 1, device = device, dtype = dtype)
+        self.probs = torch.exp(probs)
+        self.current_epoch = 1
+        self.model = None
+        
+        
+    def set_model(self, model):
+        self.model = model
+
+    def update_epoch(self):
+        if self.current_epoch < self.epochs:
+            self.current_epoch += 1
+
+        
+    def forward(self, input):
+        use_model_prob = self.probs[self.current_epoch - 1]
+        if 'in_tgt' in input:
+            input['in_tgt'] = None
+        output = None
+        tgt_mask = input['tgt_mask']
+        ori_tgt = input['tgt']
+        seq_len = tgt_mask.size(1)
+        input['tgt_mask'] = None
+        self.model.encode(**input)
+        for t in range(seq_len):
+            output = self.model(**input) 
+            current_step_pred = output[:, -1, :] 
+            if torch.random.random() < use_model_prob:
+                next_token = current_step_pred.detach()
+            else:
+                next_token = ori_tgt[:, t, :]
+            # concat part
