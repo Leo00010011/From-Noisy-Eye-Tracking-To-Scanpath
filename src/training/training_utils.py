@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import json
 from src.eval.eval_metrics import create_cls_targets, accuracy, precision, recall, eval_reg, eval_denoise
-from src.eval.eval_utils import invert_transforms
+from src.eval.eval_utils import invert_transforms, concat_reg
 
 class MetricsStorage:
     def __init__(self, filepath: str = None, decisive_metric: str = 'reg_loss_val'):
@@ -241,9 +241,13 @@ class ScheduledSampling:
         self.model.encode(**input)
         for t in range(seq_len):
             output = self.model(**input) 
-            current_step_pred = output[:, -1, :] 
+            reg = concat_reg(output)
+            current_step_pred = reg[:, -1, :] 
             if torch.random.random() < use_model_prob:
                 next_token = current_step_pred.detach()
             else:
                 next_token = ori_tgt[:, t, :]
-            # concat part
+            if input['tgt'] is None:
+                input['tgt'] = next_token
+            else:
+                input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
