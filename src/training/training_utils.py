@@ -224,7 +224,7 @@ class ScheduledSampling:
     def set_model(self, model):
         self.model = model
 
-    def update_epoch(self):
+    def step(self):
         if self.current_epoch < self.epochs:
             self.current_epoch += 1
 

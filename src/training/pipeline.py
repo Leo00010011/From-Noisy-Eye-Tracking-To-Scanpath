@@ -26,19 +26,22 @@ def train(builder:PipelineBuilder):
             print(model.param_summary())
         if builder.config.model.compilate:
             model = torch.compile(model, dynamic=True) 
-        
+        to_update_in_epoch = []
         optimizer = builder.build_optimizer(model)
         scheduler = builder.build_scheduler(optimizer, train_dataloader)
+        to_update_in_epoch.append(scheduler)
         loss_fn = builder.build_loss_fn()
         first_time = True
         metrics_storage = MetricsStorage(filepath=builder.config.training.metric_file, 
                                          decisive_metric=builder.config.training.decisive_metric)
         
         weights_scheduler = builder.build_weights_scheduler(loss_fn)
+        if weights_scheduler is not None:
+            to_update_in_epoch.append(weights_scheduler)
         scheduled_sampling = builder.build_scheduled_sampling()
         if scheduled_sampling is not None:
-            scheduled_sampling.set_model(model)
-            model = scheduled_sampling
+            to_update_in_epoch.append(scheduled_sampling)
+            model.set_scheduled_sampling(scheduled_sampling)
         for phase, denoise_weight, decisive_metric, epochs in phases:
             print(f"Training {phase} for {epochs} epochs, Denoise Weight: {denoise_weight}")
             model.set_phase(phase)
@@ -72,9 +75,9 @@ def train(builder:PipelineBuilder):
                 print(f"Epoch {epoch+1}/{epochs}, {loss_str}, LR: {optimizer.param_groups[0]['lr']:.6f}")
                 if not builder.config.scheduler.batch_lr:
                     scheduler.step()
-                    
-                if weights_scheduler is not None:
-                    weights_scheduler.update_epoch()
+                for updater in to_update_in_epoch:
+                    if updater is not None:
+                        updater.step()
                 if needs_validate and ((epoch + 1) % val_interval == 0):
                     validate(model,loss_fn, val_dataloader, epoch, device, metrics_storage.metrics, log = builder.config.training.log)
                     metrics_storage.save_metrics()

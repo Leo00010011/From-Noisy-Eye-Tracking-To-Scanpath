@@ -90,6 +90,7 @@ class MixerModel(nn.Module):
         self.denoise_modules = []
         self.fixation_modules = []
         self.n_eye_decoder = n_eye_decoder
+        self.scheduled_sampling = None
         # SPECIAL TOKENS
         if mixed_image_features:
             self.mix_enh_image_features = GatedFusion(model_dim, dropout_p = mixer_dropout, **factory_mode)
@@ -610,9 +611,14 @@ class MixerModel(nn.Module):
         output = self.denoise_head(src, **kwargs)
         return {'denoise': output}
         
+    def set_scheduled_sampling(self, scheduled_sampling):
+        self.scheduled_sampling = scheduled_sampling
+        self.scheduled_sampling.set_model(self)
         
     def forward(self, **kwargs):
         # src, tgt shape (B,L,F)
+        if self.scheduled_sampling is not None:
+            return self.scheduled_sampling(**kwargs)
         self.encode(**kwargs)
         if self.phase == 'Denoise':
             return self.decode_denoise(**kwargs)

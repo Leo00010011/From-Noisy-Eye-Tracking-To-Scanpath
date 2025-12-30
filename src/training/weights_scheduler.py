@@ -19,7 +19,7 @@ class WeightsScheduler:
         else:
             return None
     
-    def update_epoch(self):
+    def step(self):
         self.epoch += 1
         if self.epoch < self.epochs:
             self.loss_function.set_weights(self.compute_weights())
