@@ -240,20 +240,30 @@ class ScheduledSampling:
         input['tgt_mask'] = None
         seq_len = tgt_mask.size(1)
         self.model.encode(**input)
-        for t in range(seq_len):
+        use_gt = True
+        t = 0
+        while t < seq_len or has_to_eval:
+            has_to_eval = False
             output = self.model(**input) 
             reg = concat_reg(output)
             if t == seq_len - 1:
                 break
             current_step_pred = reg[:, -1, :] 
-            if torch.random.random() < use_model_prob:
-                next_token = current_step_pred.detach()
-            else:
-                next_token = ori_tgt[:, t, :]
-            if input['tgt'] is None:
-                input['tgt'] = next_token
-            else:
-                input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
+            first_on_loop = True
+            while (first_on_loop or use_gt) and t < seq_len - 1:
+                first_on_loop = False
+                has_to_eval = True
+                if torch.random.random() < use_model_prob:
+                    next_token = current_step_pred.detach()
+                    use_gt = False
+                else:
+                    next_token = ori_tgt[:, t, :]
+                    use_gt = True
+                if input['tgt'] is None:
+                    input['tgt'] = next_token
+                else:
+                    input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
+                t += 1
         input['tgt_mask'] = tgt_mask
         input['tgt'] = ori_tgt
         return output
