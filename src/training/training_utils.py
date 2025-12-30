@@ -250,7 +250,7 @@ class ScheduledSampling:
             reg = concat_reg(output)
             if t == seq_len - 1:
                 break
-            current_step_pred = reg[:, -1, :] 
+            current_step_pred = reg[:, -1:, :] 
             first_on_loop = True
             while (first_on_loop or use_gt) and t < seq_len - 1:
                 first_on_loop = False
@@ -262,7 +262,7 @@ class ScheduledSampling:
                     next_token = ori_tgt[:, t, :]
                     use_gt = True
                 if input['tgt'] is None:
-                    input['tgt'] = next_token.unsqueeze(1)
+                    input['tgt'] = next_token
                 else:
                     input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
                 t += 1
