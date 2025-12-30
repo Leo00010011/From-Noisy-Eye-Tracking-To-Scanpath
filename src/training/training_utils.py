@@ -210,3 +210,6 @@ def move_data_to_device(batch, device):
             device_batch[key] = item.to(device=device)
     return device_batch
 
+
+class ScheduledSampling:
+    pass
