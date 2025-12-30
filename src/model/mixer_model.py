@@ -46,6 +46,7 @@ class MixerModel(nn.Module):
                        phases = None,
                        src_dropout = 0,
                        tgt_dropout = 0,
+                       eye_encoder_dropout = 0,
                        enh_features_dropout = 0,
                        n_adapter = 0,
                        n_eye_decoder = 0,
@@ -79,6 +80,7 @@ class MixerModel(nn.Module):
         self.phase = None
         self.src_dropout = src_dropout
         self.tgt_dropout = tgt_dropout
+        self.eye_encoder_dropout = eye_encoder_dropout
         self.dur_head_dropout = dur_head_dropout
         self.end_dropout = end_dropout
         self.reg_head_dropout = reg_head_dropout
@@ -184,7 +186,7 @@ class MixerModel(nn.Module):
                                            total_dim = total_dim,
                                            n_heads = n_heads,
                                            ff_dim = ff_dim,
-                                           dropout_p = dropout_p,
+                                           dropout_p = eye_encoder_dropout,
                                            activation= activation,
                                            norm_first= norm_first,
                                            **factory_mode)

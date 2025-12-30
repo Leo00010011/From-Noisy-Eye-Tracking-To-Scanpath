@@ -67,7 +67,6 @@ def build_log_normalize_duration(config, key = None):
         return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale, use_tan=config.get('use_tan', False), key = key)
     else:
         return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale, use_tan=config.get('use_tan', False), key = 'y')
-    return LogNormalizeDuration(mean=config.mean, std=config.std, scale=config.scale, use_tan=config.get('use_tan', False), key = 'y')
 
 def build_quantile_normalize_duration(config, key = None):
     if key is not None:
@@ -353,6 +352,7 @@ class PipelineBuilder:
                               dur_head_dropout = self.config.model.get('dur_head_dropout', 0),
                               n_adapter = self.config.model.get('n_adapter', 0),
                               mixer_dropout = self.config.model.get('mixer_dropout', 0),
+                              eye_encoder_dropout = self.config.model.get('eye_encoder_dropout', 0),
                               end_dropout = self.config.model.get('end_dropout', 0))
             
         elif model_name == 'PathModel':
