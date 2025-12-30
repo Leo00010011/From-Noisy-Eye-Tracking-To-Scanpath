@@ -302,6 +302,7 @@ class AddGaussianNoiseToFixations:
         y_clone = input['y'].copy()
         noise = np.random.normal(0, self.std, y_clone.shape)
         y_clone += noise
+        y_clone[2][y_clone[2] < 0] = 0
         input['in_tgt'] = y_clone
         return input
 
