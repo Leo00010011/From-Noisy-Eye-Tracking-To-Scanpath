@@ -236,6 +236,7 @@ class ScheduledSampling:
             input['in_tgt'] = None
         output = None
         print(input)
+        input['pass_sampler'] = True
         tgt_mask = input['tgt_mask']
         seq_len = tgt_mask.size(1)
         ori_tgt = input['tgt']

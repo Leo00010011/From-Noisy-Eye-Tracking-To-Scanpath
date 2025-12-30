@@ -617,7 +617,7 @@ class MixerModel(nn.Module):
         
     def forward(self, **kwargs):
         # src, tgt shape (B,L,F)
-        if self.scheduled_sampling is not None:
+        if self.scheduled_sampling is not None and ('pass_sampler' not in kwargs or kwargs['pass_sampler'] is False):
             return self.scheduled_sampling(**kwargs)
         self.encode(**kwargs)
         if self.phase == 'Denoise':
