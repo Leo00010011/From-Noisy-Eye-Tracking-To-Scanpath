@@ -236,8 +236,9 @@ class ScheduledSampling:
         output = None
         tgt_mask = input['tgt_mask']
         ori_tgt = input['tgt']
-        seq_len = tgt_mask.size(1)
+        input['tgt'] = None
         input['tgt_mask'] = None
+        seq_len = tgt_mask.size(1)
         self.model.encode(**input)
         for t in range(seq_len):
             output = self.model(**input) 
@@ -253,4 +254,6 @@ class ScheduledSampling:
                 input['tgt'] = next_token
             else:
                 input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
+        input['tgt_mask'] = tgt_mask
+        input['tgt'] = ori_tgt
         return output
