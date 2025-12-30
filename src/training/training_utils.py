@@ -262,7 +262,7 @@ class ScheduledSampling:
                     next_token = ori_tgt[:, t, :]
                     use_gt = True
                 if input['tgt'] is None:
-                    input['tgt'] = next_token
+                    input['tgt'] = next_token.unsqueeze(1)
                 else:
                     input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
                 t += 1
