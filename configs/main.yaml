@@ -13,6 +13,7 @@ training:
   decisive_metric: "coord_loss_val"
   save_best_only: True
   save_full_state: True
+  use_scheduled_sampling: True
   log: True
   weights_scheduler:
     enabled: False
@@ -40,3 +41,5 @@ loss:
 #  complex_type: "combined"
   denoise_loss_type: "l1"
   fixation_loss_type: "entire_reg"
+scheduled_sampling:
+  epochs: 100

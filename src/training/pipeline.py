@@ -35,7 +35,10 @@ def train(builder:PipelineBuilder):
                                          decisive_metric=builder.config.training.decisive_metric)
         
         weights_scheduler = builder.build_weights_scheduler(loss_fn)
-        
+        scheduled_sampling = builder.build_scheduled_sampling()
+        if scheduled_sampling is not None:
+            scheduled_sampling.set_model(model)
+            model = scheduled_sampling
         for phase, denoise_weight, decisive_metric, epochs in phases:
             print(f"Training {phase} for {epochs} epochs, Denoise Weight: {denoise_weight}")
             model.set_phase(phase)

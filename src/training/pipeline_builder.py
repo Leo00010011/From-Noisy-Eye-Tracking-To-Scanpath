@@ -1,5 +1,6 @@
 import torch
 from src.training.weights_scheduler import WeightsScheduler
+from src.training.training_utils import ScheduledSampling
 from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction, DenoiseRegLoss
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
@@ -463,7 +464,13 @@ class PipelineBuilder:
                                     device = self.device)
         else:
             return None
-
+        
+    def build_scheduled_sampling(self):
+        if hasattr(self.config.training, 'use_scheduled_sampling') and self.config.training.use_scheduled_sampling:
+            return ScheduledSampling(epochs = self.config.scheduled_sampling.epochs,
+                                     device = self.device)
+        else:
+            return None
 
 
     def training_summary(self, n_samples):

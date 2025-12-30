@@ -229,7 +229,7 @@ class ScheduledSampling:
             self.current_epoch += 1
 
         
-    def forward(self, input):
+    def __call__(self, **input):
         use_model_prob = self.probs[self.current_epoch - 1]
         if 'in_tgt' in input:
             input['in_tgt'] = None
