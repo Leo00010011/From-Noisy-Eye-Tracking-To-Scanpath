@@ -255,7 +255,7 @@ class ScheduledSampling:
             while (first_on_loop or use_gt) and t < seq_len - 1:
                 first_on_loop = False
                 has_to_eval = True
-                if torch.random.random() < use_model_prob:
+                if torch.rand(1).item() < use_model_prob:
                     next_token = current_step_pred.detach()
                     use_gt = False
                 else:
