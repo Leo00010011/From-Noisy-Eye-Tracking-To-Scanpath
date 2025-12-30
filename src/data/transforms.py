@@ -300,12 +300,10 @@ class AddGaussianNoiseToFixations:
         if self.std == 0:
             return input
         y_clone = input['y'].copy()
-        noise = np.random.normal(0, self.std, y_clone.shape)
-        y_clone += noise
-        y_clone[2][y_clone[2] < 0] = 0
+        noise = np.random.normal(0, self.std, (2, y_clone.shape[1]))
+        y_clone[:2] += noise
         input['in_tgt'] = y_clone
         return input
-
     def inverse(self, y, tgt_mask, key):
         return y
     
