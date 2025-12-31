@@ -229,10 +229,10 @@ class ScheduledSampling:
         if self.current_epoch < self.epochs:
             self.current_epoch += 1
 
-    def get_latest_output(self, output, q):
+    def get_latest_output(self, output):
         latest_output = {}
         for key, value in output.items():
-            latest_output[key] = value[:, -q:, :]
+            latest_output[key] = value[:, -1:, :]
         return latest_output
     
     def get_final_output(self, output):
@@ -254,36 +254,27 @@ class ScheduledSampling:
         input['tgt'] = None
         input['tgt_mask'] = None
         self.model.encode(**input)
-        use_gt = True
         t = 0
         final_output = []
-        q = 1
+        has_to_eval = True
         while t < seq_len or has_to_eval:
             has_to_eval = False
             output = self.model(**input) 
+            final_output.append(self.get_latest_output(output))
             if t == seq_len - 1:
                 break
-            final_output.append(self.get_latest_output(output, q))
             reg = concat_reg(output)
             current_step_pred = reg[:, -1:, :] 
-            first_on_loop = True
-            q = 0
-            while (first_on_loop or use_gt) and t < seq_len - 1:
-                first_on_loop = False
-                has_to_eval = True
-                if torch.rand(1).item() < use_model_prob:
-                    next_token = current_step_pred.detach()
-                    use_gt = False
-                else:
-                    next_token = ori_tgt[:, t, :].unsqueeze(1)
-                    use_gt = True
-                    
-                if input['tgt'] is None:
-                    input['tgt'] = next_token
-                else:
-                    input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
-                q += 1
-                t += 1
+            if torch.rand(1).item() < use_model_prob:
+                next_token = current_step_pred.detach()
+            else:
+                next_token = ori_tgt[:, t, :].unsqueeze(1)
+                
+            if input['tgt'] is None:
+                input['tgt'] = next_token
+            else:
+                input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
+            t += 1
         input['tgt_mask'] = tgt_mask
         input['tgt'] = ori_tgt
         output = self.get_final_output(final_output)
