@@ -212,7 +212,7 @@ def move_data_to_device(batch, device):
 
 
 class ScheduledSampling:
-    def __init__(self, epochs, device, dtype = torch.float32):
+    def __init__(self, epochs, device, dtype = torch.float32, use_kv_cache = False):
         self.device = device
         self.epochs = epochs
         epoch_arange = torch.arange(0,epochs, device = device, dtype = dtype)
@@ -220,7 +220,7 @@ class ScheduledSampling:
         self.probs = 1 - k / (k + torch.exp(epoch_arange / k))
         self.current_epoch = 1
         self.model = None
-        
+        self.use_kv_cache = use_kv_cache
         
     def set_model(self, model):
         self.model = model
@@ -275,6 +275,8 @@ class ScheduledSampling:
             else:
                 input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
             t += 1
+        if self.use_kv_cache:
+            self.model.clear_kv_cache()
         input['tgt_mask'] = tgt_mask
         input['tgt'] = ori_tgt
         output = self.get_final_output(final_output)

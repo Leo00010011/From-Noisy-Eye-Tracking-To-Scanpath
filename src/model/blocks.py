@@ -77,7 +77,7 @@ def apply_rope( q: Tensor, k: Tensor, q_rope: Tensor | Tuple[Tensor, Tensor], k_
     return q, k
 
 class MultiHeadedAttention(nn.Module):
-    def __init__(self,model_dim, total_dim ,n_heads, is_self_attention = False, is_causal = False, device = 'cpu', dtype = torch.float32):
+    def __init__(self,model_dim, total_dim ,n_heads, is_self_attention = False, is_causal = False, use_kv_cache = False, device = 'cpu', dtype = torch.float32):
         super().__init__()
         self.model_dim = model_dim
         self.total_dim = total_dim
@@ -88,6 +88,8 @@ class MultiHeadedAttention(nn.Module):
         factory_kwargs = {'device': device, 'dtype': dtype}
         self.factory_kwargs = factory_kwargs
         self.scale = 1.0 / (self.head_dim ** 0.5)
+        self.use_kv_cache = use_kv_cache
+        self.kv_cache = None
         
         if is_self_attention:
             self.proj_in = nn.Linear(model_dim,total_dim*3, bias = False, **factory_kwargs)
@@ -95,6 +97,9 @@ class MultiHeadedAttention(nn.Module):
             self.proj_q = nn.Linear(model_dim,total_dim, bias = False, **factory_kwargs )
             self.proj_kv = nn.Linear(model_dim, total_dim * 2, bias = False, **factory_kwargs )
         self.proj_out = nn.Linear(total_dim,model_dim, bias = False, **factory_kwargs )
+        
+    def clear_kv_cache(self):
+        self.kv_cache = None
     
     def forward(self,query:torch.Tensor,
                      key :torch.Tensor = None,
@@ -102,13 +107,21 @@ class MultiHeadedAttention(nn.Module):
                      q_rope :Tuple[torch.Tensor, torch.Tensor]| None = None,
                      k_rope :Tuple[torch.Tensor, torch.Tensor]| None = None):
         # in_proj
+        
         if self.is_self_attention:
             result = self.proj_in(query)
             query, key, value = torch.chunk(result, 3,dim = -1)
         else:
             query = self.proj_q(query)
-            result = self.proj_kv(key)
-            key, value = torch.chunk(result, 2,dim = -1)
+            if self.kv_cache is None:
+                result = self.proj_kv(key)
+                key, value = torch.chunk(result, 2,dim = -1)
+                if self.use_kv_cache:
+                    self.kv_cache = (key, value)
+            else:
+                key = self.kv_cache[0]
+                value = self.kv_cache[1]
+                
         # reshape
         L_b,L_q,_ = query.size()
         L_k = key.size(1)
@@ -116,6 +129,14 @@ class MultiHeadedAttention(nn.Module):
         query = query.view(L_b,L_q,self.n_heads, self.head_dim).transpose(1,2)
         key = key.view(L_b,L_k,self.n_heads, self.head_dim).transpose(1,2)
         value = value.view(L_b,L_k,self.n_heads, self.head_dim).transpose(1,2)
+        if self.is_self_attention:
+            if self.kv_cache is not None:
+                key = torch.cat([self.kv_cache[0], key], dim=1)
+                value = torch.cat([self.kv_cache[1], value], dim=1)
+                self.kv_cache = (key, value)  
+            elif self.use_kv_cache:
+                self.kv_cache = (key, value)
+        # rope
         if q_rope is not None and k_rope is not None:
             query, key = apply_rope(query, key, q_rope, k_rope if k_rope is not None else q_rope)
         # scaled dot product
@@ -133,7 +154,7 @@ class MultiHeadedAttention(nn.Module):
         attn_output = attn_output.transpose(1,2).flatten(-2)
         # (B, L_seq, total)
         attn_output = self.proj_out(attn_output)
-        return attn_output 
+        return attn_output
 
 class TransformerEncoder(nn.Module):
     def __init__(self,model_dim = 1024, total_dim = 1024, n_heads = 8, ff_dim = 2048,dropout_p = .1,activation = F.relu,eps = 1e-5,norm_first = False, device = 'cpu', dtype = torch.float32):
@@ -243,7 +264,7 @@ class TransformerDecoder(nn.Module):
     
 
 class DoubleInputDecoder(nn.Module):
-    def __init__(self,model_dim = 1024, total_dim = 1024, n_heads = 8, ff_dim = 2048,dropout_p = .1,activation = F.relu,eps = 1e-5,norm_first = False, device = 'cpu', dtype = torch.float32):
+    def __init__(self,model_dim = 1024, total_dim = 1024, n_heads = 8, ff_dim = 2048,dropout_p = .1,activation = F.relu,eps = 1e-5,norm_first = False, use_kv_cache = False, device = 'cpu', dtype = torch.float32):
         super().__init__()
         self.model_dim = model_dim
         self.total_dim = total_dim
@@ -253,6 +274,7 @@ class DoubleInputDecoder(nn.Module):
         self.eps = eps
         self.activation = activation
         self.norm_first = norm_first
+        self.use_kv_cache = use_kv_cache
         factory_kwargs = {'device': device, 'dtype': dtype}
         # sa
         self.self_attn = MultiHeadedAttention(model_dim,
@@ -260,6 +282,7 @@ class DoubleInputDecoder(nn.Module):
                                             n_heads,
                                             is_self_attention=True,
                                             is_causal= True,
+                                            use_kv_cache=use_kv_cache,
                                             **factory_kwargs)
         self.self_attn_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
         self.self_attn_dropout = nn.Dropout(dropout_p)
@@ -269,6 +292,7 @@ class DoubleInputDecoder(nn.Module):
                                             n_heads,
                                             is_self_attention=False,
                                             is_causal= False,
+                                            use_kv_cache=use_kv_cache,
                                             **factory_kwargs)
         self.first_cross_attn_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
         self.first_cross_attn_dropout = nn.Dropout(dropout_p)
@@ -278,6 +302,7 @@ class DoubleInputDecoder(nn.Module):
                                             n_heads,
                                             is_self_attention=False,
                                             is_causal= False,
+                                            use_kv_cache=use_kv_cache,
                                             **factory_kwargs)
         self.second_cross_attn_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
         self.second_cross_attn_dropout = nn.Dropout(dropout_p)

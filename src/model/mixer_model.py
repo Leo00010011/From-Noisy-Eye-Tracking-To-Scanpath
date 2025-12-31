@@ -50,6 +50,7 @@ class MixerModel(nn.Module):
                        enh_features_dropout = 0,
                        n_adapter = 0,
                        n_eye_decoder = 0,
+                       use_kv_cache = False,
                        dtype = torch.float32,
                        device = 'cpu'):
         super().__init__()
@@ -91,6 +92,7 @@ class MixerModel(nn.Module):
         self.fixation_modules = []
         self.n_eye_decoder = n_eye_decoder
         self.scheduled_sampling = None
+        self.use_kv_cache = use_kv_cache
         # SPECIAL TOKENS
         if mixed_image_features:
             self.mix_enh_image_features = GatedFusion(model_dim, dropout_p = mixer_dropout, **factory_mode)
@@ -245,6 +247,7 @@ class MixerModel(nn.Module):
                                            dropout_p = dropout_p,
                                            activation= activation,
                                            norm_first= norm_first,
+                                           use_kv_cache = use_kv_cache,
                                            **factory_mode)
         self.decoder = _get_clones(decoder_layer,n_decoder)
         for mod in self.decoder:

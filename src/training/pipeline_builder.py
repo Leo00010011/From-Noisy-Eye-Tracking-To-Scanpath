@@ -354,7 +354,8 @@ class PipelineBuilder:
                               n_adapter = self.config.model.get('n_adapter', 0),
                               mixer_dropout = self.config.model.get('mixer_dropout', 0),
                               eye_encoder_dropout = self.config.model.get('eye_encoder_dropout', 0),
-                              end_dropout = self.config.model.get('end_dropout', 0))
+                              end_dropout = self.config.model.get('end_dropout', 0),
+                              use_kv_cache = self.config.model.get('use_kv_cache', False))
             
         elif model_name == 'PathModel':
             model = PathModel(input_dim = self.config.model.input_dim,
