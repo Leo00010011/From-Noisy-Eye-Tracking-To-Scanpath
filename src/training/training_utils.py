@@ -244,13 +244,16 @@ class ScheduledSampling:
         self.model.encode(**input)
         use_gt = True
         t = 0
+        final_output = []
         while t < seq_len or has_to_eval:
             has_to_eval = False
             output = self.model(**input) 
-            reg = concat_reg(output)
+            # TODO: Fix only using the first output token
             if t == seq_len - 1:
                 break
+            reg = concat_reg(output)
             current_step_pred = reg[:, -1:, :] 
+            final_output.append(current_step_pred)
             first_on_loop = True
             while (first_on_loop or use_gt) and t < seq_len - 1:
                 first_on_loop = False
@@ -268,4 +271,5 @@ class ScheduledSampling:
                 t += 1
         input['tgt_mask'] = tgt_mask
         input['tgt'] = ori_tgt
-        return output
+        final_output = torch.concat(final_output, dim=1)
+        return final_output
