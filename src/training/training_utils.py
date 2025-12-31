@@ -270,7 +270,7 @@ class ScheduledSampling:
             else:
                 next_token = ori_tgt[:, t, :].unsqueeze(1)
                 
-            if input['tgt'] is None:
+            if input['tgt'] is None or self.use_kv_cache:
                 input['tgt'] = next_token
             else:
                 input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
