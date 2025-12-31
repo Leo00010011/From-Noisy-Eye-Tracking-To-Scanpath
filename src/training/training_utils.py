@@ -261,12 +261,11 @@ class ScheduledSampling:
         while t < seq_len or has_to_eval:
             has_to_eval = False
             output = self.model(**input) 
-            # TODO: Fix only using the first output token
             if t == seq_len - 1:
                 break
+            final_output.append(self.get_latest_output(output, q))
             reg = concat_reg(output)
             current_step_pred = reg[:, -1:, :] 
-            final_output.append(self.get_latest_output(output, q))
             first_on_loop = True
             q = 0
             while (first_on_loop or use_gt) and t < seq_len - 1:
@@ -278,6 +277,7 @@ class ScheduledSampling:
                 else:
                     next_token = ori_tgt[:, t, :].unsqueeze(1)
                     use_gt = True
+                    
                 if input['tgt'] is None:
                     input['tgt'] = next_token
                 else:
