@@ -131,6 +131,10 @@ class MultiHeadedAttention(nn.Module):
         value = value.view(L_b,L_k,self.n_heads, self.head_dim).transpose(1,2)
         if self.is_self_attention:
             if self.kv_cache is not None:
+                print("kv_cache[0] shape:", self.kv_cache[0].shape)
+                print("kv_cache[1] shape:", self.kv_cache[1].shape)
+                print("key shape:", key.shape)
+                print("value shape:", value.shape)
                 key = torch.cat([self.kv_cache[0], key], dim=1)
                 value = torch.cat([self.kv_cache[1], value], dim=1)
                 self.kv_cache = (key, value)  
