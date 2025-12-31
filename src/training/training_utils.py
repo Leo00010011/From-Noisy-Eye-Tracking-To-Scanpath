@@ -265,7 +265,7 @@ class ScheduledSampling:
                 break
             reg = concat_reg(output)
             current_step_pred = reg[:, -1:, :] 
-            final_output.append(self.get_latest_output(output))
+            final_output.append(self.get_latest_output(output, q))
             first_on_loop = True
             q = 0
             while (first_on_loop or use_gt) and t < seq_len - 1:
