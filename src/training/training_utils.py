@@ -284,4 +284,4 @@ class ScheduledSampling:
         input['tgt_mask'] = tgt_mask
         input['tgt'] = ori_tgt
         output = self.get_final_output(final_output)
-        return final_output
+        return output
