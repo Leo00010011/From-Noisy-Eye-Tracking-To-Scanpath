@@ -229,10 +229,10 @@ class ScheduledSampling:
         if self.current_epoch < self.epochs:
             self.current_epoch += 1
 
-    def get_latest_output(self, output):
+    def get_latest_output(self, output, q):
         latest_output = {}
         for key, value in output.items():
-            latest_output[key] = value[:, -1:, :]
+            latest_output[key] = value[:, -q:, :]
         return latest_output
     
     def get_final_output(self, output):
@@ -267,6 +267,7 @@ class ScheduledSampling:
             current_step_pred = reg[:, -1:, :] 
             final_output.append(self.get_latest_output(output))
             first_on_loop = True
+            q = 0
             while (first_on_loop or use_gt) and t < seq_len - 1:
                 first_on_loop = False
                 has_to_eval = True
@@ -280,6 +281,7 @@ class ScheduledSampling:
                     input['tgt'] = next_token
                 else:
                     input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
+                q += 1
                 t += 1
         input['tgt_mask'] = tgt_mask
         input['tgt'] = ori_tgt
