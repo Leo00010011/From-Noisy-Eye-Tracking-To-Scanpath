@@ -135,8 +135,8 @@ class MultiHeadedAttention(nn.Module):
                 print("kv_cache[1] shape:", self.kv_cache[1].shape)
                 print("key shape:", key.shape)
                 print("value shape:", value.shape)
-                key = torch.cat([self.kv_cache[0], key], dim=1)
-                value = torch.cat([self.kv_cache[1], value], dim=1)
+                key = torch.cat([self.kv_cache[0], key], dim=2)
+                value = torch.cat([self.kv_cache[1], value], dim=2)
                 self.kv_cache = (key, value)  
             elif self.use_kv_cache:
                 self.kv_cache = (key, value)
