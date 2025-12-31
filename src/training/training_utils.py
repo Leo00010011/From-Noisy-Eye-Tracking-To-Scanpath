@@ -257,6 +257,7 @@ class ScheduledSampling:
         use_gt = True
         t = 0
         final_output = []
+        q = 1
         while t < seq_len or has_to_eval:
             has_to_eval = False
             output = self.model(**input) 
