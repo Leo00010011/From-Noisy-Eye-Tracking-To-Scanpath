@@ -229,7 +229,19 @@ class ScheduledSampling:
         if self.current_epoch < self.epochs:
             self.current_epoch += 1
 
-        
+    def get_latest_output(self, output):
+        latest_output = {}
+        for key, value in output.items():
+            latest_output[key] = value[:, -1:, :]
+        return latest_output
+    
+    def get_final_output(self, output):
+        final_output = {}
+        for key in output[0].keys():
+            value = [output[i][key] for i in range(len(output))]
+            final_output[key] = torch.concat(value, dim=1)
+        return final_output
+    
     def __call__(self, **input):
         use_model_prob = self.probs[self.current_epoch - 1]
         if 'in_tgt' in input:
@@ -253,7 +265,7 @@ class ScheduledSampling:
                 break
             reg = concat_reg(output)
             current_step_pred = reg[:, -1:, :] 
-            final_output.append(current_step_pred)
+            final_output.append(self.get_latest_output(output))
             first_on_loop = True
             while (first_on_loop or use_gt) and t < seq_len - 1:
                 first_on_loop = False
@@ -271,5 +283,5 @@ class ScheduledSampling:
                 t += 1
         input['tgt_mask'] = tgt_mask
         input['tgt'] = ori_tgt
-        final_output = torch.concat(final_output, dim=1)
+        output = self.get_final_output(final_output)
         return final_output
