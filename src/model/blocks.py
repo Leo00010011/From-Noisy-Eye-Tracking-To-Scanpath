@@ -328,6 +328,10 @@ class DoubleInputDecoder(nn.Module):
     def __feed_forward(self, x):
         return self.linear_down_dropout(self.linear_down(self.linear_up_dropout(self.activation(self.linear_up(x)))))
 
+    def clear_kv_cache(self):
+        self.self_attn.clear_kv_cache()
+        self.first_cross_attn.clear_kv_cache()
+        self.second_cross_attn.clear_kv_cache()
     
     def forward(self, src,
                       mem1,

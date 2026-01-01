@@ -371,6 +371,10 @@ class MixerModel(nn.Module):
             #                             **factory_mode)
             self.denoise_modules.append(self.denoise_head)
 
+    def clear_kv_cache(self):
+        for mod in self.decoder:
+            mod.clear_kv_cache()
+
     def param_summary(self):
         summ = f"""MixerModel Summary:
         Number of Encoder Layers: {self.n_encoder}
