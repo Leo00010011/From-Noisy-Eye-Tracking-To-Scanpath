@@ -99,6 +99,7 @@ class MultiHeadedAttention(nn.Module):
         self.proj_out = nn.Linear(total_dim,model_dim, bias = False, **factory_kwargs )
         
     def clear_kv_cache(self):
+        print("Clearing kv cache")
         self.kv_cache = None
     
     def forward(self,query:torch.Tensor,
@@ -125,7 +126,7 @@ class MultiHeadedAttention(nn.Module):
         L_b,L_q,_ = query.size()
         L_k = key.size(1)
         # (B,L_seq, total_dim) -> (B, L_seq, n_heads, head_dim) -> (B, n_heads, L_seq, head_dim)
-        query = query.view(L_b,L_q,self.n_heads, self.head_dim).transpose(1,2) # TODO: FIX RESHAPE
+        query = query.view(L_b,L_q,self.n_heads, self.head_dim).transpose(1,2) 
         key = key.view(L_b,L_k,self.n_heads, self.head_dim).transpose(1,2)
         value = value.view(L_b,L_k,self.n_heads, self.head_dim).transpose(1,2)
         if self.is_self_attention:
@@ -329,8 +330,11 @@ class DoubleInputDecoder(nn.Module):
         return self.linear_down_dropout(self.linear_down(self.linear_up_dropout(self.activation(self.linear_up(x)))))
 
     def clear_kv_cache(self):
+        print("Clearing self attn kv cache")
         self.self_attn.clear_kv_cache()
+        print("Clearing first cross attn kv cache")
         self.first_cross_attn.clear_kv_cache()
+        print("Clearing second cross attn kv cache")
         self.second_cross_attn.clear_kv_cache()
     
     def forward(self, src,
