@@ -106,8 +106,8 @@ class MultiHeadedAttention(nn.Module):
                      attn_mask :torch.Tensor= None,
                      q_rope :Tuple[torch.Tensor, torch.Tensor]| None = None,
                      k_rope :Tuple[torch.Tensor, torch.Tensor]| None = None):
-        # in_proj
-        
+        # Fix reshape when cross attention
+        # FIX start token in autoregressive process
         if self.is_self_attention:
             result = self.proj_in(query)
             query, key, value = torch.chunk(result, 3,dim = -1)
@@ -116,8 +116,6 @@ class MultiHeadedAttention(nn.Module):
             if self.kv_cache is None:
                 result = self.proj_kv(key)
                 key, value = torch.chunk(result, 2,dim = -1)
-                if self.use_kv_cache:
-                    self.kv_cache = (key, value)
             else:
                 key = self.kv_cache[0]
                 value = self.kv_cache[1]
@@ -126,7 +124,7 @@ class MultiHeadedAttention(nn.Module):
         L_b,L_q,_ = query.size()
         L_k = key.size(1)
         # (B,L_seq, total_dim) -> (B, L_seq, n_heads, head_dim) -> (B, n_heads, L_seq, head_dim)
-        query = query.view(L_b,L_q,self.n_heads, self.head_dim).transpose(1,2)
+        query = query.view(L_b,L_q,self.n_heads, self.head_dim).transpose(1,2) # TODO: FIX RESHAPE
         key = key.view(L_b,L_k,self.n_heads, self.head_dim).transpose(1,2)
         value = value.view(L_b,L_k,self.n_heads, self.head_dim).transpose(1,2)
         if self.is_self_attention:

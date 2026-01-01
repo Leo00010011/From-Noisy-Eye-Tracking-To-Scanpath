@@ -552,7 +552,8 @@ class MixerModel(nn.Module):
             else:
                 raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
             # apply the order positional encodings
-            tgt = torch.cat([start, tgt], dim = 1)
+            if not self.use_kv_cache:
+                tgt = torch.cat([start, tgt], dim = 1)
         else:
             tgt = start
         if self.word_dropout_prob > 0:
