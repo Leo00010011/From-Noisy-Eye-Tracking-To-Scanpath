@@ -116,6 +116,7 @@ class MultiHeadedAttention(nn.Module):
             if self.kv_cache is None:
                 result = self.proj_kv(key)
                 key, value = torch.chunk(result, 2,dim = -1)
+                self.kv_cache = (key, value)
             else:
                 key = self.kv_cache[0]
                 value = self.kv_cache[1]
