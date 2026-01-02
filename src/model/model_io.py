@@ -98,7 +98,7 @@ def load_models_with_data(path_list):
         print(f"Loading pipeline from {path}")
         pipe = load_pipeline(path, pipe)
         pipe.load_dataset()
-        scheduled_sampling = pipe.load_scheduled_sampling()
+        scheduled_sampling = pipe.build_scheduled_sampling()
         if scheduled_sampling is not None:
             model.set_scheduled_sampling(scheduled_sampling)
         train, val, test = load_test_data(pipe, path)
