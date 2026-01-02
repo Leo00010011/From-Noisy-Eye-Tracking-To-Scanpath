@@ -344,6 +344,7 @@ class DoubleInputDecoder(nn.Module):
         self.second_cross_attn.clear_kv_cache()
     
     def disable_kv_cache(self):
+        self.use_kv_cache = False
         self.self_attn.disable_kv_cache()
         self.first_cross_attn.disable_kv_cache()
         self.second_cross_attn.disable_kv_cache()
