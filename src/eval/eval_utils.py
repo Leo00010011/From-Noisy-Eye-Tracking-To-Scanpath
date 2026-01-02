@@ -331,8 +331,11 @@ def concat_reg(output):
 
 
 def eval_scheduled_sampling(model, inputs, only_last = False):
-    model.scheduled_sampling.use_model_prob = 0.90
+    # model.scheduled_sampling.use_model_prob = 0.90
+    model.eval()
     output = model(**inputs)
+    reg = concat_reg(output)
+    output['reg'] = reg
     return output
 
 def eval_autoregressive(model, inputs, only_last = False):
