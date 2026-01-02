@@ -263,7 +263,8 @@ class ScheduledSampling:
             final_output.append(self.get_latest_output(output))
             if t == seq_len - 1:
                 break
-            reg = concat_reg(output)
+            reg = concat_reg(output) # TODO: DETACH! before input
+            # TODO: Check positional encoding!!
             current_step_pred = reg[:, -1:, :] 
             if torch.rand(1).item() < use_model_prob:
                 next_token = current_step_pred.detach()

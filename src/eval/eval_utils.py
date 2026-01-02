@@ -325,9 +325,9 @@ def calculate_relative_vectors(vec):
 
 def concat_reg(output):
     if 'reg' in output:
-        return output['reg']
+        return output['reg'].detach()
     else:
-        return torch.concat([output['coord'], output['dur']], dim=2)
+        return torch.concat([output['coord'].detach(), output['dur'].detach()], dim=2)
 
 def eval_autoregressive(model, inputs, only_last = False):
     model.eval()
