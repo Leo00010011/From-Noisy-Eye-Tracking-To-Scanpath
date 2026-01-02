@@ -329,10 +329,19 @@ def concat_reg(output):
     else:
         return torch.concat([output['coord'].detach(), output['dur'].detach()], dim=2)
 
+
+def eval_scheduled_sampling(model, inputs, only_last = False):
+    model.eval()
+    output = model(**inputs)
+    return output
+
 def eval_autoregressive(model, inputs, only_last = False):
     model.eval()
     if 'in_tgt' in inputs:
         inputs['in_tgt'] = None
+    if model.scheduled_sampling is not None:
+        model.scheduled_sampling.use_model_prob = 1.0
+        return eval_scheduled_sampling(model, inputs, only_last)
     output = None
     tgt_mask = inputs['tgt_mask']
     ori_tgt = inputs['tgt']
