@@ -101,6 +101,10 @@ class MultiHeadedAttention(nn.Module):
     def clear_kv_cache(self):
         self.kv_cache = None
     
+    def disable_kv_cache(self):
+        self.kv_cache = None
+        self.use_kv_cache = False
+    
     def forward(self,query:torch.Tensor,
                      key :torch.Tensor = None,
                      attn_mask :torch.Tensor= None,
@@ -338,6 +342,11 @@ class DoubleInputDecoder(nn.Module):
         self.self_attn.clear_kv_cache()
         self.first_cross_attn.clear_kv_cache()
         self.second_cross_attn.clear_kv_cache()
+    
+    def disable_kv_cache(self):
+        self.self_attn.disable_kv_cache()
+        self.first_cross_attn.disable_kv_cache()
+        self.second_cross_attn.disable_kv_cache()
     
     def forward(self, src,
                       mem1,

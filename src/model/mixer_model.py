@@ -374,6 +374,11 @@ class MixerModel(nn.Module):
     def clear_kv_cache(self):
         for mod in self.decoder:
             mod.clear_kv_cache()
+            
+            
+    def disable_kv_cache(self):
+        for mod in self.decoder:
+            mod.disable_kv_cache()
 
     def param_summary(self):
         summ = f"""MixerModel Summary:
