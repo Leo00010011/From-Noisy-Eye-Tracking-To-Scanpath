@@ -229,7 +229,7 @@ class ScheduledSampling:
     def step(self):
         if self.current_epoch < self.epochs:
             self.current_epoch += 1
-            self.use_model_prob = self.probs[self.current_epoch - 1]
+            self.use_model_prob = min(self.probs[self.current_epoch - 1],.7)
         else:
             self.use_model_prob = 1.0
 
