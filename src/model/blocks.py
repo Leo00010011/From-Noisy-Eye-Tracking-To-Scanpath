@@ -146,7 +146,7 @@ class MultiHeadedAttention(nn.Module):
         # scaled dot product
         if attn_mask is None:
             causal = self.is_causal and not self.use_kv_cache
-            attn_output = F.scaled_dot_product_attention(query, key, value,is_causal= self.is_causal, scale=self.scale)
+            attn_output = F.scaled_dot_product_attention(query, key, value,is_causal= causal, scale=self.scale)
         else:
             # attention mask shape (B, L_seq)
             attn_bias = torch.zeros(size = (L_b, 1, L_q, L_k), device = query.device, dtype = query.dtype)
