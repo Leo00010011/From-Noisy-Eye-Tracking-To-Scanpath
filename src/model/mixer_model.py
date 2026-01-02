@@ -563,7 +563,11 @@ class MixerModel(nn.Module):
         if self.word_dropout_prob > 0:
             tgt = self.word_dropout(tgt)
         dec_pe = self.time_dec_pe.pe.unsqueeze(0)
-        tgt = tgt + dec_pe[:,:tgt.size()[1],:]
+        if self.use_kv_cache:
+            cached_input_count = self.decoder[0].get_cached_input_count()
+            tgt = tgt + dec_pe[:,cached_input_count,:].unsqueeze(1)
+        else:
+            tgt = tgt + dec_pe[:,:tgt.size()[1],:]
         if self.tgt_dropout > 0:
             tgt = self.tgt_dropout_nn(tgt)
 

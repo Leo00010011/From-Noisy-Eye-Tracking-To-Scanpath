@@ -325,6 +325,15 @@ class DoubleInputDecoder(nn.Module):
     def __feed_forward(self, x):
         return self.linear_down_dropout(self.linear_down(self.linear_up_dropout(self.activation(self.linear_up(x)))))
 
+    def get_cached_input_count(self):
+        if self.use_kv_cache:
+            if self.self_attn.kv_cache is not None:
+                return self.self_attn.kv_cache[0].shape[2]
+            else:
+                return 0
+        else:
+            return 0
+
     def clear_kv_cache(self):
         self.self_attn.clear_kv_cache()
         self.first_cross_attn.clear_kv_cache()
