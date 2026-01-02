@@ -339,6 +339,7 @@ def eval_autoregressive(model, inputs, only_last = False):
     if 'in_tgt' in inputs:
         inputs['in_tgt'] = None
     if model.scheduled_sampling is not None:
+        print('Using scheduled sampling')
         model.scheduled_sampling.use_model_prob = 1.0
         return eval_scheduled_sampling(model, inputs, only_last)
     model.eval()
