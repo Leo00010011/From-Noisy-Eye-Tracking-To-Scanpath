@@ -377,6 +377,7 @@ class MixerModel(nn.Module):
             
             
     def disable_kv_cache(self):
+        self.use_kv_cache = False
         for mod in self.decoder:
             mod.disable_kv_cache()
 
