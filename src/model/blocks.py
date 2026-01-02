@@ -115,7 +115,6 @@ class MultiHeadedAttention(nn.Module):
         else:
             query = self.proj_q(query)
             if self.kv_cache is None:
-                print("No cache in cross attention")
                 result = self.proj_kv(key)
                 key, value = torch.chunk(result, 2,dim = -1)
                 if self.use_kv_cache:
@@ -133,15 +132,10 @@ class MultiHeadedAttention(nn.Module):
         value = value.view(L_b,L_k,self.n_heads, self.head_dim).transpose(1,2)
         if self.is_self_attention:
             if self.kv_cache is not None:
-                print("kv_cache[0] shape:", self.kv_cache[0].shape)
-                print("kv_cache[1] shape:", self.kv_cache[1].shape)
-                print("key shape:", key.shape)
-                print("value shape:", value.shape)
                 key = torch.cat([self.kv_cache[0], key], dim=2)
                 value = torch.cat([self.kv_cache[1], value], dim=2)
                 self.kv_cache = (key, value)  
             elif self.use_kv_cache:
-                print("No cahce in self attention")
                 self.kv_cache = (key, value)
         # rope
         if q_rope is not None and k_rope is not None:

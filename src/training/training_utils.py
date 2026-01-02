@@ -275,11 +275,6 @@ class ScheduledSampling:
                 input['tgt'] = next_token
             else:
                 input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
-            if self.use_kv_cache:
-                print("using kv cache")
-                print("input['tgt'] shape:", input['tgt'].shape)
-            else:
-                print("not using kv cache")
             t += 1
         if self.use_kv_cache:
             self.model.clear_kv_cache()
