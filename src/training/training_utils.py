@@ -229,6 +229,9 @@ class ScheduledSampling:
         if self.current_epoch < self.epochs:
             self.current_epoch += 1
 
+    def get_current_ratio(self):
+        return self.probs[self.current_epoch - 1]
+
     def get_latest_output(self, output):
         latest_output = {}
         for key, value in output.items():
