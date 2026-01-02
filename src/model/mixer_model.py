@@ -627,7 +627,8 @@ class MixerModel(nn.Module):
         # src, tgt shape (B,L,F)
         if self.scheduled_sampling is not None and ('pass_sampler' not in kwargs or kwargs['pass_sampler'] is False):
             return self.scheduled_sampling(**kwargs)
-        self.encode(**kwargs)
+        if 'pass_sampler' not in kwargs or kwargs['pass_sampler'] is False:
+            self.encode(**kwargs)
         if self.phase == 'Denoise':
             return self.decode_denoise(**kwargs)
         elif self.phase == 'Fixation':
