@@ -24,10 +24,6 @@ from src.model.model_io import load_models_with_data
 from src.training.training_utils import move_data_to_device, compute_loss
 
 
-# %% [markdown]
-# ## Methods
-
-# %%
 def get_coords(idx, x,y, fixation_len, reg_out):
     x_coords = x[idx,:,:2].cpu().numpy().T
     y_coords = y[idx,:fixation_len[idx],:2].cpu().numpy().T
@@ -92,27 +88,6 @@ def slim_input_output(input, output):
     }
     return slim_input, slim_output
 
-# %% [markdown]
-# # Eval
-
-# %% [markdown]
-# ## Review Metrics
-
-# %%
-# names = ['path model',
-#         'W/o Image -> Eye attn',
-#         'Mixer model with enh img features',
-#         'W Image-> Eye attn']
-# 
-# 
-# 
-# ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
-#              os.path.join('outputs','2025-12-18','12-35-29'),
-#              os.path.join('outputs','2025-12-18','16-20-34'),
-#              os.path.join('outputs','2025-12-23','15-57-34')]
-
-
-# %%
 names = [# 'path model',
         # 'src dropout path model',
         # 'drop multi head',
@@ -133,13 +108,6 @@ ckpt_path = [# os.path.join('outputs','2025-12-10','15-57-12'),
              os.path.join('outputs','2026-01-02','13-34-02')]
 
 
-# %% [markdown]
-# ## Checkout Output
-
-# %% [markdown]
-# ### Eval Just One Batch
-
-# %%
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 inputs_outputs = []
 

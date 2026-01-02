@@ -218,6 +218,7 @@ class ScheduledSampling:
         epoch_arange = torch.arange(0,epochs, device = device, dtype = dtype)
         k = 10
         self.probs = 1 - k / (k + torch.exp(epoch_arange / k))
+        self.use_model_prob = 0.0
         self.current_epoch = 1
         self.model = None
         self.use_kv_cache = use_kv_cache
@@ -228,9 +229,12 @@ class ScheduledSampling:
     def step(self):
         if self.current_epoch < self.epochs:
             self.current_epoch += 1
+            self.use_model_prob = self.probs[self.current_epoch - 1]
+        else:
+            self.use_model_prob = 1.0
 
     def get_current_ratio(self):
-        return self.probs[self.current_epoch - 1]
+        return self.use_model_prob
 
     def get_latest_output(self, output):
         latest_output = {}
@@ -246,7 +250,7 @@ class ScheduledSampling:
         return final_output
     
     def __call__(self, **input):
-        use_model_prob = self.probs[self.current_epoch - 1]
+        use_model_prob = self.use_model_prob
         if 'in_tgt' in input:
             input['in_tgt'] = None
         output = None
@@ -268,7 +272,7 @@ class ScheduledSampling:
                 break
             reg = concat_reg(output)
             current_step_pred = reg[:, -1:, :] 
-            if torch.rand(1).item() < use_model_prob:
+            if (torch.rand(1).item() < use_model_prob) or not self.model.training:
                 next_token = current_step_pred.detach()
             else:
                 next_token = ori_tgt[:, t, :].unsqueeze(1)
