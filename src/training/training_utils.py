@@ -281,8 +281,7 @@ class ScheduledSampling:
                 input['tgt'] = next_token
             else:
                 input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
-            t += 1
-        print('input target shape: ', input['tgt'].shape)            
+            t += 1     
         if self.use_kv_cache:
             self.model.clear_kv_cache()
         input['tgt_mask'] = tgt_mask
