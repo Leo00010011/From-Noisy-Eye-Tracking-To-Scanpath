@@ -339,6 +339,7 @@ def eval_autoregressive(model, inputs, only_last = False):
     inputs['tgt_mask'] = None
     model.disable_kv_cache()# TODO fix for eval
     model.encode(**inputs)
+    model.scheduled_sampling = None
     with torch.no_grad():
         for _ in range(tgt_mask.size(1)):
             inputs['tgt'] = output            
