@@ -145,6 +145,7 @@ class MultiHeadedAttention(nn.Module):
             query, key = apply_rope(query, key, q_rope, k_rope if k_rope is not None else q_rope)
         # scaled dot product
         if attn_mask is None:
+            causal = self.is_causal and not self.use_kv_cache
             attn_output = F.scaled_dot_product_attention(query, key, value,is_causal= self.is_causal, scale=self.scale)
         else:
             # attention mask shape (B, L_seq)
