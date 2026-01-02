@@ -216,7 +216,7 @@ class ScheduledSampling:
         self.device = device
         self.epochs = epochs
         epoch_arange = torch.arange(0,epochs, device = device, dtype = dtype)
-        k = 6
+        k = 10
         self.probs = 1 - k / (k + torch.exp(epoch_arange / k))
         self.current_epoch = 1
         self.model = None
@@ -266,8 +266,7 @@ class ScheduledSampling:
             final_output.append(self.get_latest_output(output))
             if t == seq_len - 1:
                 break
-            reg = concat_reg(output) # TODO: DETACH! before input
-            # TODO: Check positional encoding!!
+            reg = concat_reg(output)
             current_step_pred = reg[:, -1:, :] 
             if torch.rand(1).item() < use_model_prob:
                 next_token = current_step_pred.detach()
