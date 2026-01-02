@@ -104,7 +104,7 @@ ckpt_path = [# os.path.join('outputs','2025-12-10','15-57-12'),
              # os.path.join('outputs','2025-12-28','11-30-12'),
              # os.path.join('outputs','2025-12-28','19-19-36'),
              #os.path.join('outputs','2025-12-30','19-13-05'),
-             # os.path.join('outputs','2025-12-29','23-39-13'),
+             os.path.join('outputs','2025-12-29','23-39-13'),
              os.path.join('outputs','2026-01-02','13-34-02')]
 
 
@@ -113,7 +113,7 @@ inputs_outputs = []
 
 models_and_data = load_models_with_data(ckpt_path)
 print(f'Model {names[0]}')
-for i, ((model, _, test_dataloader, _), ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
+for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
     model.eval()
     with torch.no_grad():
         if hasattr(model, 'image_encoder'):
