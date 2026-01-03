@@ -249,7 +249,8 @@ class WarmupStableDecayScheduler(_LRScheduler):
 
 
 def inverted_sigmoid(x,k = 10):
-    return 1 - k / (k + torch.exp(x / k))
+    x_tensor = torch.as_tensor(x, dtype=torch.float32)
+    return 1 - k / (k + torch.exp(x_tensor / k))
 class ScheduledSampling:
     def __init__(self, active_epochs, warmup_epochs, device, dtype = torch.float32,batch_size = 128, use_kv_cache = False):
         self.device = device
