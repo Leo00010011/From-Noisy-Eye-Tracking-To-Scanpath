@@ -1,4 +1,6 @@
 import torch
+from torch.optim.lr_scheduler import _LRScheduler
+import math
 import numpy as np
 import json
 from src.eval.eval_metrics import create_cls_targets, accuracy, precision, recall, eval_reg, eval_denoise
@@ -210,16 +212,52 @@ def move_data_to_device(batch, device):
             device_batch[key] = item.to(device=device)
     return device_batch
 
+class WarmupStableDecayScheduler(_LRScheduler):
+    def __init__(self, optimizer, warmup_steps, stable_steps, decay_steps, min_lr=1e-6, last_epoch=-1):
+        self.warmup_steps = warmup_steps
+        self.stable_steps = stable_steps
+        self.decay_steps = decay_steps
+        self.min_lr = min_lr
+        self.total_steps = warmup_steps + stable_steps + decay_steps
+        super(WarmupStableDecayScheduler, self).__init__(optimizer, last_epoch)
 
+    def get_lr(self):
+        step = self.last_epoch
+        
+        # 1. Warmup Phase: Linear increase from 0 to base_lr
+        if step < self.warmup_steps:
+            factor = float(step) / float(max(1, self.warmup_steps))
+            return [base_lr * factor for base_lr in self.base_lrs]
+        
+        # 2. Stable Phase: Constant base_lr
+        # This is where you should ramp up your Scheduled Sampling
+        elif step < self.warmup_steps + self.stable_steps:
+            return [base_lr for base_lr in self.base_lrs]
+        
+        # 3. Decay Phase: Cosine decay to min_lr
+        else:
+            # How far are we into the decay phase?
+            decay_step = step - (self.warmup_steps + self.stable_steps)
+            decay_step = min(decay_step, self.decay_steps) # Cap it
+            
+            cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_step / self.decay_steps))
+            
+            return [
+                self.min_lr + (base_lr - self.min_lr) * cosine_decay
+                for base_lr in self.base_lrs
+            ]
+
+
+def inverted_sigmoid(x,k = 10):
+    return 1 - k / (k + torch.exp(x / k))
 class ScheduledSampling:
-    def __init__(self, epochs, device, dtype = torch.float32, use_kv_cache = False):
+    def __init__(self, active_epochs, warmup_epochs, device, dtype = torch.float32,batch_size = 128, use_kv_cache = False):
         self.device = device
-        self.epochs = epochs
-        epoch_arange = torch.arange(0,epochs, device = device, dtype = dtype)
-        k = 10
-        self.probs = 1 - k / (k + torch.exp(epoch_arange / k))
+        self.active_epochs = active_epochs
         self.use_model_prob = 0.0
-        self.current_epoch = 1
+        self.current_batch = 0
+        self.warmup_epochs = 20
+        self.batch_size = batch_size
         self.model = None
         self.use_kv_cache = use_kv_cache
         
@@ -227,9 +265,12 @@ class ScheduledSampling:
         self.model = model
 
     def step(self):
-        if self.current_epoch < self.epochs:
-            self.current_epoch += 1
-            self.use_model_prob = min(self.probs[self.current_epoch - 1],.7)
+        if self.current_batch < self.warmup_epochs*self.batch_size:
+            self.current_batch += 1
+        elif self.current_batch < (self.warmup_epochs + self.active_epochs)*self.batch_size:
+            self.current_batch += 1
+            eval_batch = (self.current_batch - self.warmup_epochs*self.batch_size) / self.batch_size
+            self.use_model_prob = min(inverted_sigmoid(eval_batch, 10),.7)
         else:
             self.use_model_prob = 1.0
 

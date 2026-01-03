@@ -1,6 +1,6 @@
 import torch
 from src.training.weights_scheduler import WeightsScheduler
-from src.training.training_utils import ScheduledSampling
+from src.training.training_utils import ScheduledSampling, WarmupStableDecayScheduler
 from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction, DenoiseRegLoss
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
@@ -410,6 +410,15 @@ class PipelineBuilder:
                 milestones=self.config.scheduler.milestones,
                 gamma=self.config.scheduler.gamma
             )
+        elif self.config.scheduler.type == 'warmup_stable_decay':
+            if self.config.training.log:
+                print("Using Warmup Stable Decay Learning Rate Scheduler")
+            scheduler = WarmupStableDecayScheduler(
+                optimizer,
+                warmup_steps=self.config.scheduler.warmup_steps,
+                stable_steps=self.config.scheduler.stable_steps,
+                decay_steps=self.config.scheduler.decay_steps,
+            )
         else:
             raise ValueError(f"Scheduler type {self.config.scheduler.type} not supported.")
         return scheduler
@@ -468,8 +477,10 @@ class PipelineBuilder:
         
     def build_scheduled_sampling(self):
         if hasattr(self.config.training, 'use_scheduled_sampling') and self.config.training.use_scheduled_sampling:
-            return ScheduledSampling(epochs = self.config.scheduled_sampling.epochs,
+            return ScheduledSampling(active_epochs = self.config.scheduled_sampling.active_epochs,
                                      device = self.device,
+                                     batch_size = 128,
+                                     warmup_epochs = self.config.scheduled_sampling.warmup_epochs,
                                      use_kv_cache = self.config.model.get('use_kv_cache', False))
         else:
             return None

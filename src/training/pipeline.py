@@ -27,9 +27,10 @@ def train(builder:PipelineBuilder):
         if builder.config.model.compilate:
             model = torch.compile(model, dynamic=True) 
         to_update_in_epoch = []
+        to_update_in_batch = []
         optimizer = builder.build_optimizer(model)
         scheduler = builder.build_scheduler(optimizer, train_dataloader)
-        to_update_in_epoch.append(scheduler)
+        to_update_in_batch.append(scheduler)
         loss_fn = builder.build_loss_fn()
         first_time = True
         metrics_storage = MetricsStorage(filepath=builder.config.training.metric_file, 
@@ -40,7 +41,7 @@ def train(builder:PipelineBuilder):
             to_update_in_epoch.append(weights_scheduler)
         scheduled_sampling = builder.build_scheduled_sampling()
         if scheduled_sampling is not None:
-            to_update_in_epoch.append(scheduled_sampling)
+            to_update_in_batch.append(scheduled_sampling)
             model.set_scheduled_sampling(scheduled_sampling)
         for phase, denoise_weight, decisive_metric, epochs in phases:
             print(f"Training {phase} for {epochs} epochs, Denoise Weight: {denoise_weight}")
@@ -66,8 +67,9 @@ def train(builder:PipelineBuilder):
                     # BACKWARD PASS AND OPTIMIZATION
                     loss.backward()
                     optimizer.step()
-                    if builder.config.scheduler.batch_lr:
-                        scheduler.step()
+                    for update in to_update_in_batch:
+                        if update is not None:
+                            update.step()
                     metrics_storage.update_batch_loss(info)
                     metrics_storage.compute_normalized_regression_metrics(input, output, train_dataloader)
                 loss_info = metrics_storage.finalize_epoch()

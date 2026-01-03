@@ -1,5 +1,5 @@
 defaults:
-  - scheduler: multistep_lr
+  - scheduler: warmup
   - data: default
   - model: mixer_model
   - loss: separated_loss
@@ -42,4 +42,5 @@ loss:
   denoise_loss_type: "l1"
   fixation_loss_type: "entire_reg"
 scheduled_sampling:
-  epochs: 50
+  warmup_epochs: 20
+  active_epochs: 50
