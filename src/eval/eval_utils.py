@@ -332,7 +332,6 @@ def concat_reg(output):
 
 def eval_scheduled_sampling(model, inputs, only_last = False):
     # model.scheduled_sampling.use_model_prob = 0.90
-    model.eval()
     output = model(**inputs)
     reg = concat_reg(output)
     output['reg'] = reg
@@ -344,7 +343,7 @@ def eval_autoregressive(model, inputs, only_last = False):
     if model.scheduled_sampling is not None:
         model.scheduled_sampling.use_model_prob = 1.0
         return eval_scheduled_sampling(model, inputs, only_last)
-    model.eval()
+    
     output = None
     tgt_mask = inputs['tgt_mask']
     ori_tgt = inputs['tgt']

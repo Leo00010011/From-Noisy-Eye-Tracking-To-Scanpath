@@ -108,7 +108,11 @@ def load_models_with_data(path_list):
 
 def load_pipeline(path, pipe=None):
     model_config = OmegaConf.load(os.path.join(path, '.hydra', 'config.yaml'))
-    return PipelineBuilder(model_config)
+    if pipe is None:
+        return PipelineBuilder(model_config)
+    else:
+        pipe.config = model_config
+        return pipe
 
 def load_test_data(pipe: PipelineBuilder, path: str):
     path = os.path.join(path, 'split.pth')
