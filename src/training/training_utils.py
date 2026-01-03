@@ -314,7 +314,7 @@ class ScheduledSampling:
                 break
             reg = concat_reg(output)
             current_step_pred = reg[:, -1:, :] 
-            if (torch.rand(1).item() < use_model_prob):
+            if (torch.rand(1).item() < use_model_prob) or not self.model.training:
                 next_token = current_step_pred.detach()
             else:
                 next_token = ori_tgt[:, t, :].unsqueeze(1)
