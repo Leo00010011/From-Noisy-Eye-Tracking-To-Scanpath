@@ -114,7 +114,7 @@ inputs_outputs = []
 
 models_and_data = load_models_with_data(ckpt_path)
 print(f'Model {names[0]}')
-for i, ((model, _, test_dataloader, _), ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
+for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
     model.eval()
     if model.scheduled_sampling is not None:
         model.scheduled_sampling.use_kv_cache = False
@@ -145,10 +145,7 @@ for i, ((model, _, test_dataloader, _), ckpt_path, name) in enumerate(zip(models
         for batch in tqdm(test_dataloader):
             input = move_data_to_device(batch, device)
             output = eval_autoregressive(model, input, only_last = True)
-            input, output = slim_input_output(input, output)
             input, output = invert_transforms(input, output, test_dataloader, remove_outliers = True)
-            current_model['inputs'].append(input)
-            current_model['outputs'].append(output)
             reg_out, cls_out = output['reg'], output['cls']
             y, y_mask, fixation_len = input['tgt'], input['tgt_mask'], input['fixation_len']
             cls_loss, reg_loss = compute_loss(input, output)
@@ -165,6 +162,9 @@ for i, ((model, _, test_dataloader, _), ckpt_path, name) in enumerate(zip(models
             pre_neg_acum += precision(cls_out, y_mask, cls_targets, cls = 0)
             rec_neg_acum += recall(cls_out, y_mask, cls_targets, cls = 0)
             count += 1
+            input, output = slim_input_output(input, output)
+            current_model['inputs'].append(input)
+            current_model['outputs'].append(output)
         inputs_outputs.append(current_model)
         # print(f'Cls Loss: {cls_loss_acum/count:.4f}, Reg Loss: {reg_loss_acum/count:.4f}')
         print(f'Outliers count: {outliers_count_acum}')
