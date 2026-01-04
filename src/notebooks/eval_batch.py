@@ -181,7 +181,7 @@ for i, ((model, _, _, test_dataloader), ckpt_path, name) in enumerate(zip(models
     torch.cuda.empty_cache()
     gc.collect()
 
-
+models_and_data = load_models_with_data(ckpt_path)
 print(f'Model {names[0]}')
 for i, ((model, _, test_dataloader, _), ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
     model.eval()
