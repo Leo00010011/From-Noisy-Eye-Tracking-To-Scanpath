@@ -429,9 +429,9 @@ class PipelineBuilder:
                 print("Using Warmup Stable Decay Learning Rate Scheduler")
             scheduler = WarmupStableDecayScheduler(
                 optimizer,
-                warmup_steps=self.config.scheduler.warmup_steps*80,
-                stable_steps=self.config.scheduler.stable_steps*80,
-                decay_steps=self.config.scheduler.decay_steps*80,
+                warmup_steps=self.config.scheduler.warmup_steps*150,
+                stable_steps=self.config.scheduler.stable_steps*150,
+                decay_steps=self.config.scheduler.decay_steps*150,
             )
         else:
             raise ValueError(f"Scheduler type {self.config.scheduler.type} not supported.")
@@ -493,7 +493,7 @@ class PipelineBuilder:
         if hasattr(self.config.training, 'use_scheduled_sampling') and self.config.training.use_scheduled_sampling:
             return ScheduledSampling(active_epochs = self.config.scheduled_sampling.active_epochs,
                                      device = self.device,
-                                     batch_size = 80,
+                                     batch_size = 150,
                                      warmup_epochs = self.config.scheduled_sampling.warmup_epochs,
                                      use_kv_cache = self.config.model.get('use_kv_cache', False))
         else:
