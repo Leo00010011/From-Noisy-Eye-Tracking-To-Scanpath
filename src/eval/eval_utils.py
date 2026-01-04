@@ -101,8 +101,9 @@ def invert_transforms_fixations(inputs, outputs, transforms, remove_outliers = F
         pred_reg = outputs['reg']
     elif 'coord' in outputs and 'dur' in outputs:
         pred_reg = torch.concat([outputs['coord'], outputs['dur']], dim=2)
-    if pred_reg is not None:
-        gt_reg = inputs['tgt']
+    else:
+        pred_reg = outputs
+    gt_reg = inputs['tgt']
         
     # reverse the transforms
     for transform in reversed(transforms):
