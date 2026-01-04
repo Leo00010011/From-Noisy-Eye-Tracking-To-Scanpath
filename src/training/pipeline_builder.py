@@ -480,7 +480,7 @@ class PipelineBuilder:
         if hasattr(self.config.training, 'use_scheduled_sampling') and self.config.training.use_scheduled_sampling:
             return ScheduledSampling(active_epochs = self.config.scheduled_sampling.active_epochs,
                                      device = self.device,
-                                     batch_size = 120,
+                                     batch_size = 80,
                                      warmup_epochs = self.config.scheduled_sampling.warmup_epochs,
                                      use_kv_cache = self.config.model.get('use_kv_cache', False))
         else:
