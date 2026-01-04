@@ -309,14 +309,14 @@ class AddGaussianNoiseToFixations:
     
 def generate_gaussian_heatmaps(coords, image_size, sigma=5.0):
     height, width = image_size
-    num_points = coords.shape[1]
+    num_points = coords.shape[0]
     x = torch.arange(width)
     y = torch.arange(height)
-    yy, xx = torch.meshgrid(y, x, indexing='xy')
+    yy, xx = torch.meshgrid(y, x, indexing='ij')
     xx = xx.unsqueeze(0) 
     yy = yy.unsqueeze(0) 
-    target_x = coords[0, :].view(num_points, 1, 1)*image_size[0]
-    target_y = coords[1, :].view(num_points, 1, 1)*image_size[1]
+    target_x = coords[:, 0].view(num_points, 1, 1)*image_size[0]
+    target_y = coords[:, 1].view(num_points, 1, 1)*image_size[1]
     dist_sq = (xx - target_x)**2 + (yy - target_y)**2
     heatmaps = torch.exp(-dist_sq / (2 * sigma**2))
     return heatmaps
@@ -329,8 +329,8 @@ def get_coords_from_heatmaps(heatmaps):
     probs = heatmaps.view(B, N, -1)
     probs = probs / (probs.sum(dim=2, keepdim=True) + 1e-6) # +epsilon for stability
     probs = probs.view(B, N, H, W)
-    expected_x = torch.sum(probs * pos_x.view(1,1, 1, W), dim=(1, 2))
-    expected_y = torch.sum(probs * pos_y.view(1,1, H, 1), dim=(1, 2))
+    expected_x = torch.sum(probs * pos_x.view(1,1, 1, W), dim=(2, 3))/W
+    expected_y = torch.sum(probs * pos_y.view(1,1, H, 1), dim=(2, 3))/H
     # reshape to (B, N, 2)
     return torch.stack([expected_x, expected_y], dim=-1)
 
