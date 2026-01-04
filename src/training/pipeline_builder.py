@@ -401,11 +401,11 @@ class PipelineBuilder:
         return optimizer
     
     def build_scheduler(self, optimizer: torch.optim.Optimizer, train_dataloader: DataLoader):
+        sample_count = len(train_dataloader.dataset)
+        steps_per_epoch = int(np.ceil(sample_count / train_dataloader.batch_size))
         if self.config.scheduler.type == 'one_cycle':
             if self.config.training.log:
                 print("Using One Cycle Learning Rate Scheduler")
-            sample_count = len(train_dataloader.dataset)
-            steps_per_epoch = int(np.ceil(sample_count / train_dataloader.batch_size))
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 optimizer,
                 max_lr=self.config.scheduler.max_lr,
@@ -429,9 +429,9 @@ class PipelineBuilder:
                 print("Using Warmup Stable Decay Learning Rate Scheduler")
             scheduler = WarmupStableDecayScheduler(
                 optimizer,
-                warmup_steps=self.config.scheduler.warmup_steps*150,
-                stable_steps=self.config.scheduler.stable_steps*150,
-                decay_steps=self.config.scheduler.decay_steps*150,
+                warmup_steps=self.config.scheduler.warmup_steps*steps_per_epoch,
+                stable_steps=self.config.scheduler.stable_steps*steps_per_epoch,
+                decay_steps=self.config.scheduler.decay_steps*steps_per_epoch,
             )
         else:
             raise ValueError(f"Scheduler type {self.config.scheduler.type} not supported.")
@@ -489,11 +489,11 @@ class PipelineBuilder:
         else:
             return None
         
-    def build_scheduled_sampling(self):
+    def build_scheduled_sampling(self, sample_count: int):
         if hasattr(self.config.training, 'use_scheduled_sampling') and self.config.training.use_scheduled_sampling:
             return ScheduledSampling(active_epochs = self.config.scheduled_sampling.active_epochs,
                                      device = self.device,
-                                     batch_size = 150,
+                                     batch_size = sample_count,
                                      warmup_epochs = self.config.scheduled_sampling.warmup_epochs,
                                      use_kv_cache = self.config.model.get('use_kv_cache', False))
         else:
