@@ -401,8 +401,7 @@ class PipelineBuilder:
         return optimizer
     
     def build_scheduler(self, optimizer: torch.optim.Optimizer, train_dataloader: DataLoader):
-        sample_count = len(train_dataloader.dataset)
-        steps_per_epoch = int(np.ceil(sample_count / train_dataloader.batch_size))
+        steps_per_epoch = len(train_dataloader)
         if self.config.scheduler.type == 'one_cycle':
             if self.config.training.log:
                 print("Using One Cycle Learning Rate Scheduler")
@@ -489,11 +488,11 @@ class PipelineBuilder:
         else:
             return None
         
-    def build_scheduled_sampling(self, sample_count: int):
+    def build_scheduled_sampling(self, steps_per_epoch: int):
         if hasattr(self.config.training, 'use_scheduled_sampling') and self.config.training.use_scheduled_sampling:
             return ScheduledSampling(active_epochs = self.config.scheduled_sampling.active_epochs,
                                      device = self.device,
-                                     batch_size = sample_count,
+                                     sample_count = steps_per_epoch,
                                      warmup_epochs = self.config.scheduled_sampling.warmup_epochs,
                                      use_kv_cache = self.config.model.get('use_kv_cache', False))
         else:
