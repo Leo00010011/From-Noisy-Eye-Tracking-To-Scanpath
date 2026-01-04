@@ -171,10 +171,14 @@ class PipelineBuilder:
 
     def log_split(self,train_subjects,val_subjects,test_subjects,train_stimuli,
                   val_stimuli,test_stimuli,train_idx,val_idx,test_idx,stimuli):
-        print(f""" 
-                Train subjects:  {train_subjects})
-                'Validation subjects:  {val_subjects}
-                'Test subjects:  {test_subjects}
+        if train_subjects is not None:
+            print(f""" 
+                    Train subjects:  {train_subjects})
+                    'Validation subjects:  {val_subjects}
+                    'Test subjects:  {test_subjects}
+                    """)
+        else:    
+            print(f""" 
                 'Stimuli Train set size:  {len(train_stimuli)}, ' percentage:  {len(train_stimuli)/len(stimuli)*100}
                 'Stimuli Validation set size:  {len(val_stimuli)}, ' percentage:  {len(val_stimuli)/len(stimuli)*100}
                 'Stimuli Test set size:  {len(test_stimuli)}, ' percentage:  {len(test_stimuli)/len(stimuli)*100}
@@ -210,6 +214,15 @@ class PipelineBuilder:
             if self.config.training.log:
                 self.log_split(train_subjects, val_subjects, test_subjects, train_stimuli, val_stimuli, 
                                test_stimuli, train_idx, val_idx, test_idx, stimuli)
+        elif hasattr(self.config.data, 'split_strategy') and self.config.data.split_strategy.name == 'stimuly_disjoint':
+            stimuli = self.data.get_all_stimuli()
+            train_stimuli, val_stimuli, test_stimuli = PipelineBuilder.split_data(stimuli, 
+                                                                                  [self.config.data.split_strategy.train_stimuli_per, 
+                                                                                   self.config.data.split_strategy.val_stimuli_per])
+            train_idx, val_idx, test_idx = self.data.get_stimuly_disjoint_splits(train_stimuli, val_stimuli, test_stimuli)
+            train_idx , val_idx , test_idx= torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx) 
+            if self.config.training.log:
+                self.log_split(None, None, None, train_stimuli, val_stimuli, test_stimuli, train_idx, val_idx, test_idx, stimuli)
         else:
             total_size = len(self.PathDataset)
             train_size = int(self.config.data.train_per * total_size)

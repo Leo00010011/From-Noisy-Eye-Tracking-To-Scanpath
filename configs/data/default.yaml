@@ -1,5 +1,5 @@
 defaults:
-  - split_strategy: disjoint
+  - split_strategy: stimuly_disjoint
   - _self_
 
 load:
