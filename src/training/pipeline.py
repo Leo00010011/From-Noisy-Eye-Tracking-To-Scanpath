@@ -30,7 +30,10 @@ def train(builder:PipelineBuilder):
         to_update_in_batch = []
         optimizer = builder.build_optimizer(model)
         scheduler = builder.build_scheduler(optimizer, train_dataloader)
-        to_update_in_batch.append(scheduler)
+        if builder.config.scheduler.batch_lr:
+            to_update_in_batch.append(scheduler)
+        else:
+            to_update_in_epoch.append(scheduler)
         loss_fn = builder.build_loss_fn()
         first_time = True
         metrics_storage = MetricsStorage(filepath=builder.config.training.metric_file, 
