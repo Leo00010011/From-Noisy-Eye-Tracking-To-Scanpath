@@ -416,9 +416,9 @@ class PipelineBuilder:
                 print("Using Warmup Stable Decay Learning Rate Scheduler")
             scheduler = WarmupStableDecayScheduler(
                 optimizer,
-                warmup_steps=self.config.scheduler.warmup_steps,
-                stable_steps=self.config.scheduler.stable_steps,
-                decay_steps=self.config.scheduler.decay_steps,
+                warmup_steps=self.config.scheduler.warmup_steps*80,
+                stable_steps=self.config.scheduler.stable_steps*80,
+                decay_steps=self.config.scheduler.decay_steps*80,
             )
         else:
             raise ValueError(f"Scheduler type {self.config.scheduler.type} not supported.")
