@@ -104,7 +104,7 @@ ckpt_path = [# os.path.join('outputs','2025-12-10','15-57-12'),
              # os.path.join('outputs','2025-12-28','11-30-12'),
              # os.path.join('outputs','2025-12-28','19-19-36'),
              # os.path.join('outputs','2025-12-30','19-13-05'),
-             os.path.join('outputs','2025-01-04','20-11-06'),
+             os.path.join('outputs','2026-01-04','20-11-06'),
              os.path.join('outputs','2026-01-04','18-48-31')
              ]
 
