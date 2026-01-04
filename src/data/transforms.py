@@ -304,6 +304,7 @@ class AddGaussianNoiseToFixations:
         y_clone[:2] += noise
         input['in_tgt'] = y_clone
         return input
+    
     def inverse(self, y, tgt_mask, key):
         return y
     
