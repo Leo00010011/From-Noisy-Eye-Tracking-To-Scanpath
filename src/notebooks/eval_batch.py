@@ -195,7 +195,7 @@ for i, ((model, _, test_dataloader, _), ckpt_path, name) in enumerate(zip(models
             print('No rope reg')
         current_model = {
             'checkpoint_path': ckpt_path,
-            'model_name': "val_{name}",
+            'model_name': f"val_{name}",
             'inputs': [],
             'outputs': [],
         }

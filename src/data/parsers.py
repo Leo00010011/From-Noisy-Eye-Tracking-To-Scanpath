@@ -114,8 +114,8 @@ class CocoFreeView:
                             train_stimuli, val_stimuli, test_stimuli):
         df = self.df
         train_df = df[df['subject'].isin(train_subjects) & df['name'].isin(train_stimuli)]
-        val_df = df[df['subject'].isin(val_subjects) | df['name'].isin(val_stimuli)]
-        test_df = df[(df['subject'].isin(test_subjects) | df['name'].isin(test_stimuli)) & ~df.index.isin(val_df.index)]
+        val_df = df[df['subject'].isin(val_subjects) & df['name'].isin(val_stimuli)]
+        test_df = df[(df['subject'].isin(test_subjects) & df['name'].isin(test_stimuli))]
         return train_df.index, val_df.index, test_df.index
 
 

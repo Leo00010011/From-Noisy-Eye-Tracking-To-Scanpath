@@ -169,15 +169,6 @@ class PipelineBuilder:
                 self.img_dataset.resize_size = load_config.img_size
                 self.img_dataset.runtime_transform = transform
 
-    def split_data(array, ratios):
-        indices = np.arange(len(array))
-        sub_count = len(array)
-        np.random.shuffle(indices)
-        train_array = array[indices[:int(ratios[0]*sub_count)]]
-        val_array = array[indices[int(ratios[0]*sub_count):int((ratios[0]+ratios[1])*sub_count)]]
-        test_array = array[indices[int((ratios[0]+ratios[1])*sub_count):]]
-        return train_array, val_array, test_array
-    
     def log_split(self,train_subjects,val_subjects,test_subjects,train_stimuli,
                   val_stimuli,test_stimuli,train_idx,val_idx,test_idx,stimuli):
         print(f""" 
@@ -191,6 +182,16 @@ class PipelineBuilder:
                 'Scanpath Validation set size:  {len(val_idx)}, ' percentage:  {len(val_idx)/len(self.PathDataset)*100}
                 'Scanpath Test set size:  {len(test_idx)}, ' percentage:  {len(test_idx)/len(self.PathDataset)*100}
                 """)
+        
+    def split_data(array, ratios):
+        indices = np.arange(len(array))
+        sub_count = len(array)
+        np.random.shuffle(indices)
+        train_array = array[indices[:int(ratios[0]*sub_count)]]
+        val_array = array[indices[int(ratios[0]*sub_count):int((ratios[0]+ratios[1])*sub_count)]]
+        test_array = array[indices[int((ratios[0]+ratios[1])*sub_count):]]
+        return train_array, val_array, test_array
+    
 
 
     def make_splits(self):
