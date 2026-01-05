@@ -224,6 +224,7 @@ class MixerModel(nn.Module):
             self.eye_decoder = _get_clones(eye_decoder_layer,n_eye_decoder)
             for mod in self.eye_decoder:
                 self.denoise_modules.append(mod)
+                
             
             if self.n_adapter > 0:
                 adapter_layer = TransformerEncoder(model_dim = model_dim,
@@ -237,7 +238,7 @@ class MixerModel(nn.Module):
                 self.adapter = _get_clones(adapter_layer,n_adapter) 
                 if self.norm_first:
                     self.adapter_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
-        
+                    
                 
         
         
@@ -260,7 +261,7 @@ class MixerModel(nn.Module):
             self.final_enc_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
             self.denoise_modules.append(self.final_enc_norm)
             self.final_fenh_norm_src = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
-            
+            self.denoise_modules.append(self.final_fenh_norm_src)
             self.final_fenh_norm_image = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
             self.denoise_modules.append(self.final_fenh_norm_image)
             if self.mixed_image_features:
@@ -449,9 +450,9 @@ class MixerModel(nn.Module):
             for mod in self.denoise_modules:
                 mod.requires_grad_(False)
         elif phase == 'Combined':
-            for mod in self.fixation_modules:
-                mod.requires_grad_(True)
             for mod in self.denoise_modules:
+                mod.requires_grad_(False)
+            for mod in self.fixation_modules:
                 mod.requires_grad_(True)
     
     def encode(self, src, image_src, src_mask, **kwargs):
