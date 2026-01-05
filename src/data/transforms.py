@@ -366,8 +366,8 @@ class AddHeatmaps:
         masked_rows = y_new[tgt_mask]
         masked_rows[:, :2] = coords
         y_new[tgt_mask] = masked_rows
-        y['reg'] = y_new
-        return y
+        return y_new
+    
     
     def __repr__(self):
         return f'AddHeatmaps'
