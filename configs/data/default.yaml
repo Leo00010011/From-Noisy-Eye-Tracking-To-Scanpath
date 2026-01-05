@@ -23,7 +23,7 @@ transforms:
 #                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration']
 # Add Gaussian Noise to Fixations
   transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
-                   'NormalizeCoords', 'NormalizeTime','AddGaussianNoiseToFixations', 'NormalizeFixationCoords', 'LogNormalizeDuration']
+                   'NormalizeCoords', 'NormalizeTime','AddGaussianNoiseToFixations', 'NormalizeFixationCoords', 'LogNormalizeDuration', 'GenerateHeatmaps']
 # Quantile Normalization of durations
 #  transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
 #                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'QuantileNormalizeDuration']                    
@@ -70,3 +70,7 @@ transforms:
     pkl_path: "quantile_transformer.pkl"
   AddGaussianNoiseToFixations:
     std: 16.0
+  GenerateHeatmaps:
+    image_H: 32
+    image_W: 32
+    sigma: 1.5

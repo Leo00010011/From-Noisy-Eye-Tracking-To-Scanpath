@@ -8,7 +8,7 @@ import numpy as np
 from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.data.parsers import CocoFreeView
 from src.data.transforms import (ExtractRandomPeriod, Normalize, StandarizeTime, LogNormalizeDuration,
-                                 AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise, SaveCleanX, QuantileNormalizeDuration, AddGaussianNoiseToFixations)
+                                 AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise, SaveCleanX, QuantileNormalizeDuration, AddGaussianNoiseToFixations, AddHeatmaps)
 from src.model.path_model import PathModel
 from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
@@ -132,6 +132,11 @@ class PipelineBuilder:
                 elif transform_str == 'AddGaussianNoiseToFixations':
                     transforms.append(AddGaussianNoiseToFixations(transform_config.get('std', 0)))
                     has_in_tgt = True
+                elif transform_str == 'GenerateHeatmaps':
+                    transforms.append(AddHeatmaps(image_size = (transform_config.get('image_H', 32), transform_config.get('image_W', 32)),                                                
+                                                  sigma = transform_config.get('sigma', 1.5),
+                                                  device = self.device,
+                                                  dtype = torch.float32))
                 else:
                     raise ValueError(f"Transform {transform_str} not supported.")
         else:
