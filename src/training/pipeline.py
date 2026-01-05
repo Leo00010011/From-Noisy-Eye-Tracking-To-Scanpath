@@ -24,6 +24,9 @@ def train(builder:PipelineBuilder):
         model = builder.build_model()
         if builder.config.training.log:
             print(model.param_summary())
+        if builder.config.model.pretrined_encoder_path is not None:
+            print(f"Loading encoder from {builder.config.model.pretrined_encoder_path}")
+            model.load_encoder(builder.config.model.pretrined_encoder_path)
         if builder.config.model.compilate:
             model = torch.compile(model, dynamic=True) 
         to_update_in_epoch = []
