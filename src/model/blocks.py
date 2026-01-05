@@ -573,3 +573,53 @@ class GatedFusion(nn.Module):
         output = self.dropout(output)
         
         return output
+    
+import torch
+import torch.nn as nn
+import math
+
+class TrajectoryHeatmapGenerator(nn.Module):
+    def __init__(self, embed_dim, feature_height, feature_width):
+        """
+        Args:
+            embed_dim (int): The feature dimension (F).
+            feature_height (int): The height of the feature map (H) coming from ViT.
+            feature_width (int): The width of the feature map (W) coming from ViT.
+        """
+        super().__init__()
+        self.H = feature_height
+        self.W = feature_width
+        self.embed_dim = embed_dim
+
+        self.up_conv = nn.ConvTranspose2d(
+            in_channels=embed_dim,
+            out_channels=embed_dim,
+            kernel_size=4,
+            stride=2,
+            padding=1
+        )
+        
+
+    def forward(self, image_features, trajectory_tokens):
+        """
+        Args:
+            image_features: Tensor of shape (B, 1 + H*W, F)
+            trajectory_tokens: Tensor of shape (B, L, F)
+
+        Returns:
+            heatmaps: Tensor of shape (B, L, 2*H * 2*W)
+        """
+        B, N,F = image_features.shape
+        _,L,_ = trajectory_tokens.shape
+        # Shape: (B, H*W, F)
+        spatial_tokens = image_features[:, 1:, :] 
+        # Shape: (B, F, H, W)
+        spatial_map = spatial_tokens.transpose(1, 2).reshape(B, F, self.H, self.W)
+        # Shape: (B, F, 2H, 2W)
+        upsampled_map = self.up_conv(spatial_map)
+        # Shape: (B, F, 4*H*W)
+        flat_upsampled_map = upsampled_map.view(B, F, -1)
+        # Shape: (B, L, 4*H*W)
+        heatmaps = torch.bmm(trajectory_tokens, flat_upsampled_map)
+        heatmaps = heatmaps.view(B, L, 2 * self.H, 2 * self.W)
+        return heatmaps   
