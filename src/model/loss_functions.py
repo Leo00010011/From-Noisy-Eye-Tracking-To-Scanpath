@@ -194,6 +194,12 @@ class PenaltyReducedFocalLoss(nn.Module):
         self.dur_func = dur_func
         self.dur_weight = dur_weight
 
+    def set_denoise_weight(self, denoise_weight: float):
+        return
+    
+    def summary(self):
+        print(f"PenaltyReducedFocalLoss: alpha={self.alpha}, beta={self.beta}, cls_weight={self.cls_weight}, dur_weight={self.dur_weight}, cls_func={self.cls_func.__name__}, dur_func={self.dur_func.__name__}")
+    
     def forward(self, input, output):
         """
         Args:
