@@ -390,7 +390,7 @@ class MixerModel(nn.Module):
             raise ValueError(f"Unsupported head_type: {head_type}")
         
         # DENOISE HEADS
-        if phases is not None and 'Denoise' in phases:
+        if phases is not None and ('Denoise' in phases or 'Combined' in phases):
             self.denoise_head = ResidualRegressor(model_dim, **factory_mode)
             # self.denoise_head =  MLP(model_dim,
             #                             mlp_head_hidden_dim,
@@ -417,7 +417,7 @@ class MixerModel(nn.Module):
         Loads only the parameters specified in encoder_keys_list from the checkpoint.
         """
         full_checkpoint = torch.load(checkpoint_path, map_location="cpu")
-        if "state_dict" in full_checkpoint:
+        if "model_state_dict" in full_checkpoint:
             full_checkpoint = full_checkpoint["state_dict"]
         encoder_state_dict = {
             k: v for k, v in full_checkpoint.items() 
