@@ -1,7 +1,7 @@
 import torch
 from src.training.weights_scheduler import WeightsScheduler
 from src.training.training_utils import ScheduledSampling, WarmupStableDecayScheduler
-from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction, DenoiseRegLoss
+from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction, DenoiseRegLoss, PenaltyReducedFocalLoss
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
 import numpy as np
@@ -462,6 +462,13 @@ class PipelineBuilder:
             loss_fn = CombinedLossFunction(denoise_loss = DenoiseRegLoss(STR_TO_LOSS_FUNC[self.config.loss.denoise_loss_type]),
                                          fixation_loss = self.build_loss_fn(primary_loss = self.config.loss.fixation_loss_type),
                                          denoise_weight = 0)
+        elif loss_type == 'focal_loss':
+            loss_fn = PenaltyReducedFocalLoss(alpha = self.config.loss.alpha,
+                                         beta = self.config.loss.beta,
+                                         cls_func = STR_TO_LOSS_FUNC[self.config.loss.cls_func],
+                                         cls_weight = self.config.loss.cls_weight,
+                                         dur_func = STR_TO_LOSS_FUNC[self.config.loss.dur_func],
+                                         dur_weight = self.config.loss.dur_weight)
         else:
             raise ValueError(f"Loss type {loss_type} not supported.")
         return loss_fn

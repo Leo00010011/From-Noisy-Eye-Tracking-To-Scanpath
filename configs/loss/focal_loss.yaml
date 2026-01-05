@@ -1,0 +1,7 @@
+type: "focal_loss"
+alpha: 2.0
+beta: 4.0
+cls_func: "bce_with_logits"
+cls_weight: 0.5
+dur_func: "l1"
+dur_weight: 0.5

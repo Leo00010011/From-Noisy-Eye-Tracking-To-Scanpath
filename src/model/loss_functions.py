@@ -170,48 +170,90 @@ class CombinedLossFunction(torch.nn.Module):
         # Build info dict only with relevant losses and subdicts
         return loss, info
     
-class SpatialFocalLossWithLogits(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
+class PenaltyReducedFocalLoss(nn.Module):
+    def __init__(self, alpha=2.0,
+                 beta=4.0,
+                 cls_func = torch.nn.functional.binary_cross_entropy_with_logits,
+                 cls_weight = 0.5,
+                 dur_func = torch.nn.functional.l1_loss,
+                 dur_weight = 0.5):
         """
+        Implementation of Eq (4) from the image.
+        
         Args:
-            alpha (float): Weighting factor for the rare class (the target pixel).
-            gamma (float): Focusing parameter. Higher values reduce loss for easy examples.
+            alpha (float): Power factor for the prediction error (focal term).
+            beta (float): Power factor for the distance from ground truth center.
+                          Higher beta = less penalty for near-misses.
+            reduction (str): 'mean' (divides by HW as in paper) or 'sum'.
         """
         super().__init__()
         self.alpha = alpha
-        self.gamma = gamma
-        self.reduction = reduction
+        self.beta = beta
+        self.cls_func = cls_func
+        self.cls_weight = cls_weight
+        self.dur_func = dur_func
+        self.dur_weight = dur_weight
 
-    def forward(self, logits, targets):
+    def forward(self, input, output):
         """
         Args:
-            logits: (B, L, Num_Pixels) - Raw output from the model.
-            targets: (B, L) - Flattened indices of the ground truth locations.
-                              Values should be in range [0, Num_Pixels - 1].
+            logits: (B, C, H, W) or (B, L, H*W) - Raw model outputs (before Sigmoid).
+            targets: (B, C, H, W) or (B, L, H*W) - Ground truth Gaussian heatmap.
+                     IMPORTANT: Peaks must be exactly 1.0. Values in [0, 1].
+        
+        Returns:
+            loss: Scalar loss
         """
-        # 1. Compute Log Softmax for numerical stability
-        # log_pt shape: (B, L, Num_Pixels)
-        log_probs = F.log_softmax(logits, dim=-1)
+        logits = output['heatmaps']
+        targets = input['heatmaps']
+        dur_out = output['dur']
+        cls_out = output['cls']
+        y = input['tgt']
+        attn_mask = input['tgt_mask']
+        fixation_len = input['fixation_len']
+        device = logits.device
         
-        # 2. Gather the log_prob of the true target class
-        # We look up the value at the target index for each step in the sequence
-        # targets.unsqueeze(-1) shape: (B, L, 1)
-        target_log_probs = log_probs.gather(dim=-1, index=targets.unsqueeze(-1))
+      
         
-        # Remove the extra dim -> (B, L)
-        target_log_probs = target_log_probs.squeeze(-1)
+        if attn_mask is None:
+            print("No attention mask provided")
+            attn_mask = torch.ones(cls_out.size()[:-1], dtype = torch.bool, device = device)
+        # >>>>>> Classification loss
+        weights = create_weights(fixation_len, attn_mask, device)
+        cls_targets = create_cls_targets(cls_out, fixation_len, device)
+        cls_loss = self.cls_func(cls_out[attn_mask], cls_targets[attn_mask], weight=weights[attn_mask])
         
-        # 3. Compute Pt (Probability of true class)
-        pt = torch.exp(target_log_probs)
+        attn_mask = attn_mask.unsqueeze(-1)
+        attn_mask = attn_mask[:,1:,:]
+        dur_loss = self.dur_func(dur_out[:,:-1,:][attn_mask], y[:,:,2:][attn_mask])
         
-        # 4. Focal Loss Formula
-        # Loss = -alpha * (1 - pt)^gamma * log(pt)
-        focal_term = (1 - pt) ** self.gamma
-        loss = -self.alpha * focal_term * target_log_probs
+        attn_mask = attn_mask.squeeze(-1)
+        logits = logits[:,:-1,:][attn_mask]
+        targets = targets[:,:-1,:][attn_mask]
+        preds = torch.sigmoid(logits)
+        preds = torch.clamp(preds, min=1e-4, max=1 - 1e-4)
 
-        if self.reduction == 'mean':
-            return loss.mean()
-        elif self.reduction == 'sum':
-            return loss.sum()
-        return loss
-    
+        epsilon = 2e-1
+        pos_inds = (targets >= (1.0 - epsilon)).float()
+        neg_inds = 1 - pos_inds
+        pos_loss = torch.log(preds) * torch.pow(1 - preds, self.alpha) * pos_inds
+
+        neg_loss = torch.log(1 - preds) * torch.pow(preds, self.alpha) * \
+                   torch.pow(1 - targets, self.beta) * neg_inds
+
+        num_pixels = preds.numel() # H * W * B ...
+        
+        coord_loss = 0
+        coord_loss = coord_loss - (pos_loss + neg_loss).sum()
+        coord_loss = coord_loss / num_pixels
+        
+        reg_loss = self.dur_weight * dur_loss + (1 - self.dur_weight) * coord_loss
+        total_loss = self.cls_weight * cls_loss + (1 - self.cls_weight) * reg_loss
+        info = {
+            'cls_loss': float(cls_loss.item()),
+            'coord_loss': float(coord_loss.item()),
+            'dur_loss': float(dur_loss.item()),
+            'total_loss': float(total_loss.item()),
+        }
+        return total_loss, info
+        

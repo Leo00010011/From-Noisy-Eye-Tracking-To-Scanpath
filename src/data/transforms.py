@@ -312,7 +312,7 @@ class AddGaussianNoiseToFixations:
 
 
 class AddHeatmaps:
-    def __init__(self, sigma=5.0, image_size=(32, 32), device = 'cpu', dtype = torch.float32):
+    def __init__(self, sigma=1.0, image_size=(32, 32), device = 'cpu', dtype = torch.float32):
         self.sigma = sigma
         self.key = 'y'
         self.modify_y = True
@@ -323,9 +323,9 @@ class AddHeatmaps:
         height, width = image_size
         self.pos_x = torch.arange(width, **factory_kwargs)
         self.pos_y = torch.arange(height, **factory_kwargs)
-        xx, yy = torch.meshgrid(self.pos_y, self.pos_x, indexing='ij')
-        self.xx = self.xx.unsqueeze(0).to(device, dtype)
-        self.yy = self.yy.unsqueeze(0).to(device, dtype)
+        yy, xx = torch.meshgrid(self.pos_y, self.pos_x, indexing='ij')
+        self.xx = xx.unsqueeze(0).to(device, dtype)
+        self.yy = yy.unsqueeze(0).to(device, dtype)
         
     def generate_gaussian_heatmaps(self, coords):
         num_points = coords.shape[0]
@@ -336,12 +336,12 @@ class AddHeatmaps:
         return heatmaps
     
     def get_coords_from_heatmaps(self, heatmaps):
-        B, N, H, W = heatmaps.shape
-        probs = heatmaps.view(B, N, -1)
-        probs = probs / (probs.sum(dim=2, keepdim=True) + 1e-6) # +epsilon for stability
-        probs = probs.view(B, N, H, W)
-        expected_x = torch.sum(probs * self.pos_x.view(1,1, 1, W), dim=(2, 3))/W
-        expected_y = torch.sum(probs * self.pos_y.view(1,1, H, 1), dim=(2, 3))/H
+        N, H, W = heatmaps.shape
+        probs = heatmaps.view(N, -1)
+        probs = probs / (probs.sum(dim=1, keepdim=True) + 1e-6) # +epsilon for stability
+        probs = probs.view(N, H, W)
+        expected_x = torch.sum(probs * self.pos_x.view(1, 1, W), dim=(1, 2))/W
+        expected_y = torch.sum(probs * self.pos_y.view(1, H, 1), dim=(1, 2))/H
         return torch.stack([expected_x, expected_y], dim=-1)
         
     def __call__(self, input):
@@ -351,15 +351,19 @@ class AddHeatmaps:
         return input
     
     def inverse(self, y, tgt_mask, key):
-        # shape (B,L,H,W) -> (N,H,W)
         heatmaps = y['heatmaps']
+        print(heatmaps.shape)
         B,L,_,_ = heatmaps.shape
+        # shape (B,L,H,W) -> (N,H,W)
         heatmaps = heatmaps[tgt_mask]
-        coords = get_coords_from_heatmaps(heatmaps)
+        coords = self.get_coords_from_heatmaps(heatmaps)
+        print(coords.shape)
         # new output
-        y_new = torch.fill((B,L,3), PAD_TOKEN_ID)
-        y_new[tgt_mask,:2] = coords
-        y_new[tgt_mask,2] = y['dur']
+        y_new = torch.full((B,L,3),fill_value =  PAD_TOKEN_ID, device = heatmaps.device, dtype = heatmaps.dtype)
+        print(y_new.shape)
+        masked_rows = y_new[tgt_mask]
+        masked_rows[:, :2] = coords
+        y_new[tgt_mask] = masked_rows
         y['reg'] = y_new
         return y
     

@@ -266,6 +266,8 @@ class FreeViewInMemory(Dataset):
             output['clean_x'] = input['clean_x']
         if 'in_tgt' in input:
             output['in_tgt'] = input['in_tgt']
+        if 'heatmaps' in input:
+            output['heatmaps'] = input['heatmaps']
         return output
     
 
@@ -307,6 +309,14 @@ def seq2seq_padded_collate_fn(batch):
             padding_value=PAD_TOKEN_ID
         )   
         output['in_tgt'] = padded_in_tgt
+    if 'heatmaps' in batch[0]:
+        heatmaps_sequences = [item['heatmaps'] for item in batch]
+        padded_heatmaps = torch.nn.utils.rnn.pad_sequence(
+            heatmaps_sequences, 
+            batch_first=True, 
+            padding_value=PAD_TOKEN_ID
+        )   
+        output['heatmaps'] = padded_heatmaps
 
     
     padded_inputs = torch.nn.utils.rnn.pad_sequence(
