@@ -649,10 +649,12 @@ class MixerModel(nn.Module):
             return {'heatmaps': heatmaps, 'dur': dur_out, 'cls': cls_out}
         
     def decode_denoise(self, **kwargs):
-        src = self.src
-        
-        output = self.denoise_head(src, **kwargs)
-        return {'denoise': output}
+        if hasattr(self, 'denoise_head'):
+            src = self.src
+            output = self.denoise_head(src, **kwargs)
+            return {'denoise': output}
+        else:
+            return {}
         
     def set_scheduled_sampling(self, scheduled_sampling):
         self.scheduled_sampling = scheduled_sampling
