@@ -38,7 +38,7 @@ training:
     decisive_metric: ${training.decisive_metric}
     epochs: 40
 loss:
-#  complex_type: "combined"
+  complex_type: "combined"
   denoise_loss_type: "l1"
   fixation_loss_type: "separate_reg"
 scheduled_sampling:
