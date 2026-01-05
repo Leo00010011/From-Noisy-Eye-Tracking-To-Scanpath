@@ -353,6 +353,8 @@ class AddHeatmaps:
         return input
     
     def inverse(self, y, tgt_mask, key):
+        if not isinstance(y, dict):
+            return y
         heatmaps = y['heatmaps']
         B,L,_,_ = heatmaps.shape
         tgt_mask = tgt_mask.squeeze(-1)
