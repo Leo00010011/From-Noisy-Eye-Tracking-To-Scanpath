@@ -236,8 +236,11 @@ class MixerModel(nn.Module):
                                            norm_first= norm_first,
                                            **factory_mode)
                 self.adapter = _get_clones(adapter_layer,n_adapter) 
+                for mod in self.adapter:
+                    self.fixation_modules.append(mod)
                 if self.norm_first:
                     self.adapter_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
+                    self.fixation_modules.append(self.adapter_norm)
                     
                 
         
@@ -451,7 +454,7 @@ class MixerModel(nn.Module):
                 mod.requires_grad_(False)
         elif phase == 'Combined':
             for mod in self.denoise_modules:
-                mod.requires_grad_(False)
+                mod.requires_grad_(True)
             for mod in self.fixation_modules:
                 mod.requires_grad_(True)
     
