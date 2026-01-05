@@ -357,7 +357,7 @@ class AddHeatmaps:
         print(heatmaps.shape)
         B,L,_,_ = heatmaps.shape
         # shape (B,L,H,W) -> (N,H,W)
-        heatmaps = heatmaps[tgt_mask]
+        heatmaps = heatmaps[tgt_mask.squeeze(-1)]
         coords = self.get_coords_from_heatmaps(heatmaps)
         print(coords.shape)
         # new output
