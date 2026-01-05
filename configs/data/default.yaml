@@ -23,7 +23,7 @@ transforms:
 #                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration']
 # Add Gaussian Noise to Fixations
   transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
-                   'NormalizeCoords', 'NormalizeTime','AddGaussianNoiseToFixations', 'NormalizeFixationCoords', 'LogNormalizeDuration', 'GenerateHeatmaps']
+                   'NormalizeCoords', 'NormalizeTime','AddGaussianNoiseToFixations', 'NormalizeFixationCoords', 'LogNormalizeDuration']
 # Quantile Normalization of durations
 #  transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
 #                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'QuantileNormalizeDuration']                    
