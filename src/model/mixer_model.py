@@ -418,7 +418,7 @@ class MixerModel(nn.Module):
         """
         full_checkpoint = torch.load(checkpoint_path, map_location="cpu")
         if "model_state_dict" in full_checkpoint:
-            full_checkpoint = full_checkpoint["state_dict"]
+            full_checkpoint = full_checkpoint["model_state_dict"]
         encoder_state_dict = {
             k: v for k, v in full_checkpoint.items() 
             if any(block_name in k for block_name in encoder_keys)
