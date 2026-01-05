@@ -354,15 +354,13 @@ class AddHeatmaps:
     
     def inverse(self, y, tgt_mask, key):
         heatmaps = y['heatmaps']
-        print(heatmaps.shape)
         B,L,_,_ = heatmaps.shape
+        tgt_mask = tgt_mask.squeeze(-1)
         # shape (B,L,H,W) -> (N,H,W)
-        heatmaps = heatmaps[tgt_mask.squeeze(-1)]
+        heatmaps = heatmaps[tgt_mask]
         coords = self.get_coords_from_heatmaps(heatmaps)
-        print(coords.shape)
         # new output
         y_new = torch.full((B,L,3),fill_value =  PAD_TOKEN_ID, device = heatmaps.device, dtype = heatmaps.dtype)
-        print(y_new.shape)
         masked_rows = y_new[tgt_mask]
         masked_rows[:, :2] = coords
         y_new[tgt_mask] = masked_rows
