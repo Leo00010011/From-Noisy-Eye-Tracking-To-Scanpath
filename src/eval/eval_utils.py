@@ -143,7 +143,7 @@ def invert_transforms(inputs, outputs, dataloader, remove_outliers = False):
     else:
         transforms = dataloader.dataset.dataset.transforms
         
-    if 'coord' in outputs or 'reg' in outputs:
+    if 'coord' in outputs or 'reg' in outputs or 'heatmaps' in outputs:
         inputs, outputs = invert_transforms_fixations(inputs, outputs, transforms, remove_outliers)
     if 'denoise' in outputs:
         inputs, outputs = invert_transforms_clean_x(inputs, outputs, transforms)
