@@ -1,4 +1,6 @@
 import torch
+import torch.nn.functional as F
+import torch.nn as nn
 
 def create_weights(fixation_len, attn_mask, device):
     weights = torch.ones(attn_mask.size(), dtype = torch.float32, device = device)
@@ -168,6 +170,48 @@ class CombinedLossFunction(torch.nn.Module):
         # Build info dict only with relevant losses and subdicts
         return loss, info
     
+class SpatialFocalLossWithLogits(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
+        """
+        Args:
+            alpha (float): Weighting factor for the rare class (the target pixel).
+            gamma (float): Focusing parameter. Higher values reduce loss for easy examples.
+        """
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
 
-    
+    def forward(self, logits, targets):
+        """
+        Args:
+            logits: (B, L, Num_Pixels) - Raw output from the model.
+            targets: (B, L) - Flattened indices of the ground truth locations.
+                              Values should be in range [0, Num_Pixels - 1].
+        """
+        # 1. Compute Log Softmax for numerical stability
+        # log_pt shape: (B, L, Num_Pixels)
+        log_probs = F.log_softmax(logits, dim=-1)
+        
+        # 2. Gather the log_prob of the true target class
+        # We look up the value at the target index for each step in the sequence
+        # targets.unsqueeze(-1) shape: (B, L, 1)
+        target_log_probs = log_probs.gather(dim=-1, index=targets.unsqueeze(-1))
+        
+        # Remove the extra dim -> (B, L)
+        target_log_probs = target_log_probs.squeeze(-1)
+        
+        # 3. Compute Pt (Probability of true class)
+        pt = torch.exp(target_log_probs)
+        
+        # 4. Focal Loss Formula
+        # Loss = -alpha * (1 - pt)^gamma * log(pt)
+        focal_term = (1 - pt) ** self.gamma
+        loss = -self.alpha * focal_term * target_log_probs
+
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        return loss
     

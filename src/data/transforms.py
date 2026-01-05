@@ -308,44 +308,45 @@ class AddGaussianNoiseToFixations:
     def inverse(self, y, tgt_mask, key):
         return y
     
-def generate_gaussian_heatmaps(coords, image_size, sigma=5.0):
-    height, width = image_size
-    num_points = coords.shape[0]
-    x = torch.arange(width)
-    y = torch.arange(height)
-    yy, xx = torch.meshgrid(y, x, indexing='ij')
-    xx = xx.unsqueeze(0) 
-    yy = yy.unsqueeze(0) 
-    target_x = coords[:, 0].view(num_points, 1, 1)*image_size[0]
-    target_y = coords[:, 1].view(num_points, 1, 1)*image_size[1]
-    dist_sq = (xx - target_x)**2 + (yy - target_y)**2
-    heatmaps = torch.exp(-dist_sq / (2 * sigma**2))
-    return heatmaps
 
-def get_coords_from_heatmaps(heatmaps):
-    B, N, H, W = heatmaps.shape
-    device = heatmaps.device
-    pos_x = torch.arange(W, device=device).float()
-    pos_y = torch.arange(H, device=device).float()
-    probs = heatmaps.view(B, N, -1)
-    probs = probs / (probs.sum(dim=2, keepdim=True) + 1e-6) # +epsilon for stability
-    probs = probs.view(B, N, H, W)
-    expected_x = torch.sum(probs * pos_x.view(1,1, 1, W), dim=(2, 3))/W
-    expected_y = torch.sum(probs * pos_y.view(1,1, H, 1), dim=(2, 3))/H
-    # reshape to (B, N, 2)
-    return torch.stack([expected_x, expected_y], dim=-1)
 
 
 class AddHeatmaps:
-    def __init__(self, sigma=5.0, image_size=(32, 32)):
+    def __init__(self, sigma=5.0, image_size=(32, 32), device = 'cpu', dtype = torch.float32):
         self.sigma = sigma
         self.key = 'y'
         self.modify_y = True
         self.image_size = image_size
+        self.device = device
+        self.dtype = dtype
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        height, width = image_size
+        self.pos_x = torch.arange(width, **factory_kwargs)
+        self.pos_y = torch.arange(height, **factory_kwargs)
+        xx, yy = torch.meshgrid(self.pos_y, self.pos_x, indexing='ij')
+        self.xx = self.xx.unsqueeze(0).to(device, dtype)
+        self.yy = self.yy.unsqueeze(0).to(device, dtype)
+        
+    def generate_gaussian_heatmaps(self, coords):
+        num_points = coords.shape[0]
+        target_x = coords[:, 0].view(num_points, 1, 1)*self.image_size[0]
+        target_y = coords[:, 1].view(num_points, 1, 1)*self.image_size[1]
+        dist_sq = (self.xx - target_x)**2 + (self.yy - target_y)**2
+        heatmaps = torch.exp(-dist_sq / (2 * self.sigma**2))
+        return heatmaps
+    
+    def get_coords_from_heatmaps(self, heatmaps):
+        B, N, H, W = heatmaps.shape
+        probs = heatmaps.view(B, N, -1)
+        probs = probs / (probs.sum(dim=2, keepdim=True) + 1e-6) # +epsilon for stability
+        probs = probs.view(B, N, H, W)
+        expected_x = torch.sum(probs * self.pos_x.view(1,1, 1, W), dim=(2, 3))/W
+        expected_y = torch.sum(probs * self.pos_y.view(1,1, H, 1), dim=(2, 3))/H
+        return torch.stack([expected_x, expected_y], dim=-1)
         
     def __call__(self, input):
         y = input['y']
-        heatmaps = generate_gaussian_heatmaps(y, self.image_size, self.sigma)
+        heatmaps = self.generate_gaussian_heatmaps(y)
         input['heatmaps'] = heatmaps
         return input
     
