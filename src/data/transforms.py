@@ -328,6 +328,7 @@ class AddHeatmaps:
         self.yy = yy.unsqueeze(0).to(device, dtype)
         
     def generate_gaussian_heatmaps(self, coords):
+        coords = torch.from_numpy(coords).to(self.device, self.dtype)
         num_points = coords.shape[0]
         target_x = coords[:, 0].view(num_points, 1, 1)*self.image_size[0]
         target_y = coords[:, 1].view(num_points, 1, 1)*self.image_size[1]
