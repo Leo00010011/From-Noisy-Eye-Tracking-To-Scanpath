@@ -2,7 +2,7 @@ defaults:
   - scheduler: multistep_lr
   - data: default
   - model: mixer_model
-  - loss: separated_loss
+  - loss: focal_loss
   - _self_
 
 training:
