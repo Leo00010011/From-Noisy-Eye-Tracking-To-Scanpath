@@ -155,6 +155,9 @@ class MixerModel(nn.Module):
             self.pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
             self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
             self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
+            self.denoise_modules.append(self.pos_proj)
+            self.denoise_modules.append(self.time_proj)
+            self.denoise_modules.append(self.dur_proj)
         else:
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         
@@ -394,6 +397,40 @@ class MixerModel(nn.Module):
             #                             2,
             #                             **factory_mode)
             self.denoise_modules.append(self.denoise_head)
+
+    def get_key_name(self, model, module_list):
+        # 1. Create a set of object IDs for your target list for O(1) lookup
+        target_ids = {id(m) for m in module_list}
+        found_names = []
+
+        # 2. Iterate through every named module in the model
+        for name, module in model.named_modules():
+            # 3. Check if the current module's ID is in our target list
+            if id(module) in target_ids:
+                found_names.append(name)
+                
+        return found_names
+    
+    def load_encoder(self, checkpoint_path):
+        encoder_keys = self.get_key_name(self, self.denoise_modules)
+        """
+        Loads only the parameters specified in encoder_keys_list from the checkpoint.
+        """
+        full_checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        if "state_dict" in full_checkpoint:
+            full_checkpoint = full_checkpoint["state_dict"]
+        encoder_state_dict = {
+            k: v for k, v in full_checkpoint.items() 
+            if any(block_name in k for block_name in encoder_keys)
+        }
+
+        missing_keys, unexpected_keys = self.load_state_dict(encoder_state_dict, strict=False)
+
+        print(f"✅ Loaded {len(encoder_state_dict)} encoder layers.")
+        
+        for expected_key in encoder_keys:
+            if any(expected_key in k for k in missing_keys):
+                print(f"⚠️ Warning: Expected block '{expected_key}' was NOT loaded.")
 
     def clear_kv_cache(self):
         for mod in self.decoder:
