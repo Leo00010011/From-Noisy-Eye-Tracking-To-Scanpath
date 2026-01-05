@@ -235,7 +235,7 @@ class PenaltyReducedFocalLoss(nn.Module):
         
         attn_mask = attn_mask.squeeze(-1)
         logits = logits[:,:-1,:][attn_mask]
-        targets = targets[:,:-1,:][attn_mask]
+        targets = targets[attn_mask]
         preds = torch.sigmoid(logits)
         preds = torch.clamp(preds, min=1e-4, max=1 - 1e-4)
 
