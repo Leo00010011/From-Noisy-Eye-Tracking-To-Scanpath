@@ -156,8 +156,11 @@ class MixerModel(nn.Module):
             self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
             self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
             self.denoise_modules.append(self.pos_proj)
+            self.fixation_modules.append(self.pos_proj)
             self.denoise_modules.append(self.time_proj)
+            self.fixation_modules.append(self.time_proj)
             self.denoise_modules.append(self.dur_proj)
+            self.fixation_modules.append(self.dur_proj)
         else:
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         
@@ -480,15 +483,15 @@ class MixerModel(nn.Module):
     def set_phase(self, phase):
         self.phase = phase
         if phase == 'Denoise':
-            for mod in self.denoise_modules:
-                mod.requires_grad_(True)
             for mod in self.fixation_modules:
                 mod.requires_grad_(False)
+            for mod in self.denoise_modules:
+                mod.requires_grad_(True)
         elif phase == 'Fixation':
-            for mod in self.fixation_modules:
-                mod.requires_grad_(True)
             for mod in self.denoise_modules:
                 mod.requires_grad_(False)
+            for mod in self.fixation_modules:
+                mod.requires_grad_(True)
         elif phase == 'Combined':
             for mod in self.denoise_modules:
                 mod.requires_grad_(True)
