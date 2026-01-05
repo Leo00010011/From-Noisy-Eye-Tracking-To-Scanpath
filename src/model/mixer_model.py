@@ -3,7 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import copy
 import numpy as np
-from src.model.blocks import TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer, ArgMaxRegressor, LearnableCoordinateDropout, ResidualRegressor, GatedFusion, TransformerDecoder
+from src.model.blocks import (TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer, ArgMaxRegressor,
+                              LearnableCoordinateDropout, ResidualRegressor, GatedFusion, TransformerDecoder,
+                              TrajectoryHeatmapGenerator)
 from src.model.pos_encoders import PositionalEncoding, GaussianFourierPosEncoder, FourierPosEncoder
 from src.model.rope_positional_embeddings import RopePositionEmbedding
 
@@ -359,6 +361,24 @@ class MixerModel(nn.Module):
             self.fixation_modules.append(self.argmax_regressor)
             self.fixation_modules.append(self.dur_head)
             self.fixation_modules.append(self.end_head)
+        elif head_type == 'heatmap':
+            self.trajectory_heatmap_generator = TrajectoryHeatmapGenerator(model_dim,
+                                                                           self.patch_resolution[0],
+                                                                           self.patch_resolution[1],
+                                                                           **factory_mode)
+            self.dur_head = MLP(model_dim,
+                                           mlp_head_hidden_dim,
+                                           1,
+                                           **factory_mode)
+            
+            self.end_head = MLP(model_dim,
+                                     mlp_head_hidden_dim,
+                                     1,
+                                     hidden_dropout_p = end_dropout,
+                                     **factory_mode)
+            self.fixation_modules.append(self.trajectory_heatmap_generator)
+            self.fixation_modules.append(self.dur_head)
+            self.fixation_modules.append(self.end_head)
         else:
             raise ValueError(f"Unsupported head_type: {head_type}")
         
@@ -622,6 +642,11 @@ class MixerModel(nn.Module):
             dur_out = self.dur_head(output)
             cls_out = self.end_head(output)
             return {'start': start_out, 'coord': coord_out, 'dur': dur_out, 'cls': cls_out}
+        elif self.head_type == 'heatmap':
+            heatmaps = self.trajectory_heatmap_generator(image_src, output)
+            dur_out = self.dur_head(output)
+            cls_out = self.end_head(output)
+            return {'heatmaps': heatmaps, 'dur': dur_out, 'cls': cls_out}
         
     def decode_denoise(self, **kwargs):
         src = self.src

@@ -573,13 +573,9 @@ class GatedFusion(nn.Module):
         output = self.dropout(output)
         
         return output
-    
-import torch
-import torch.nn as nn
-import math
 
 class TrajectoryHeatmapGenerator(nn.Module):
-    def __init__(self, embed_dim, feature_height, feature_width):
+    def __init__(self, embed_dim, feature_height, feature_width, device='cpu', dtype=torch.float32):
         """
         Args:
             embed_dim (int): The feature dimension (F).
@@ -590,13 +586,14 @@ class TrajectoryHeatmapGenerator(nn.Module):
         self.H = feature_height
         self.W = feature_width
         self.embed_dim = embed_dim
-
+        factory_kwargs = {'device': device, 'dtype': dtype}
         self.up_conv = nn.ConvTranspose2d(
             in_channels=embed_dim,
             out_channels=embed_dim,
             kernel_size=4,
             stride=2,
-            padding=1
+            padding=1,
+            **factory_kwargs
         )
         
 
