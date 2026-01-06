@@ -100,8 +100,6 @@ class GaussianFourierPosEncoder(nn.Module):
         # x shape: (Batch, Seq_Len, Input_Dim)
         # 1. Project input: (2*pi*x) * B
         x = x.unsqueeze(-1)
-        print(x.shape)
-        print(self.B.shape)
         # (B, L, input_dim,1) * (input_dim, mapping_size) -> (B, L, mapping_size)
         if self.input_dim == 1:
             projected = (2 * torch.pi * x) * self.B
@@ -115,5 +113,4 @@ class GaussianFourierPosEncoder(nn.Module):
         return self.mlp(x_proj)
     
     def forward_features(self):
-        print('HERE forward features')
         return self.forward(self.coords)
