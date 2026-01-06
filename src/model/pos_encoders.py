@@ -75,7 +75,7 @@ class GaussianFourierPosEncoder(nn.Module):
         if input_encoder == 'sharded_gaussian' or input_encoder == 'shared_gaussian_base':
             coords = torch.arange(.5,patch_size)/patch_size
             ii,jj = torch.meshgrid(coords,coords, indexing = 'xy')
-            self.coords = torch.stack([ii,jj], dim = -1).flatten(start_dim=1)
+            self.coords = torch.stack([ii,jj], dim = -1).flatten(start_dim=0, end_dim=1)
         if base is not None:
             B = base
         elif input_dim == 1:
