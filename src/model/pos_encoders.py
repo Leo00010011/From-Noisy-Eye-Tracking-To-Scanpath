@@ -61,7 +61,7 @@ class FourierPosEncoder(nn.Module):
         return self.mlp(x_flat)
     
 class GaussianFourierPosEncoder(nn.Module):
-    def __init__(self, input_dim, mapping_size, hidden_dim, output_dim, sigma=1.0 , input_encoder = 'fourier', patch_size = 16, device='cpu', dtype=torch.float32):
+    def __init__(self, input_dim, mapping_size, hidden_dim, output_dim, sigma=1.0 , input_encoder = 'fourier', patch_size = 16,base = None,  device='cpu', dtype=torch.float32):
         """
         Args:
             mapping_size: Number of random Fourier features (output will be input_dim * mapping_size * 2).
@@ -79,7 +79,9 @@ class GaussianFourierPosEncoder(nn.Module):
         # 1. Create the random matrix B *once*
         # We sample from a Normal distribution N(0, sigma^2)
         # Size: [input_dim, mapping_size]
-        if input_dim == 1:
+        if base is not None:
+            B = base
+        elif input_dim == 1:
             B = torch.randn((mapping_size), device=device, dtype=dtype) * sigma
         else:
             B = torch.randn((input_dim, mapping_size), device=device, dtype=dtype) * sigma

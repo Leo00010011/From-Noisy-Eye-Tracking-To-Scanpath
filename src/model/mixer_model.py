@@ -161,6 +161,17 @@ class MixerModel(nn.Module):
             self.fixation_modules.append(self.time_proj)
             self.denoise_modules.append(self.dur_proj)
             self.fixation_modules.append(self.dur_proj)
+        elif input_encoder == "shared_gaussian_base":
+            self.eye_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
+            self.fix_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,base = self.eye_pos_proj.B,**factory_mode)
+            self.img_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,base = self.eye_pos_proj.B,**factory_mode)
+            self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
+            self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
+            self.denoise_modules.append(self.eye_pos_proj)
+            self.denoise_modules.append(self.time_proj)
+            self.fixation_modules.append(self.fix_pos_proj)
+            self.fixation_modules.append(self.img_pos_proj)
+            self.fixation_modules.append(self.dur_proj)
         else:
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         
@@ -519,6 +530,12 @@ class MixerModel(nn.Module):
             enc_coords = self.pos_proj(enc_coords)
             enc_time = self.time_proj(enc_time)
             src = enc_coords + enc_time
+        elif self.input_encoder == 'shared_gaussian_base':
+            enc_coords = src[:,:,:2]
+            enc_time = src[:,:,2]
+            enc_coords = self.eye_pos_proj(enc_coords)
+            enc_time = self.time_proj(enc_time)
+            src = enc_coords + enc_time
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
         
@@ -544,6 +561,10 @@ class MixerModel(nn.Module):
             if self.input_encoder == 'sharded_gaussian':
                 # pos_enc [1,H*W,model_dim]
                 pos_enc = self.pos_proj.forward_features().unsqueeze(0)
+                prefix = image_src.size(1) - pos_enc.shape[0]
+                image_src[:,prefix:,:] = image_src[:,prefix:,:] + pos_enc
+            elif self.input_encoder == 'shared_gaussian_base':
+                pos_enc = self.img_pos_proj.forward_features().unsqueeze(0)
                 prefix = image_src.size(1) - pos_enc.shape[0]
                 image_src[:,prefix:,:] = image_src[:,prefix:,:] + pos_enc
 
@@ -621,6 +642,12 @@ class MixerModel(nn.Module):
                 dec_coords = tgt[:,:,:2]
                 dec_dur = tgt[:,:,2]
                 dec_coords = self.pos_proj(dec_coords)
+                dec_dur = self.dur_proj(dec_dur)
+                tgt = dec_coords + dec_dur
+            elif self.input_encoder == 'shared_gaussian_base':
+                dec_coords = tgt[:,:,:2]
+                dec_dur = tgt[:,:,2]
+                dec_coords = self.fix_pos_proj(dec_coords)
                 dec_dur = self.dur_proj(dec_dur)
                 tgt = dec_coords + dec_dur
             else:
