@@ -203,18 +203,18 @@ class MixerModel(nn.Module):
                                                       rescale_coords  = image_encoder.model.rope_embed.rescale_coords ,
                                                       **factory_mode)
         # ENCODER
-        
-        path_layer = TransformerEncoder(model_dim = model_dim,
-                                           total_dim = total_dim,
-                                           n_heads = n_heads,
-                                           ff_dim = ff_dim,
-                                           dropout_p = eye_encoder_dropout,
-                                           activation= activation,
-                                           norm_first= norm_first,
-                                           **factory_mode)
-        self.path_encoder = _get_clones(path_layer,n_encoder) 
-        for mod in self.path_encoder:
-            self.denoise_modules.append(mod)
+        if n_encoder > 0:
+            path_layer = TransformerEncoder(model_dim = model_dim,
+                                            total_dim = total_dim,
+                                            n_heads = n_heads,
+                                            ff_dim = ff_dim,
+                                            dropout_p = eye_encoder_dropout,
+                                            activation= activation,
+                                            norm_first= norm_first,
+                                            **factory_mode)
+            self.path_encoder = _get_clones(path_layer,n_encoder) 
+            for mod in self.path_encoder:
+                self.denoise_modules.append(mod)
 
         if n_feature_enhancer > 0 and not (self.n_eye_decoder > 0):
             feature_enhancer_layer = FeatureEnhancer(model_dim = model_dim,
@@ -547,12 +547,13 @@ class MixerModel(nn.Module):
             src = self.src_dropout_nn(src)
 
         # encoding path
-        for mod in self.path_encoder:
-            src_rope = None
-            if self.use_rope:
-                src_rope = self.rope_pos(traj_coords = src_coords)
-            src = mod(src, src_mask, rope_pos = src_rope)
-            
+        if self.n_encoder > 0:
+            for mod in self.path_encoder:
+                src_rope = None
+                if self.use_rope:
+                    src_rope = self.rope_pos(traj_coords = src_coords)
+                src = mod(src, src_mask, rope_pos = src_rope)
+                
         if self.norm_first:
             src = self.final_enc_norm(src)
             
