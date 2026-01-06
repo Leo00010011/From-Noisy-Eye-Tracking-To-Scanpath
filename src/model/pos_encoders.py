@@ -76,9 +76,6 @@ class GaussianFourierPosEncoder(nn.Module):
             coords = torch.arange(.5,patch_size)/patch_size
             ii,jj = torch.meshgrid(coords,coords, indexing = 'xy')
             self.coords = torch.stack([ii,jj], dim = -1).flatten(start_dim=1)
-        # 1. Create the random matrix B *once*
-        # We sample from a Normal distribution N(0, sigma^2)
-        # Size: [input_dim, mapping_size]
         if base is not None:
             B = base
         elif input_dim == 1:
@@ -103,6 +100,8 @@ class GaussianFourierPosEncoder(nn.Module):
         # x shape: (Batch, Seq_Len, Input_Dim)
         # 1. Project input: (2*pi*x) * B
         x = x.unsqueeze(-1)
+        print(x.shape)
+        print(self.B.shape)
         # (B, L, input_dim,1) * (input_dim, mapping_size) -> (B, L, mapping_size)
         if self.input_dim == 1:
             projected = (2 * torch.pi * x) * self.B
@@ -116,4 +115,5 @@ class GaussianFourierPosEncoder(nn.Module):
         return self.mlp(x_proj)
     
     def forward_features(self):
+        print('HERE forward features')
         self.forward(self.coords)
