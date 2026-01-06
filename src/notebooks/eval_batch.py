@@ -96,7 +96,8 @@ names = [# 'path model',
         # 'clean_eye + gaussian noise'	,
         # 'gaussian noise'	,
         # 'sampling',
-        'phase'
+        # 'phase'
+        'shared_gaussian_base'
         ]
 
 
@@ -109,7 +110,8 @@ ckpt_path = [# os.path.join('outputs','2025-12-10','15-57-12'),
              # os.path.join('outputs','2026-01-04','20-11-06'),
              # os.path.join('outputs','2026-01-04','20-44-32'),
              # os.path.join('outputs','2026-01-04','18-48-31')
-             os.path.join('outputs','2026-01-05','23-42-29'),
+             # os.path.join('outputs','2026-01-05','23-42-29'),
+             os.path.join('outputs','2026-01-06','14-14-24'),
              ]
 
 
