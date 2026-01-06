@@ -599,12 +599,12 @@ class MixerModel(nn.Module):
             else:
                 image_src = self.final_fenh_norm_image(image_src)
             
+            if self.n_adapter > 0:
+                for mod in self.adapter:
+                    image_src = mod(image_src, None)
+                if self.norm_first:
+                    image_src = self.adapter_norm(image_src)
             if self.n_eye_decoder > 0:
-                if self.n_adapter > 0:
-                    for mod in self.adapter:
-                        image_src = mod(image_src, None)
-                    if self.norm_first:
-                        image_src = self.adapter_norm(image_src)
                 for mod in self.eye_decoder:
                     for mod in self.eye_decoder:
                         src = mod(src, image_src, src_mask, None)
