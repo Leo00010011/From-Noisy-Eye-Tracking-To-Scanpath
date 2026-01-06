@@ -116,4 +116,4 @@ class GaussianFourierPosEncoder(nn.Module):
     
     def forward_features(self):
         print('HERE forward features')
-        self.forward(self.coords)
+        return self.forward(self.coords)
