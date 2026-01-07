@@ -281,14 +281,20 @@ class ScheduledSampling:
     def get_latest_output(self, output):
         latest_output = {}
         for key, value in output.items():
-            latest_output[key] = value[:, -1:, :]
+            if key == 'denoise':
+                latest_output[key] = value
+            else:
+                latest_output[key] = value[:, -1:, :]
         return latest_output
     
     def get_final_output(self, output):
         final_output = {}
         for key in output[0].keys():
-            value = [output[i][key] for i in range(len(output))]
-            final_output[key] = torch.concat(value, dim=1)
+            if key == 'denoise':
+                final_output[key] = output[-1][key]
+            else:
+                value = [output[i][key] for i in range(len(output))]
+                final_output[key] = torch.concat(value, dim=1)
         return final_output
     
     def __call__(self, **input):

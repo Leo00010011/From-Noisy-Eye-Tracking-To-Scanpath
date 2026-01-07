@@ -122,6 +122,10 @@ class PipelineBuilder:
                     transforms.append(build_log_normalize_duration(transform_config))
                     if has_in_tgt:
                         transforms.append(build_log_normalize_duration(transform_config, key = 'in_tgt'))
+                elif transform_str == 'NormalizeDuration':
+                    transforms.append(build_normalize_time(transform_config, key = 'y'))
+                    if has_in_tgt:
+                        transforms.append(build_normalize_time(transform_config, key = 'in_tgt'))
                 elif transform_str == 'SaveCleanX':
                     transforms.append(SaveCleanX())
                     has_save_clean_x = True

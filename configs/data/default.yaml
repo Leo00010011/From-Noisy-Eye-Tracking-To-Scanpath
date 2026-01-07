@@ -23,7 +23,7 @@ transforms:
 #                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration']
 # Add Gaussian Noise to Fixations
   transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'SaveCleanX','AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
-                   'NormalizeCoords', 'NormalizeTime','AddGaussianNoiseToFixations', 'NormalizeFixationCoords', 'LogNormalizeDuration']
+                   'NormalizeCoords', 'NormalizeTime','AddGaussianNoiseToFixations', 'NormalizeFixationCoords', 'NormalizeDuration']
 # Quantile Normalization of durations
 #  transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
 #                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'QuantileNormalizeDuration']                    
@@ -66,6 +66,10 @@ transforms:
     std: 0.5076
     scale: 0.3333
     use_tan: True
+  NormalizeDuration:
+    key: "y"
+    period_duration: 1200
+    mode: "time"
   QuantileNormalizeDuration:
     pkl_path: "quantile_transformer.pkl"
   AddGaussianNoiseToFixations:
