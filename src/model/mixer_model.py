@@ -243,21 +243,21 @@ class MixerModel(nn.Module):
                 self.denoise_modules.append(mod)
                 
             
-            if self.n_adapter > 0:
-                adapter_layer = TransformerEncoder(model_dim = model_dim,
-                                           total_dim = total_dim,
-                                           n_heads = n_heads,
-                                           ff_dim = ff_dim,
-                                           dropout_p = dropout_p,
-                                           activation= activation,
-                                           norm_first= norm_first,
-                                           **factory_mode)
-                self.adapter = _get_clones(adapter_layer,n_adapter) 
-                for mod in self.adapter:
-                    self.fixation_modules.append(mod)
-                if self.norm_first:
-                    self.adapter_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
-                    self.fixation_modules.append(self.adapter_norm)
+        if self.n_adapter > 0:
+            adapter_layer = TransformerEncoder(model_dim = model_dim,
+                                        total_dim = total_dim,
+                                        n_heads = n_heads,
+                                        ff_dim = ff_dim,
+                                        dropout_p = dropout_p,
+                                        activation= activation,
+                                        norm_first= norm_first,
+                                        **factory_mode)
+            self.adapter = _get_clones(adapter_layer,n_adapter) 
+            for mod in self.adapter:
+                self.fixation_modules.append(mod)
+            if self.norm_first:
+                self.adapter_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
+                self.fixation_modules.append(self.adapter_norm)
                     
                 
         
