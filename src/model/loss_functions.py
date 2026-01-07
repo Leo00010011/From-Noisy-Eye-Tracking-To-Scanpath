@@ -62,6 +62,7 @@ class EndBinaryCrossEntropy(torch.nn.Module):
     def __init__(self, cls_func = torch.nn.functional.binary_cross_entropy_with_logits):
         super().__init__()
         self.cls_func = cls_func
+        self.__name__ = 'end_bce_with_logits'
     
     def forward(self, input, output):
         coord_out = output['coord']
@@ -79,6 +80,7 @@ class EndSoftMax(torch.nn.Module):
         if cls_func is None:
             cls_func = nn.CrossEntropyLoss()
         self.cls_func = cls_func
+        self.__name__ = 'end_softmax'
     
     def forward(self, input, output):
         cls_out = output['cls']
