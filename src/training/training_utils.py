@@ -299,13 +299,15 @@ class ScheduledSampling:
     
     def __call__(self, **input):
         use_model_prob = self.use_model_prob
-        if 'in_tgt' in input:
-            input['in_tgt'] = None
         output = None
         input['pass_sampler'] = True
         tgt_mask = input['tgt_mask']
         seq_len = tgt_mask.size(1)
-        ori_tgt = input['tgt']
+        tgt = input['tgt']
+        ori_tgt = tgt
+        if 'in_tgt' in input:
+            ori_tgt = input['in_tgt']
+            input['in_tgt'] = None
         input['tgt'] = None
         input['tgt_mask'] = None
         self.model.encode(**input)
@@ -333,6 +335,8 @@ class ScheduledSampling:
         if self.use_kv_cache:
             self.model.clear_kv_cache()
         input['tgt_mask'] = tgt_mask
-        input['tgt'] = ori_tgt
+        input['tgt'] = tgt
+        if 'in_tgt' in input:
+            input['in_tgt'] = ori_tgt
         output = self.get_final_output(final_output)
         return output
