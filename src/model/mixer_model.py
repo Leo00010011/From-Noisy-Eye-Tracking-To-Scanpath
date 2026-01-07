@@ -156,10 +156,7 @@ class MixerModel(nn.Module):
             self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
             self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
             self.denoise_modules.append(self.pos_proj)
-            self.fixation_modules.append(self.pos_proj)
             self.denoise_modules.append(self.time_proj)
-            self.fixation_modules.append(self.time_proj)
-            self.denoise_modules.append(self.dur_proj)
             self.fixation_modules.append(self.dur_proj)
         elif input_encoder == "shared_gaussian_base":
             self.eye_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
