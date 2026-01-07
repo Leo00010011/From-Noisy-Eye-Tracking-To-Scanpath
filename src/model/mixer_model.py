@@ -47,6 +47,7 @@ class MixerModel(nn.Module):
                        end_dropout = 0,
                        phases = None,
                        src_dropout = 0,
+                       adapter_dropout = 0,
                        tgt_dropout = 0,
                        eye_encoder_dropout = 0,
                        enh_features_dropout = 0,
@@ -94,6 +95,7 @@ class MixerModel(nn.Module):
         self.fixation_modules = []
         self.n_eye_decoder = n_eye_decoder
         self.scheduled_sampling = None
+        self.adapter_dropout = adapter_dropout
         self.use_kv_cache = use_kv_cache
         # SPECIAL TOKENS
         if mixed_image_features:
@@ -245,7 +247,7 @@ class MixerModel(nn.Module):
                                         total_dim = total_dim,
                                         n_heads = n_heads,
                                         ff_dim = ff_dim,
-                                        dropout_p = dropout_p,
+                                        dropout_p = adapter_dropout,
                                         activation= activation,
                                         norm_first= norm_first,
                                         **factory_mode)

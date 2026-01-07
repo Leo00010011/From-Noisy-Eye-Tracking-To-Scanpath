@@ -341,6 +341,7 @@ class PipelineBuilder:
                               n_decoder = self.config.model.n_decoder,
                               model_dim = self.config.model.model_dim,
                               total_dim = self.config.model.total_dim,
+                              adapter_dropout = self.config.model.get('adapter_dropout', 0),
                               n_heads = self.config.model.n_heads,
                               ff_dim = self.config.model.ff_dim,
                               image_features_dropout = self.config.model.get('image_features_dropout', 0),
