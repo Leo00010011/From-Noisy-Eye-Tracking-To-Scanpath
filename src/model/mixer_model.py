@@ -561,11 +561,11 @@ class MixerModel(nn.Module):
         if self.image_encoder is not None:
             image_src = self.image_encoder(image_src)
             image_src = self.img_input_proj(image_src)
-            # if self.input_encoder == 'shared_gaussian':
-            #     # pos_enc [1,H*W,model_dim]
-            #     pos_enc = self.pos_proj.forward_features().unsqueeze(0)
-            #     prefix = image_src.size(1) - pos_enc.shape[1]
-            #     image_src[:,prefix:,:] = image_src[:,prefix:,:] + pos_enc
+            if self.input_encoder == 'shared_gaussian':
+                # pos_enc [1,H*W,model_dim]
+                pos_enc = self.pos_proj.forward_features().unsqueeze(0)
+                prefix = image_src.size(1) - pos_enc.shape[1]
+                image_src[:,prefix:,:] = image_src[:,prefix:,:] + pos_enc
             if self.input_encoder == 'shared_gaussian_base':
                 pos_enc = self.img_pos_proj.forward_features().unsqueeze(0)
                 prefix = image_src.size(1) - pos_enc.shape[1]
