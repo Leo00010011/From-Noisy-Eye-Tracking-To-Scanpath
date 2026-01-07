@@ -112,7 +112,7 @@ class SeparatedRegLossFunction(torch.nn.Module):
             'coord_loss': float(coord_loss.item()),
             'dur_loss': float(dur_loss.item()),
         }
-        loss = cls_loss + self.cls_weight * (((1-self.dur_weight) * coord_loss + self.dur_weight * dur_loss))
+        loss = self.cls_weight * cls_loss + (1 - self.cls_weight) * (((1-self.dur_weight) * coord_loss + self.dur_weight * dur_loss))
         return loss, info
 
 class DenoiseRegLoss(torch.nn.Module):
