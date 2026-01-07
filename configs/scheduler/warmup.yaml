@@ -1,7 +1,7 @@
 # hydra group
 type: warmup_stable_decay
 batch_lr: True
-warmup_steps: 10
-stable_steps: 30
+warmup_steps: 0
+stable_steps: 40
 decay_steps: 40
 min_lr: 1e-5
