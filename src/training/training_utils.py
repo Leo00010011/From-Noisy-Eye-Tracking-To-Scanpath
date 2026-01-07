@@ -257,7 +257,7 @@ class ScheduledSampling:
         self.active_epochs = active_epochs
         self.use_model_prob = 0.0
         self.current_batch = 0
-        self.warmup_epochs = 20
+        self.warmup_epochs = warmup_epochs
         self.steps_per_epoch = steps_per_epoch
         self.model = None
         self.use_kv_cache = use_kv_cache

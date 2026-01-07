@@ -507,6 +507,8 @@ class PipelineBuilder:
             return None
         
     def build_scheduled_sampling(self, steps_per_epoch: int):
+        print("Scheduled Sampling:")
+        print("steps per epoch: ", steps_per_epoch)
         if hasattr(self.config.training, 'use_scheduled_sampling') and self.config.training.use_scheduled_sampling:
             return ScheduledSampling(active_epochs = self.config.scheduled_sampling.active_epochs,
                                      device = self.device,
