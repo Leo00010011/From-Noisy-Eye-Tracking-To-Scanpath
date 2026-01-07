@@ -88,7 +88,7 @@ class EndSoftMax(torch.nn.Module):
         fixation_len = input['fixation_len']
         logits = cls_out.squeeze(-1) 
         logits = logits.masked_fill(~attn_mask, -1e9)
-        return self.cls_func(logits, fixation_len)
+        return 100*self.cls_func(logits, fixation_len)
          
 
 class SeparatedRegLossFunction(torch.nn.Module):
