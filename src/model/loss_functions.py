@@ -56,7 +56,39 @@ class EntireRegLossFunction(torch.nn.Module):
         }
         loss = self.cls_weight * cls_loss + (1 - self.cls_weight) * reg_loss
         return loss, info
+
+
+class EndBinaryCrossEntropy(torch.nn.Module):
+    def __init__(self, cls_func = torch.nn.functional.binary_cross_entropy_with_logits):
+        super().__init__()
+        self.cls_func = cls_func
     
+    def forward(self, input, output):
+        coord_out = output['coord']
+        cls_out = output['cls']
+        attn_mask = input['tgt_mask']
+        fixation_len = input['fixation_len']
+        device = coord_out.device
+        weights = create_weights(fixation_len, attn_mask, device)
+        cls_targets = create_cls_targets(cls_out, fixation_len, device)
+        return self.cls_func(cls_out[attn_mask], cls_targets[attn_mask], weight=weights[attn_mask])
+
+class EndSoftMax(torch.nn.Module):
+    def __init__(self, cls_func = None):
+        super().__init__()
+        if cls_func is None:
+            cls_func = nn.CrossEntropyLoss()
+        self.cls_func = cls_func
+    
+    def forward(self, input, output):
+        cls_out = output['cls']
+        attn_mask = input['tgt_mask']
+        fixation_len = input['fixation_len']
+        logits = cls_out.squeeze(-1) 
+        logits = logits.masked_fill(~attn_mask, -1e9)
+        return self.cls_func(logits, fixation_len)
+         
+
 class SeparatedRegLossFunction(torch.nn.Module):
     def __init__(self, cls_weight = 0.5, dur_weight = 0.5,
                  cls_func = torch.nn.functional.binary_cross_entropy_with_logits, 
@@ -91,10 +123,9 @@ class SeparatedRegLossFunction(torch.nn.Module):
         if attn_mask is None:
             print("No attention mask provided")
             attn_mask = torch.ones(cls_out.size()[:-1], dtype = torch.bool, device = device)
+            input['tgt_mask'] = attn_mask
         # >>>>>> Classification loss
-        weights = create_weights(fixation_len, attn_mask, device)
-        cls_targets = create_cls_targets(cls_out, fixation_len, device)
-        cls_loss = self.cls_func(cls_out[attn_mask], cls_targets[attn_mask], weight=weights[attn_mask])
+        cls_loss = self.cls_func(input,output)
         
         # >>>>>> Regression loss
         attn_mask = attn_mask.unsqueeze(-1)

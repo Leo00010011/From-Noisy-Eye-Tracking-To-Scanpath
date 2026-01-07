@@ -1,6 +1,6 @@
 type: "separated_reg"
 cls_weight: 0.2
 dur_weight: 0.33
-cls_func: "bce_with_logits"
+cls_func: "end_softmax"
 coord_func: "l1"
 dur_func: "l1"

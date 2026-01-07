@@ -1,7 +1,7 @@
 import torch
 from src.training.weights_scheduler import WeightsScheduler
 from src.training.training_utils import ScheduledSampling, WarmupStableDecayScheduler
-from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction, DenoiseRegLoss, PenaltyReducedFocalLoss
+from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction, DenoiseRegLoss, PenaltyReducedFocalLoss,EndBinaryCrossEntropy, EndSoftMax
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
 import numpy as np
@@ -16,6 +16,8 @@ from src.data.datasets import FreeViewImgDataset, CoupledDataloader, Deduplicate
 
 STR_TO_LOSS_FUNC = {
     'bce_with_logits': torch.nn.functional.binary_cross_entropy_with_logits,
+    'end_bce_with_logits': EndBinaryCrossEntropy(),
+    'end_softmax': EndSoftMax(),
     'mse': torch.nn.functional.mse_loss,
     'l1': torch.nn.functional.l1_loss
 }
