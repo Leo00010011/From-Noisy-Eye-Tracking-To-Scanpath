@@ -76,7 +76,6 @@ def build_quantile_normalize_duration(config, key = None):
         return QuantileNormalizeDuration(key = key, pkl_path = config.get('pkl_path', 'quantile_transformer.pkl'))
     else:
         return QuantileNormalizeDuration(key = 'y', pkl_path = config.get('pkl_path', 'quantile_transformer.pkl'))
-    return QuantileNormalizeDuration(key = 'y', pkl_path = config.get('pkl_path', 'quantile_transformer.pkl'))
 
 class PipelineBuilder:
     def __init__(self, config):
