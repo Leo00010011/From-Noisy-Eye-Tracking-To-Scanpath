@@ -412,7 +412,7 @@ class AddCurriculumNoise:
         coords = x[:2]
         clean_coords = clean_x[:2]
         noise = coords - clean_coords
-        curriculum = clean_coords + (1 - alpha)*noise
+        curriculum = clean_coords + alpha*noise
         input['x'][:2] = curriculum
         return input
     
