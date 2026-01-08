@@ -388,7 +388,7 @@ class AddCurriculumNoise:
         self.steps_per_epoch = 1
         
     def step(self):
-        self.current_step = min(self.current_step + 1, self.num_steps/self.steps_per_epoch)
+        self.current_step = min(self.current_step + 1, self.num_steps*self.steps_per_epoch)
     
     def get_alpha(self):
         return self.alphas[self.current_step - 1]
