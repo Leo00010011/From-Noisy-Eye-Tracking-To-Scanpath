@@ -79,5 +79,5 @@ transforms:
     image_W: 32
     sigma: 1.5
   AddCurriculumNoise:
-    num_steps: 20
+    num_steps: 30
     s: 0.002
