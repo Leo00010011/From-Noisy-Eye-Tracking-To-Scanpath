@@ -27,7 +27,7 @@ training:
     name: "Denoise"
     denoise_weight: 1 
     decisive_metric: "denoise_error_val"
-    epochs: 50
+    epochs: 100
   Fixation:
     name: "Fixation"
     denoise_weight: 0
@@ -48,4 +48,4 @@ scheduled_sampling:
 denoise_dropout_scheduler:
   base_prob: 0.2
   warmup_epochs: 0
-  active_epochs: 30
+  active_epochs: 50
