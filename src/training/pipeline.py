@@ -31,7 +31,9 @@ def train(builder:PipelineBuilder):
             model = torch.compile(model, dynamic=True) 
         to_update_in_epoch = []
         to_update_in_batch = []
+        curriculum_noise = None
         if builder.curriculum_noise is not None:
+            curriculum_noise = builder.curriculum_noise
             builder.curriculum_noise.set_steps_per_epoch(len(train_dataloader))
             to_update_in_batch.append(builder.curriculum_noise)
         optimizer = builder.build_optimizer(model)
@@ -84,7 +86,8 @@ def train(builder:PipelineBuilder):
                 loss_info = metrics_storage.finalize_epoch()
                 loss_str = ", ".join([f"{key}: {value:.4f}" for key, value in loss_info.items()])
                 print(f"Epoch {epoch+1}/{epochs}, {loss_str}, LR: {optimizer.param_groups[0]['lr']:.6f} ",
-                      f"Scheduled Sampling: {scheduled_sampling.get_current_ratio()}" if scheduled_sampling is not None else "")
+                      f"Scheduled Sampling: {scheduled_sampling.get_current_ratio()}" if scheduled_sampling is not None else "",
+                      f"Curriculum Noise: {curriculum_noise.get_alpha()}" if curriculum_noise is not None else "")
                 for updater in to_update_in_epoch:
                     if updater is not None:
                         updater.step()
