@@ -124,7 +124,7 @@ models_and_data = load_models_with_data(ckpt_path)
 print(f'Model {names[0]}')
 for i, ((model, _, _, test_dataloader), model_ckpt_path, name) in enumerate(zip(models_and_data, ckpt_path, names)):    
     model.eval()
-    if model.scheduled_sampling is not None:
+    if hasattr(model, 'scheduled_sampling') and model.scheduled_sampling is not None:
         model.scheduled_sampling.use_kv_cache = False
         model.disable_kv_cache()
     with torch.no_grad():
