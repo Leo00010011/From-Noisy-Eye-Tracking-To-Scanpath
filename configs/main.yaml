@@ -10,7 +10,7 @@ training:
   validate: True
   val_interval: 10
   learning_rate: 0.001
-  decisive_metric: "coord_loss_val"
+  decisive_metric: "coordinate_error_val"
   save_best_only: True
   save_full_state: True
   use_scheduled_sampling: True
