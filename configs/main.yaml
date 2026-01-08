@@ -31,16 +31,16 @@ training:
     name: "Fixation"
     denoise_weight: 0
     decisive_metric: ${training.decisive_metric}
-    epochs: 50
+    epochs: 80
   Combined:
     name: "Combined"
     denoise_weight: 0.05
     decisive_metric: ${training.decisive_metric}
-    epochs: 30
+    epochs: 50
 loss:
   complex_type: "combined"
   denoise_loss_type: "l1"
   fixation_loss_type: "separated_reg"
 scheduled_sampling:
   warmup_epochs: 10
-  active_epochs: 30
+  active_epochs: 60
