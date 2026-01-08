@@ -345,13 +345,13 @@ class ScheduledSampling:
  
 
 class DenoiseDropoutScheduler:
-    def __init__(self,model, active_epochs, warmup_epochs, device, dtype = torch.float32,steps_per_epoch = 128):
-        self.device = device
+    def __init__(self,base_prob, model, active_epochs, warmup_epochs, steps_per_epoch = 128):
+        self.base_prob = base_prob
         self.active_epochs = active_epochs
         self.warmup_epochs = warmup_epochs
         self.steps_per_epoch = steps_per_epoch
         self.probs = AddCurriculumNoise.get_cosine_schedule_alphas_bar(active_epochs*steps_per_epoch, s = 0.002)
-        self.probs = np.sqrt((self.probs))*.5
+        self.probs = np.sqrt((self.probs))*base_prob
         self.current_step = 1
         self.model = model
         
@@ -361,20 +361,15 @@ class DenoiseDropoutScheduler:
         
     def get_prob(self):
         if self.current_step < self.warmup_epochs*self.steps_per_epoch:
-            return self.model.src_word_dropout.dropout_prob
+            return self.base_prob
         elif self.current_step < (self.warmup_epochs + self.active_epochs)*self.steps_per_epoch:
             prev = self.warmup_epochs*self.steps_per_epoch
             return self.probs[self.current_step - prev]
         else:
             return 0
             
-    def __call__(self,):
-        if self.current_step < self.warmup_epochs*self.steps_per_epoch:
-            return
-        elif self.current_step < (self.warmup_epochs + self.active_epochs)*self.steps_per_epoch:
-            self.model.src_word_dropout.dropout_prob = self.get_prob()
-        else:
-            self.model.src_word_dropout.dropout_prob = 0
+    def __call__(self):
+        self.model.src_word_dropout.dropout_prob = self.get_prob()
     
     def __repr__(self):
         return f"DenoiseDropoutScheduler(active_epochs={self.active_epochs}, warmup_epochs={self.warmup_epochs}, steps_per_epoch={self.steps_per_epoch})"

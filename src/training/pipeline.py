@@ -50,10 +50,14 @@ def train(builder:PipelineBuilder):
         weights_scheduler = builder.build_weights_scheduler(loss_fn)
         if weights_scheduler is not None:
             to_update_in_epoch.append(weights_scheduler)
+        
         scheduled_sampling = builder.build_scheduled_sampling(len(train_dataloader))
         if scheduled_sampling is not None:
             to_update_in_batch.append(scheduled_sampling)
             model.set_scheduled_sampling(scheduled_sampling)
+        denoise_dropout_scheduler = builder.build_denoise_dropout_scheduler(model, len(train_dataloader))
+        if denoise_dropout_scheduler is not None:
+            to_update_in_batch.append(denoise_dropout_scheduler)
         for phase, denoise_weight, decisive_metric, epochs in phases:
             print(f"Training {phase} for {epochs} epochs, Denoise Weight: {denoise_weight}")
             model.set_phase(phase)

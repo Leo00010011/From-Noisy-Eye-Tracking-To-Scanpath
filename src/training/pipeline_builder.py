@@ -1,5 +1,6 @@
 import torch
 from src.data.transforms import AddCurriculumNoise
+from src.training.training_utils import DenoiseDropoutScheduler
 from src.training.weights_scheduler import WeightsScheduler
 from src.training.training_utils import ScheduledSampling, WarmupStableDecayScheduler
 from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction, DenoiseRegLoss, PenaltyReducedFocalLoss,EndBinaryCrossEntropy, EndSoftMax
@@ -527,6 +528,15 @@ class PipelineBuilder:
         else:
             return None
 
+    def build_denoise_dropout_scheduler(self, model: torch.nn.Module, steps_per_epoch: int):
+        if hasattr(self.config.training, 'use_denoise_dropout_scheduler') and self.config.training.use_denoise_dropout_scheduler:
+            return DenoiseDropoutScheduler(model = model,
+                                       base_prob = self.config.denoise_dropout_scheduler.base_prob,
+                                       active_epochs = self.config.denoise_dropout_scheduler.active_epochs,
+                                       warmup_epochs = self.config.denoise_dropout_scheduler.warmup_epochs,
+                                       steps_per_epoch = steps_per_epoch)
+        else:
+            return None
 
     def training_summary(self, n_samples):
         print(""" Traning Summary:
