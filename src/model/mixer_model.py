@@ -40,6 +40,7 @@ class MixerModel(nn.Module):
                        pos_enc_sigma = 1.0,
                        use_rope = False,
                        word_dropout_prob = 0.3,
+                       src_word_dropout_prob = 0,
                        dur_head_dropout = 0,
                        reg_head_dropout = 0,
                        mixed_image_features = False,
@@ -106,6 +107,9 @@ class MixerModel(nn.Module):
         if word_dropout_prob > 0:
             self.word_dropout = LearnableCoordinateDropout(model_dim=model_dim, dropout_prob=word_dropout_prob, **factory_mode)
             self.fixation_modules.append(self.word_dropout)
+        if src_word_dropout_prob > 0:
+            self.src_word_dropout = LearnableCoordinateDropout(model_dim=model_dim, dropout_prob=src_word_dropout_prob, **factory_mode)
+            self.denoise_modules.append(self.src_word_dropout)
         if src_dropout > 0:
             self.src_dropout_nn = nn.Dropout(src_dropout)
             self.denoise_modules.append(self.src_dropout_nn)
