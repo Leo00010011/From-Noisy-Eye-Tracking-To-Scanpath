@@ -81,3 +81,4 @@ transforms:
   AddCurriculumNoise:
     num_steps: 30
     s: 0.002
+    start_alpha: 0.4

@@ -79,7 +79,7 @@ def build_quantile_normalize_duration(config, key = None):
         return QuantileNormalizeDuration(key = 'y', pkl_path = config.get('pkl_path', 'quantile_transformer.pkl'))
     
 def build_add_curriculum_noise(config):
-    return AddCurriculumNoise(num_steps = config.get('num_steps', 10), s = config.get('s', 0.002))
+    return AddCurriculumNoise(num_steps = config.get('num_steps', 10), s = config.get('s', 0.002), start_alpha = config.get('start_alpha', 0.4))
 
 class PipelineBuilder:
     def __init__(self, config):

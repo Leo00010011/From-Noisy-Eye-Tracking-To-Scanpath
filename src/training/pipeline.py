@@ -32,7 +32,8 @@ def train(builder:PipelineBuilder):
         to_update_in_epoch = []
         to_update_in_batch = []
         if builder.curriculum_noise is not None:
-            to_update_in_epoch.append(builder.curriculum_noise)
+            builder.curriculum_noise.steps_per_epoch = len(train_dataloader)
+            to_update_in_batch.append(builder.curriculum_noise)
         optimizer = builder.build_optimizer(model)
         scheduler = builder.build_scheduler(optimizer, train_dataloader)
         if builder.config.scheduler.batch_lr:

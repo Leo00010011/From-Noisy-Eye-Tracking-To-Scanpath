@@ -378,23 +378,32 @@ class AddHeatmaps:
         
         
 class AddCurriculumNoise:
-    def __init__(self, num_steps = 10, s = 0.002):
+    def __init__(self, num_steps = 10, s = 0.002, start_alpha = 0.4):
         self.key = 'x'
         self.num_steps = num_steps
         self.s = s
-        self.alphas = AddCurriculumNoise.get_cosine_schedule_alphas_bar(num_steps, s)
+        self.alphas = AddCurriculumNoise.get_cosine_schedule_alphas_bar(num_steps, s, start_alpha)
         self.current_step = 1
+        self.start_alpha = start_alpha
+        self.steps_per_epoch = 1
         
     def step(self):
-        self.current_step = min(self.current_step + 1, self.num_steps)
+        self.current_step = min(self.current_step + 1, self.num_steps/self.steps_per_epoch)
     
-    def get_cosine_schedule_alphas_bar(num_steps, s=0.008):
+    def get_alpha(self):
+        return self.alphas[self.current_step - 1]
+    
+    def set_steps_per_epoch(self, steps_per_epoch):
+        self.steps_per_epoch = steps_per_epoch
+        self.alphas = AddCurriculumNoise.get_cosine_schedule_alphas_bar(self.num_steps*self.steps_per_epoch, self.s, self.start_alpha)
+    
+    def get_cosine_schedule_alphas_bar(num_steps, s=0.008, start_alpha = 0.4):
         steps = np.linspace(0, num_steps, num_steps)
         f_t = np.cos(((steps / num_steps) + s) / (1 + s) * (math.pi / 2)) ** 2
         alphas_cumprod = f_t / f_t[0]
         alphas_cumprod[-1] = 0
-        cum_alpha = np.clip(alphas_cumprod, 0, .7)
-        return cum_alpha
+        alphas_cumprod = np.sqrt((1 - alphas_cumprod))*(1 - start_alpha) + start_alpha
+        return alphas_cumprod
     
     def __call__(self,input):
         x = input['x']
