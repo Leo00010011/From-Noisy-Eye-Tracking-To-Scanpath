@@ -5,7 +5,7 @@ import numpy as np
 import json
 from src.eval.eval_metrics import create_cls_targets, accuracy, precision, recall, eval_reg, eval_denoise
 from src.eval.eval_utils import invert_transforms, concat_reg
-from src.data.transforms import AddCurriculumNoise
+
 
 class MetricsStorage:
     def __init__(self, filepath: str = None, decisive_metric: str = 'reg_loss_val'):
@@ -342,7 +342,15 @@ class ScheduledSampling:
         output = self.get_final_output(final_output)
         return output
 
- 
+def get_cosine_schedule_alphas_bar(num_steps, s=0.008):
+    steps = np.linspace(0, num_steps, num_steps)
+    
+    # The cosine function ensures a smooth decay to zero
+    f_t = np.cos(((steps / num_steps) + s) / (1 + s) * (math.pi / 2)) ** 2
+    alphas_cumprod = f_t / f_t[0]
+    
+    # Ensure it doesn't hit absolute zero too fast for stability
+    return np.clip(alphas_cumprod, a_min=0.0001, a_max=None)
 
 class DenoiseDropoutScheduler:
     def __init__(self,base_prob, model, active_epochs, warmup_epochs, steps_per_epoch = 128):
@@ -350,7 +358,7 @@ class DenoiseDropoutScheduler:
         self.active_epochs = active_epochs
         self.warmup_epochs = warmup_epochs
         self.steps_per_epoch = steps_per_epoch
-        self.probs = AddCurriculumNoise.get_cosine_schedule_alphas_bar(active_epochs*steps_per_epoch, s = 0.002)
+        self.probs = get_cosine_schedule_alphas_bar(active_epochs*steps_per_epoch, s = 0.002)
         self.probs = np.sqrt((self.probs))*base_prob
         self.current_step = 1
         self.model = model

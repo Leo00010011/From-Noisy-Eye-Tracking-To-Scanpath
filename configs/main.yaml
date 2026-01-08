@@ -47,5 +47,5 @@ scheduled_sampling:
   active_epochs: 20
 denoise_dropout_scheduler:
   base_prob: 0.5
-  active_epochs: 10
-  warmup_epochs: 20
+  warmup_epochs: 10
+  active_epochs: 20
