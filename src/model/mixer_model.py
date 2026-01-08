@@ -96,6 +96,7 @@ class MixerModel(nn.Module):
         self.fixation_modules = []
         self.n_eye_decoder = n_eye_decoder
         self.scheduled_sampling = None
+        self.src_word_dropout_prob = src_word_dropout_prob
         self.adapter_dropout = adapter_dropout
         self.use_kv_cache = use_kv_cache
         # SPECIAL TOKENS
