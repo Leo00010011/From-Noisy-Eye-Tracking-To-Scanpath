@@ -534,12 +534,16 @@ class MixerModel(nn.Module):
             enc_coords = src[:,:,:2]
             enc_time = src[:,:,2]
             enc_coords = self.pos_proj(enc_coords)
+            if self.src_word_dropout_prob > 0:
+                enc_coords = self.src_word_dropout(enc_coords)
             enc_time = self.time_proj(enc_time)
             src = enc_coords + enc_time
         elif self.input_encoder == 'shared_gaussian_base':
             enc_coords = src[:,:,:2]
             enc_time = src[:,:,2]
             enc_coords = self.eye_pos_proj(enc_coords)
+            if self.src_word_dropout_prob > 0:
+                enc_coords = self.src_word_dropout(enc_coords)
             enc_time = self.time_proj(enc_time)
             src = enc_coords + enc_time
         else:
@@ -550,8 +554,6 @@ class MixerModel(nn.Module):
         if self.src_dropout > 0:
             src = self.src_dropout_nn(src)
         
-        if self.src_word_dropout_prob > 0:
-            src = self.src_word_dropout(src)
 
         # encoding path
         if self.n_encoder > 0:
