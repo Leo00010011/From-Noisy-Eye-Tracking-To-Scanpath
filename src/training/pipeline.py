@@ -91,7 +91,8 @@ def train(builder:PipelineBuilder):
                 loss_str = ", ".join([f"{key}: {value:.4f}" for key, value in loss_info.items()])
                 print(f"Epoch {epoch+1}/{epochs}, {loss_str}, LR: {optimizer.param_groups[0]['lr']:.6f} ",
                       f"Scheduled Sampling: {scheduled_sampling.get_current_ratio()}" if scheduled_sampling is not None else "",
-                      f"Curriculum Noise: {curriculum_noise.get_alpha()}" if curriculum_noise is not None else "")
+                      f"Curriculum Noise: {curriculum_noise.get_alpha()}" if curriculum_noise is not None else "",
+                      f"Denoise Dropout: {denoise_dropout_scheduler.get_prob()}" if denoise_dropout_scheduler is not None else "")
                 for updater in to_update_in_epoch:
                     if updater is not None:
                         updater.step()
