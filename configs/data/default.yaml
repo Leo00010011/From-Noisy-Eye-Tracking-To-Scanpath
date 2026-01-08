@@ -22,7 +22,7 @@ transforms:
 #  transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
 #                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration']
 # Add Gaussian Noise to Fixations
-  transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'SaveCleanX','AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
+  transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'SaveCleanX','AddRandomCenterCorrelatedRadialNoise','AddCurriculumNoise','DiscretizationNoise',
                    'NormalizeCoords', 'NormalizeTime','AddGaussianNoiseToFixations', 'NormalizeFixationCoords', 'NormalizeDuration']
 # Quantile Normalization of durations
 #  transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
@@ -78,3 +78,6 @@ transforms:
     image_H: 32
     image_W: 32
     sigma: 1.5
+  AddCurriculumNoise:
+    num_steps: 20
+    s: 0.002

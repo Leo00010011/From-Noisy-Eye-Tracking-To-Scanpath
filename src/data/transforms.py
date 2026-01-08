@@ -390,10 +390,8 @@ class AddCurriculumNoise:
     
     def get_cosine_schedule_alphas_bar(num_steps, s=0.008):
         steps = np.linspace(0, num_steps, num_steps)
-        # The cosine function ensures a smooth decay to zero
         f_t = np.cos(((steps / num_steps) + s) / (1 + s) * (math.pi / 2)) ** 2
         alphas_cumprod = f_t / f_t[0]
-        # Ensure it doesn't hit absolute zero too fast for stability
         alphas_cumprod[-1] = 0
         cum_alpha = np.clip(alphas_cumprod, 0, .7)
         return cum_alpha
