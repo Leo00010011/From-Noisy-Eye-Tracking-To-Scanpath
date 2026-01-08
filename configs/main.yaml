@@ -9,7 +9,7 @@ training:
   num_epochs: 100
   validate: True
   val_interval: 10
-  learning_rate: 0.001
+  learning_rate: 0.0005
   decisive_metric: "coordinate_error_val"
   save_best_only: True
   save_full_state: True
@@ -31,7 +31,7 @@ training:
     name: "Fixation"
     denoise_weight: 0
     decisive_metric: ${training.decisive_metric}
-    epochs: 80
+    epochs: 60
   Combined:
     name: "Combined"
     denoise_weight: 0.05
@@ -43,4 +43,4 @@ loss:
   fixation_loss_type: "separated_reg"
 scheduled_sampling:
   warmup_epochs: 10
-  active_epochs: 60
+  active_epochs: 40

@@ -271,9 +271,9 @@ class ScheduledSampling:
         elif self.current_batch < (self.warmup_epochs + self.active_epochs)*self.steps_per_epoch:
             self.current_batch += 1
             eval_batch = (self.current_batch - self.warmup_epochs*self.steps_per_epoch) / self.steps_per_epoch
-            self.use_model_prob = min(inverted_sigmoid(eval_batch, 10),.7)
+            self.use_model_prob = min(inverted_sigmoid(eval_batch, 10),.8)
         else:
-            self.use_model_prob = .7
+            self.use_model_prob = .8
 
     def get_current_ratio(self):
         return self.use_model_prob

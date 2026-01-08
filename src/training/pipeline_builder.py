@@ -442,6 +442,7 @@ class PipelineBuilder:
                 warmup_steps=self.config.scheduler.warmup_steps*steps_per_epoch,
                 stable_steps=self.config.scheduler.stable_steps*steps_per_epoch,
                 decay_steps=self.config.scheduler.decay_steps*steps_per_epoch,
+                min_lr=self.config.scheduler.min_lr,
             )
         else:
             raise ValueError(f"Scheduler type {self.config.scheduler.type} not supported.")
