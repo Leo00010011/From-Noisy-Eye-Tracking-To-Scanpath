@@ -404,7 +404,7 @@ class AddCurriculumNoise:
         clean_coords = clean_x[:2]
         noise = coords - clean_coords
         curriculum = clean_coords + (1 - alpha)*noise
-        input['x'] = curriculum
+        input['x'][:2] = curriculum
         return input
     
     def inverse(self, y, tgt_mask, key):
