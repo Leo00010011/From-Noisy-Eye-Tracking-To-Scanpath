@@ -1,5 +1,6 @@
 import torch
 import joblib
+import math
 from src.data.datasets import extract_random_period, PAD_TOKEN_ID
 from src.preprocess.noise import add_random_center_correlated_radial_noise, discretization_noise
 import numpy as np
@@ -374,3 +375,40 @@ class AddHeatmaps:
     def __str__(self):
         return f'''+ AddHeatmaps
         sigma={self.sigma}'''
+        
+        
+class AddCurriculumNoise:
+    def __init__(self, num_steps = 10, s = 0.002):
+        self.key = 'x'
+        self.num_steps = num_steps
+        self.s = s
+        self.alphas = AddCurriculumNoise.get_cosine_schedule_alphas_bar(num_steps, s)
+        self.current_step = 1
+        
+    def step(self):
+        self.current_step = min(self.current_step + 1, self.num_steps)
+    
+    def get_cosine_schedule_alphas_bar(num_steps, s=0.008):
+        steps = np.linspace(0, num_steps, num_steps)
+        # The cosine function ensures a smooth decay to zero
+        f_t = np.cos(((steps / num_steps) + s) / (1 + s) * (math.pi / 2)) ** 2
+        alphas_cumprod = f_t / f_t[0]
+        # Ensure it doesn't hit absolute zero too fast for stability
+        alphas_cumprod[-1] = 0
+        cum_alpha = np.clip(alphas_cumprod, 0, .7)
+        return cum_alpha
+    
+    def __call__(self,input):
+        x = input['x']
+        clean_x = input['clean_x']
+        alpha = self.alphas[self.current_step - 1]
+        coords = x[:2]
+        clean_coords = clean_x[:2]
+        noise = coords - clean_coords
+        curriculum = clean_coords + (1 - alpha)*noise
+        input['x'] = curriculum
+        return input
+    
+    def inverse(self, y, tgt_mask, key):
+        return y
+    

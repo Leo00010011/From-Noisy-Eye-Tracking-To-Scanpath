@@ -1,4 +1,5 @@
 import torch
+from src.data.transforms import AddCurriculumNoise
 from src.training.weights_scheduler import WeightsScheduler
 from src.training.training_utils import ScheduledSampling, WarmupStableDecayScheduler
 from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction, DenoiseRegLoss, PenaltyReducedFocalLoss,EndBinaryCrossEntropy, EndSoftMax
@@ -76,6 +77,9 @@ def build_quantile_normalize_duration(config, key = None):
         return QuantileNormalizeDuration(key = key, pkl_path = config.get('pkl_path', 'quantile_transformer.pkl'))
     else:
         return QuantileNormalizeDuration(key = 'y', pkl_path = config.get('pkl_path', 'quantile_transformer.pkl'))
+    
+def build_add_curriculum_noise(config):
+    return AddCurriculumNoise(num_steps = config.get('num_steps', 10), s = config.get('s', 0.002))
 
 class PipelineBuilder:
     def __init__(self, config):
@@ -84,6 +88,7 @@ class PipelineBuilder:
         self.PathDataset = None
         self.img_dataset = None
         self.data = None
+        self.curriculum_noise = None
         if self.config.model.device.startswith('cuda') and torch.cuda.is_available():
             self.device = torch.device(self.config.model.device)
         else:
@@ -142,6 +147,9 @@ class PipelineBuilder:
                                                   sigma = transform_config.get('sigma', 1.5),
                                                   device = self.device,
                                                   dtype = torch.float32))
+                elif transform_str == 'AddCurriculumNoise':
+                    self.curriculum_noise = build_add_curriculum_noise(transform_config)
+                    transforms.append(self.curriculum_noise)
                 else:
                     raise ValueError(f"Transform {transform_str} not supported.")
         else:
