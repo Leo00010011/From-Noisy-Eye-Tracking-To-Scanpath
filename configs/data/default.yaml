@@ -80,5 +80,5 @@ transforms:
     sigma: 1.5
   AddCurriculumNoise:
     num_steps: 30
-    s: 0.002
+    s: 1000
     start_alpha: 0.4

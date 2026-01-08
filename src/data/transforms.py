@@ -380,6 +380,7 @@ class AddHeatmaps:
 class AddCurriculumNoise:
     def __init__(self, num_steps = 10, s = 0.002, start_alpha = 0.4):
         self.key = 'x'
+        self.enabled = True
         self.num_steps = num_steps
         self.s = s
         self.alphas = AddCurriculumNoise.get_cosine_schedule_alphas_bar(num_steps, s, start_alpha)
@@ -406,6 +407,8 @@ class AddCurriculumNoise:
         return alphas_cumprod
     
     def __call__(self,input):
+        if not self.enabled:
+            return input
         x = input['x']
         clean_x = input['clean_x']
         alpha = self.alphas[self.current_step - 1]
