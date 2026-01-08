@@ -549,6 +549,9 @@ class MixerModel(nn.Module):
         src = src + enc_pe[:,:src.size()[1],:]
         if self.src_dropout > 0:
             src = self.src_dropout_nn(src)
+        
+        if self.src_word_dropout_prob > 0:
+            src = self.src_word_dropout(src)
 
         # encoding path
         if self.n_encoder > 0:
