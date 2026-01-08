@@ -365,8 +365,8 @@ class DenoiseDropoutScheduler:
         
         
     def step(self):
-        active = (self.warmup_epochs + self.active_epochs)*self.steps_per_epoch
-        self.current_step = min(self.current_step + 1, active - 1)
+        # active = (self.warmup_epochs + self.active_epochs)*self.steps_per_epoch
+        self.current_step += 1
         
     def get_prob(self):
         if self.current_step < self.warmup_epochs*self.steps_per_epoch:
