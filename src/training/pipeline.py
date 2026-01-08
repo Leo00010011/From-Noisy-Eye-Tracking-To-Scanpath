@@ -97,7 +97,11 @@ def train(builder:PipelineBuilder):
                     if updater is not None:
                         updater.step()
                 if needs_validate and ((epoch + 1) % val_interval == 0):
+                    if curriculum_noise is not None:
+                        curriculum_noise.enabled = False
                     validate(model,loss_fn, val_dataloader, epoch, device, metrics_storage.metrics, log = builder.config.training.log)
+                    if curriculum_noise is not None:
+                        curriculum_noise.enabled = True
                     metrics_storage.save_metrics()
                     is_best = metrics_storage.update_best()
                     if is_best:
