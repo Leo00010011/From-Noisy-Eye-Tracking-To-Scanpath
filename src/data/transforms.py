@@ -398,6 +398,8 @@ class AddCurriculumNoise:
         if self.n_updates > 0:
             # get the index
             current_idx = int(math.floor(self.current_step/(self.steps_per_epoch*self.num_steps)*self.n_updates))
+            if current_idx >= self.n_updates:
+                return 1
             return self.alphas[self.idx[current_idx]]
         else:
             return self.alphas[self.current_step - 1]
