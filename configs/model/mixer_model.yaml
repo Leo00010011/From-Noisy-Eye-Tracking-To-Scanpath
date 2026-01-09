@@ -39,7 +39,7 @@ use_kv_cache: False
 compilate: False
 head_type: "linear"
 activation:  "gelu"
-# pretrined_encoder_path: "outputs/2026-01-05/22-49-28/model.pth"
+# pretrined_encoder_path: "outputs/2026-01-09/18-38-39/model.pth"
 pretrined_encoder_path: null
 device: "cuda"
 image_encoder:
