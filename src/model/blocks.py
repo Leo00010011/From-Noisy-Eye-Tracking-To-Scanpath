@@ -529,10 +529,10 @@ class LearnableCoordinateDropout(nn.Module):
 
 
 class ResidualRegressor(nn.Module):
-    def __init__(self, model_dim, device='cpu', dtype=torch.float32):
+    def __init__(self, model_dim, hidden_dropout_p = 0, output_dropout_p = 0, device='cpu', dtype=torch.float32):
         super().__init__()
         factory_kwargs = {'device': device, 'dtype': dtype}
-        self.regressor = MLP(model_dim, [model_dim, model_dim//2], 2, hidden_dropout_p = 0, output_dropout_p = 0, include_dropout = False, **factory_kwargs)
+        self.regressor = MLP(model_dim, [model_dim, model_dim//2], 2, hidden_dropout_p = hidden_dropout_p, output_dropout_p = output_dropout_p, include_dropout = False, **factory_kwargs)
         
     def forward(self, src_tokens, src, **kwargs):
         return self.regressor(src_tokens) + src[:,:,:2]

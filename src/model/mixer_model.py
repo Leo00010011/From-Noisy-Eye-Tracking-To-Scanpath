@@ -52,6 +52,8 @@ class MixerModel(nn.Module):
                        tgt_dropout = 0,
                        eye_encoder_dropout = 0,
                        enh_features_dropout = 0,
+                       denoise_head_hidden_dropout = 0,
+                       denoise_head_output_dropout = 0,
                        n_adapter = 0,
                        n_eye_decoder = 0,
                        use_kv_cache = False,
@@ -92,6 +94,8 @@ class MixerModel(nn.Module):
         self.mixed_image_features = mixed_image_features
         self.mixer_dropout = mixer_dropout
         self.n_adapter = n_adapter
+        self.denoise_head_hidden_dropout = denoise_head_hidden_dropout
+        self.denoise_head_output_dropout = denoise_head_output_dropout
         self.denoise_modules = []
         self.fixation_modules = []
         self.n_eye_decoder = n_eye_decoder
@@ -409,7 +413,7 @@ class MixerModel(nn.Module):
         
         # DENOISE HEADS
         if phases is not None and ('Denoise' in phases or 'Combined' in phases):
-            self.denoise_head = ResidualRegressor(model_dim, **factory_mode)
+            self.denoise_head = ResidualRegressor(model_dim, hidden_dropout_p = self.denoise_head_hidden_dropout, output_dropout_p = self.denoise_head_output_dropout, **factory_mode)
             # self.denoise_head =  MLP(model_dim,
             #                             mlp_head_hidden_dim,
             #                             2,
