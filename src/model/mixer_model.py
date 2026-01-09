@@ -36,6 +36,7 @@ class MixerModel(nn.Module):
                        mlp_head_hidden_dim = None,
                        image_encoder = None,
                        n_feature_enhancer = 1,
+                       use_denoised_coordinates = False,
                        image_dim = None,
                        pos_enc_sigma = 1.0,
                        use_rope = False,
@@ -98,6 +99,7 @@ class MixerModel(nn.Module):
         self.denoise_head_output_dropout = denoise_head_output_dropout
         self.denoise_modules = []
         self.fixation_modules = []
+        self.use_denoised_coordinates = use_denoised_coordinates
         self.n_eye_decoder = n_eye_decoder
         self.scheduled_sampling = None
         self.src_word_dropout_prob = src_word_dropout_prob
@@ -519,6 +521,10 @@ class MixerModel(nn.Module):
                 mod.requires_grad_(True)
     
     def encode(self, src, image_src, src_mask, **kwargs):
+        if self.use_denoised_coordinates:
+            output = self.decode_denoise()
+            den_src = output['denoise']
+            src[:,:,:2] = den_src[:,:,:2]
         src_coords = src[:,:,:2].clone()
         if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum' or self.input_encoder == 'nerf_fourier':
             enc_coords = src[:,:,:2]

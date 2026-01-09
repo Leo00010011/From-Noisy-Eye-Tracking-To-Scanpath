@@ -27,6 +27,7 @@ denoise_head_hidden_dropout: 0.3
 denoise_head_output_dropout: 0.1
 use_enh_img_features: False
 mixed_image_features: False
+use_denoised_coordinates: True
 mixer_dropout: 0
 norm_first: True
 dropout_p: 0
