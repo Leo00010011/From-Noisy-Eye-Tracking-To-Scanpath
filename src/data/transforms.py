@@ -421,7 +421,7 @@ class AddCurriculumNoise:
             return input
         x = input['x']
         clean_x = input['clean_x']
-        alpha = self.alphas[self.current_step - 1]
+        alpha = self.get_alpha()
         coords = x[:2]
         clean_coords = clean_x[:2]
         noise = coords - clean_coords
