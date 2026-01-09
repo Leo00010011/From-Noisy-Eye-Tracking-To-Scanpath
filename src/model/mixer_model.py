@@ -520,12 +520,7 @@ class MixerModel(nn.Module):
             for mod in self.fixation_modules:
                 mod.requires_grad_(True)
     
-    def encode(self, src, image_src, src_mask, **kwargs):
-        if self.use_denoised_coordinates:
-            output = self.decode_denoise()
-            den_src = output['denoise']
-            src[:,:,:2] = den_src[:,:,:2]
-        src_coords = src[:,:,:2].clone()
+    def input_encoding(self, src):
         if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum' or self.input_encoder == 'nerf_fourier':
             enc_coords = src[:,:,:2]
             enc_time = src[:,:,2]
@@ -557,7 +552,12 @@ class MixerModel(nn.Module):
             src = enc_coords + enc_time
         else:
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
+        return src
+    
+    def encode(self, src, image_src, src_mask, **kwargs):
+        src_coords = src[:,:,:2].clone()
         
+        src = self.input_encoding(src)
         enc_pe = self.time_enc_pe.pe.unsqueeze(0)
         src = src + enc_pe[:,:src.size()[1],:]
         if self.src_dropout > 0:
@@ -637,6 +637,13 @@ class MixerModel(nn.Module):
         if in_tgt is not None:
             tgt = in_tgt
         src = self.src
+        if self.use_denoised_coordinates:
+            output = self.decode_denoise()
+            den_src = output['denoise']
+            true_src = kwargs['src'].clone()
+            true_src[:,:,:2] = den_src[:,:,:2]
+            src = self.input_encoding(true_src)
+            
         image_src = self.image_src
         src_coords = self.src_coords
         
