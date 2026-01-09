@@ -197,7 +197,7 @@ class MixerModel(nn.Module):
                                            model_dim,
                                            hidden_dropout_p = image_features_dropout,
                                            **factory_mode)
-            self.denoise_modules.append(self.img_input_proj)
+            self.fixation_modules.append(self.img_input_proj)
             if use_rope:
                 self.rope_pos = RopePositionEmbedding(embed_dim = self.model_dim,
                                                       num_heads = self.n_heads,
@@ -261,10 +261,10 @@ class MixerModel(nn.Module):
                                         **factory_mode)
             self.adapter = _get_clones(adapter_layer,n_adapter) 
             for mod in self.adapter:
-                self.denoise_modules.append(mod)
+                self.fixation_modules.append(mod)
             if self.norm_first:
                 self.adapter_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
-                self.denoise_modules.append(self.adapter_norm)
+                self.fixation_modules.append(self.adapter_norm)
                     
                 
         

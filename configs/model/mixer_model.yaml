@@ -5,7 +5,7 @@ n_encoder: 4
 n_decoder: 4
 n_adapter: 4
 n_feature_enhancer: 0
-n_eye_decoder: 4
+n_eye_decoder: 0
 model_dim: 512
 total_dim: 512
 n_heads: 8
