@@ -263,6 +263,7 @@ class ScheduledSampling:
         self.model = None
         self.use_kv_cache = use_kv_cache
         
+        
     def set_model(self, model):
         self.model = model
 

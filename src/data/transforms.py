@@ -378,7 +378,7 @@ class AddHeatmaps:
         
         
 class AddCurriculumNoise:
-    def __init__(self, num_steps = 10, s = 0.002, start_alpha = 0.4):
+    def __init__(self, num_steps = 10, s = 0.002, start_alpha = 0.4, n_updates = -1):
         self.key = 'x'
         self.enabled = True
         self.num_steps = num_steps
@@ -387,12 +387,21 @@ class AddCurriculumNoise:
         self.current_step = 1
         self.start_alpha = start_alpha
         self.steps_per_epoch = 1
+        self.n_updates = n_updates
+        if self.n_updates > 0:
+            self.idx = np.astype(np.floor(np.linspace(0,self.num_steps*self.steps_per_epoch-1,self.n_updates)),int)
         
     def step(self):
         self.current_step = min(self.current_step + 1, self.num_steps*self.steps_per_epoch)
-    
+        if self.n_updates > 0:
+                self.idx = np.astype(np.floor(np.linspace(0,self.num_steps*self.steps_per_epoch-1,self.n_updates)),int)
     def get_alpha(self):
-        return self.alphas[self.current_step - 1]
+        if self.n_updates > 0:
+            # get the index
+            current_idx = int(math.floor(self.current_step/(self.steps_per_epoch*self.num_steps)*self.n_updates))
+            return self.alphas[self.idx[current_idx]]
+        else:
+            return self.alphas[self.current_step - 1]
     
     def set_steps_per_epoch(self, steps_per_epoch):
         self.steps_per_epoch = steps_per_epoch

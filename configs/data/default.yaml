@@ -82,3 +82,4 @@ transforms:
     num_steps: 60
     s: 1000
     start_alpha: 0.4
+    n_updates: 5
