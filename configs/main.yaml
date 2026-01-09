@@ -27,7 +27,7 @@ training:
     name: "Denoise"
     denoise_weight: 1 
     decisive_metric: "denoise_error_val"
-    epochs: 120
+    epochs: 150
   Fixation:
     name: "Fixation"
     denoise_weight: 0
