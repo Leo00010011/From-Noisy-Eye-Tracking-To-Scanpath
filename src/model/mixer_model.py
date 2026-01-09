@@ -638,7 +638,7 @@ class MixerModel(nn.Module):
             tgt = in_tgt
         src = self.src
         if self.use_denoised_coordinates:
-            output = self.decode_denoise(src)
+            output = self.decode_denoise(**kwargs)
             den_src = output['denoise']
             true_src = kwargs['src'].clone()
             true_src[:,:,:2] = den_src[:,:,:2]
