@@ -389,12 +389,12 @@ class AddCurriculumNoise:
         self.steps_per_epoch = 1
         self.n_updates = n_updates
         if self.n_updates > 0:
-            self.idx = np.astype(np.floor(np.linspace(0,self.num_steps*self.steps_per_epoch-1,self.n_updates)),int)
+            self.idx = np.floor(np.linspace(0,self.num_steps*self.steps_per_epoch-1,self.n_updates).astype(int))
         
     def step(self):
         self.current_step = min(self.current_step + 1, self.num_steps*self.steps_per_epoch)
         if self.n_updates > 0:
-                self.idx = np.astype(np.floor(np.linspace(0,self.num_steps*self.steps_per_epoch-1,self.n_updates)),int)
+                self.idx = np.floor(np.linspace(0,self.num_steps*self.steps_per_epoch-1,self.n_updates).astype(int))
     def get_alpha(self):
         if self.n_updates > 0:
             # get the index
