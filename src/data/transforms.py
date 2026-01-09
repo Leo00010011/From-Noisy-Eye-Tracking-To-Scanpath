@@ -389,7 +389,7 @@ class AddCurriculumNoise:
         self.steps_per_epoch = 1
         self.n_updates = n_updates
         if self.n_updates > 0:
-            self.idx = np.floor(np.linspace(0,self.num_steps*self.steps_per_epoch-1,self.n_updates).astype(int))
+            self.idx = np.floor(np.linspace(0,self.num_steps*self.steps_per_epoch-1,self.n_updates)).astype(int)
         
     def step(self):
         self.current_step = min(self.current_step + 1, self.num_steps*self.steps_per_epoch)
@@ -406,7 +406,7 @@ class AddCurriculumNoise:
         self.steps_per_epoch = steps_per_epoch
         self.alphas = AddCurriculumNoise.get_cosine_schedule_alphas_bar(self.num_steps*self.steps_per_epoch, self.s, self.start_alpha)
         if self.n_updates > 0:
-                self.idx = np.floor(np.linspace(0,self.num_steps*self.steps_per_epoch-1,self.n_updates).astype(int))
+                self.idx = np.floor(np.linspace(0,self.num_steps*self.steps_per_epoch-1,self.n_updates)).astype(int)
     
     def get_cosine_schedule_alphas_bar(num_steps, s=0.008, start_alpha = 0.4):
         steps = np.linspace(0, num_steps, num_steps)
