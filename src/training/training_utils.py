@@ -271,8 +271,9 @@ class ScheduledSampling:
         self.use_kv_cache = use_kv_cache
         self.n_updates = n_updates
         self.min_prob = min_prob
-        if n_updates > 0:
-            self.batch_idx = torch.linspace(0,warmup_epochs*steps_per_epoch-1,n_updates)
+        
+        self.total_warmup_steps = warmup_epochs*steps_per_epoch
+        self.total_active_steps = active_epochs*steps_per_epoch
         
     def set_model(self, model):
         self.model = model
@@ -282,12 +283,14 @@ class ScheduledSampling:
             self.current_batch += 1
         elif self.current_batch < (self.warmup_epochs + self.active_epochs)*self.steps_per_epoch:
             self.current_batch += 1
-            eval_batch = (self.current_batch - self.warmup_epochs*self.steps_per_epoch) / self.steps_per_epoch
+            active_steps = self.current_batch - self.total_warmup_steps
+            eval_epoch = (active_steps) / self.steps_per_epoch
             if self.n_updates > 0:
-                eval_batch = (self.current_batch - self.warmup_epochs*self.steps_per_epoch)
-                idx = int(eval_batch/(self.active_epochs*self.steps_per_epoch)*self.n_updates)
-                eval_batch = self.batch_idx[idx]/ self.steps_per_epoch
-            prob = inverted_sigmoid(eval_batch, 10)*(1 - self.min_prob) + self.min_prob
+                step_size = self.total_active_steps / self.n_updates
+                eval_epoch = ((active_steps // step_size)*step_size)/self.steps_per_epoch
+            # normalize to 0-50
+            eval_epoch = eval_epoch / self.total_active_steps*50
+            prob = inverted_sigmoid(eval_epoch, 10)*(1 - self.min_prob) + self.min_prob
             self.use_model_prob = min(prob,.8)
         else:
             self.use_model_prob = .8
