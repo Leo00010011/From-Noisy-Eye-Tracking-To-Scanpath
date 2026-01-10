@@ -289,7 +289,7 @@ class ScheduledSampling:
                 step_size = self.total_active_steps / self.n_updates
                 eval_epoch = ((active_steps // step_size)*step_size)/self.steps_per_epoch
             # normalize to 0-50
-            eval_epoch = eval_epoch*50
+            eval_epoch = (eval_epoch / self.active_epochs)*50
             prob = inverted_sigmoid(eval_epoch, 10)*(1 - self.min_prob) + self.min_prob
             self.use_model_prob = min(prob,.8)
         else:
