@@ -253,7 +253,7 @@ def inverted_sigmoid(x,k = 10):
     x_tensor = torch.as_tensor(x, dtype=torch.float32)
     return 1 - k / (k + torch.exp(x_tensor / k))
 class ScheduledSampling:
-    def __init__(self, active_epochs, warmup_epochs, device, dtype = torch.float32,steps_per_epoch = 128, use_kv_cache = False):
+    def __init__(self, active_epochs, warmup_epochs, device, dtype = torch.float32,steps_per_epoch = 128, use_kv_cache = False, n_updates = -1):
         self.device = device
         self.active_epochs = active_epochs
         self.use_model_prob = 0.0
@@ -262,7 +262,9 @@ class ScheduledSampling:
         self.steps_per_epoch = steps_per_epoch
         self.model = None
         self.use_kv_cache = use_kv_cache
-        
+        self.n_updates = n_updates
+        if n_updates > 0:
+            self.batch_idx = torch.linspace(0,warmup_epochs*steps_per_epoch-1,n_updates)
         
     def set_model(self, model):
         self.model = model
@@ -273,6 +275,10 @@ class ScheduledSampling:
         elif self.current_batch < (self.warmup_epochs + self.active_epochs)*self.steps_per_epoch:
             self.current_batch += 1
             eval_batch = (self.current_batch - self.warmup_epochs*self.steps_per_epoch) / self.steps_per_epoch
+            if self.n_updates > 0:
+                eval_batch = (self.current_batch - self.warmup_epochs*self.steps_per_epoch)
+                idx = int(eval_batch/(self.active_epochs*self.steps_per_epoch)*self.n_updates)
+                eval_batch = self.batch_idx[idx]
             self.use_model_prob = min(inverted_sigmoid(eval_batch, 10),.8)
         else:
             self.use_model_prob = .8
