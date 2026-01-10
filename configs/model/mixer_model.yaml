@@ -27,7 +27,7 @@ denoise_head_hidden_dropout: 0.3
 denoise_head_output_dropout: 0.1
 use_enh_img_features: False
 mixed_image_features: False
-use_denoised_coordinates: True
+use_denoised_coordinates: False
 mixer_dropout: 0
 norm_first: True
 dropout_p: 0
@@ -40,8 +40,8 @@ use_kv_cache: False
 compilate: False
 head_type: "linear"
 activation:  "gelu"
-pretrined_encoder_path: "outputs/2026-01-09/18-38-39/model.pth"
-# pretrined_encoder_path: null
+#pretrined_encoder_path: "outputs/2026-01-09/18-38-39/model.pth"
+pretrined_encoder_path: null
 device: "cuda"
 image_encoder:
   enabled: True

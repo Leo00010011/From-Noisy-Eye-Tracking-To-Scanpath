@@ -1,5 +1,5 @@
 # hydra group
 type: multistep_lr
 batch_lr: False
-milestones: [50, 80, 100]
+milestones: [50, 80, 110]
 gamma: 0.1
