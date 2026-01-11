@@ -1,7 +1,7 @@
 defaults:
   - scheduler: multistep_lr
   - data: default
-  - model: mixer_model
+  - model: warmup
   - loss: separated_loss
   - _self_
 
@@ -37,7 +37,7 @@ training:
     name: "Combined"
     denoise_weight: 0
     decisive_metric: ${training.decisive_metric}
-    epochs: 70
+    epochs: 40
 loss:
   complex_type: "combined"
   denoise_loss_type: "l1"
