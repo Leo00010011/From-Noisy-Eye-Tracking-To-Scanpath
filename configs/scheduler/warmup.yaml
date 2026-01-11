@@ -2,6 +2,6 @@
 type: warmup_stable_decay
 batch_lr: True
 warmup_steps: 0
-stable_steps: 40
-decay_steps: 80
+stable_steps: 300
+decay_steps: 100
 min_lr: 0.00001

@@ -99,7 +99,7 @@ names = ['path model',
         # 'phase',
         # 'shared_gaussian_base',
         'phase',
-        'second best phase'
+        'best phase'
         ]
 
 
@@ -115,7 +115,7 @@ ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
              # os.path.join('outputs','2026-01-05','23-42-29'),
           #   os.path.join('outputs','2026-01-06','14-14-24'),
              os.path.join('outputs','2026-01-07','20-26-55'),
-             os.path.join('outputs','2026-01-11','11-56-06'),
+             os.path.join('outputs','2026-01-11','16-19-26'),
              ]
 
 

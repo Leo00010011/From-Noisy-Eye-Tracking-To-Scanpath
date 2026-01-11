@@ -9,7 +9,7 @@ training:
   num_epochs: 100
   validate: True
   val_interval: 10
-  learning_rate: 0.001
+  learning_rate: 0.0001
   decisive_metric: "reg_error_val"
   use_denoise_dropout_scheduler: False
   save_best_only: True
@@ -32,19 +32,19 @@ training:
     name: "Fixation"
     denoise_weight: 0
     decisive_metric: ${training.decisive_metric}
-    epochs: 80
+    epochs: 200
   Combined:
     name: "Combined"
     denoise_weight: 0
     decisive_metric: ${training.decisive_metric}
-    epochs: 70
+    epochs: 300
 loss:
   complex_type: "combined"
   denoise_loss_type: "l1"
   fixation_loss_type: "separated_reg"
 scheduled_sampling:
-  warmup_epochs: 10
-  active_epochs: 40
+  warmup_epochs: 30
+  active_epochs: 70
   n_updates: 6
   min_prob: 0.3
 denoise_dropout_scheduler:
