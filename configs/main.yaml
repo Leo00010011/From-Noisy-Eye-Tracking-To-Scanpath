@@ -1,7 +1,7 @@
 defaults:
-  - scheduler: multistep_lr
+  - scheduler: warmup
   - data: default
-  - model: warmup
+  - model: mixer_model
   - loss: separated_loss
   - _self_
 
