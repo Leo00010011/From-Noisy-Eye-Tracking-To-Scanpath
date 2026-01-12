@@ -390,6 +390,7 @@ class PipelineBuilder:
                               tgt_dropout = self.config.model.get('tgt_dropout', 0),
                               dur_head_dropout = self.config.model.get('dur_head_dropout', 0),
                               n_adapter = self.config.model.get('n_adapter', 0),
+                              decoder_dropout = self.config.model.get('decoder_dropout', 0),
                               mixer_dropout = self.config.model.get('mixer_dropout', 0),
                               eye_encoder_dropout = self.config.model.get('eye_encoder_dropout', 0),
                               end_dropout = self.config.model.get('end_dropout', 0),
