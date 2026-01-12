@@ -14,7 +14,7 @@ training:
   use_denoise_dropout_scheduler: False
   save_best_only: True
   save_full_state: True
-  use_scheduled_sampling: True
+  use_scheduled_sampling: False
   log: True
   weights_scheduler:
     enabled: False
@@ -32,12 +32,12 @@ training:
     name: "Fixation"
     denoise_weight: 0
     decisive_metric: ${training.decisive_metric}
-    epochs: 200
+    epochs: 50
   Combined:
     name: "Combined"
     denoise_weight: 0
     decisive_metric: ${training.decisive_metric}
-    epochs: 300
+    epochs: 50
 loss:
   complex_type: "combined"
   denoise_loss_type: "l1"
