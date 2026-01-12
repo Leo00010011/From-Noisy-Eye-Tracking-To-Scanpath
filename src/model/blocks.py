@@ -620,3 +620,184 @@ class TrajectoryHeatmapGenerator(nn.Module):
         heatmaps = torch.bmm(trajectory_tokens, flat_upsampled_map)
         heatmaps = heatmaps.view(B, L, 2 * self.H, 2 * self.W)
         return heatmaps   
+
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+
+class MultiScaleDeformableAttention(nn.Module):
+    def __init__(
+        self,
+        embed_dim=256,
+        num_heads=8,
+        num_levels=4,
+        num_points=4,
+        dropout=0.1
+    ):
+        """
+        Args:
+            embed_dim: The dimension of the hidden embeddings (must be divisible by num_heads).
+            num_heads: Number of attention heads.
+            num_levels: Number of feature levels (scales) involved (e.g., 4 for standard Deformable DETR).
+            num_points: Number of sampling points per attention head per feature level.
+            dropout: Dropout probability.
+        """
+        super().__init__()
+        if embed_dim % num_heads != 0:
+            raise ValueError(f"embed_dim ({embed_dim}) must be divisible by num_heads ({num_heads})")
+
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.num_levels = num_levels
+        self.num_points = num_points
+        self.head_dim = embed_dim // num_heads
+
+        # --- Learnable Parameters ---
+        
+        # 1. Sampling Offsets: 
+        # Generates (x, y) offsets for each head, level, and point.
+        # Output dim: num_heads * num_levels * num_points * 2 (for x, y)
+        self.sampling_offsets = nn.Linear(embed_dim, num_heads * num_levels * num_points * 2)
+        
+        # 2. Attention Weights:
+        # Generates the importance (scalar weight) for each sampled point.
+        # Output dim: num_heads * num_levels * num_points
+        self.attention_weights = nn.Linear(embed_dim, num_heads * num_levels * num_points)
+        
+        # 3. Value Projection: Project input features to value embeddings
+        self.value_proj = nn.Linear(embed_dim, embed_dim)
+        
+        # 4. Output Projection: Mix heads back to embed_dim
+        self.output_proj = nn.Linear(embed_dim, embed_dim)
+        
+        self.dropout = nn.Dropout(dropout)
+
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        """
+        Initialization is critical for Deformable DETR convergence.
+        1. Offsets initialized to 0 so sampling starts at the reference point.
+        2. Attention weights initialized to uniform distribution.
+        3. Grid init trick used in the original paper to bias offsets slightly.
+        """
+        nn.init.constant_(self.sampling_offsets.weight.data, 0.)
+        
+        # Grid initialization for offsets (biases them to look at specific points around center)
+        thetas = torch.arange(self.num_heads, dtype=torch.float32) * (2.0 * math.pi / self.num_heads)
+        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+        grid_init = (grid_init / grid_init.abs().max(-1, keepdim=True)[0]).view(self.num_heads, 1, 1, 2).repeat(1, self.num_levels, self.num_points, 1)
+        
+        for i in range(self.num_points):
+            grid_init[:, :, i, :] *= i + 1
+            
+        with torch.no_grad():
+            self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+            
+        nn.init.constant_(self.attention_weights.weight.data, 0.)
+        nn.init.constant_(self.attention_weights.bias.data, 0.)
+        
+        nn.init.xavier_uniform_(self.value_proj.weight.data)
+        nn.init.constant_(self.value_proj.bias.data, 0.)
+        nn.init.xavier_uniform_(self.output_proj.weight.data)
+        nn.init.constant_(self.output_proj.bias.data, 0.)
+
+    def forward(self, query, reference_points, value, value_spatial_shapes, value_mask=None):
+        """
+        Args:
+            query: (Batch, Num_Queries, Embed_Dim)
+            reference_points: (Batch, Num_Queries, 2) - Normalized [0, 1] coordinates
+            value: (Batch, Total_Num_Pixels, Embed_Dim) - Flattened features from all levels
+            value_spatial_shapes: (Num_Levels, 2) - Shapes (H, W) of each feature map
+            value_mask: Optional mask for padding
+            
+        Returns:
+            output: (Batch, Num_Queries, Embed_Dim)
+        """
+        bs, num_queries, _ = query.shape
+        bs, num_value_tokens, _ = value.shape
+        
+        # 1. Project inputs
+        value = self.value_proj(value)
+        if value_mask is not None:
+            value = value.masked_fill(value_mask[..., None], 0.0)
+            
+        # Reshape value to (Batch, Num_Heads, Embed_Dim/Num_Heads, Total_Num_Pixels)
+        # Note: We keep pixels flat here and reshape later for grid_sample
+        value = value.view(bs, num_value_tokens, self.num_heads, self.head_dim)
+        
+        # 2. Generate Sampling Offsets and Attention Weights from Query
+        sampling_offsets = self.sampling_offsets(query).view(
+            bs, num_queries, self.num_heads, self.num_levels, self.num_points, 2
+        )
+        attention_weights = self.attention_weights(query).view(
+            bs, num_queries, self.num_heads, self.num_levels * self.num_points
+        )
+        attention_weights = F.softmax(attention_weights, -1).view(
+            bs, num_queries, self.num_heads, self.num_levels, self.num_points
+        )
+
+        # 3. Prepare Reference Points
+        # (Batch, Num_Queries, 1, Num_Levels, 1, 2)
+        if reference_points.shape[-1] == 2:
+            offset_normalizer = torch.stack(
+                [value_spatial_shapes[..., 1], value_spatial_shapes[..., 0]], -1
+            )
+            sampling_locations = reference_points[:, :, None, None, None, :] \
+                                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
+        elif reference_points.shape[-1] == 4:
+            # Handle case where reference points are boxes (x, y, w, h)
+            # This logic is specific to Deformable DETR's iterative refinement
+            sampling_locations = reference_points[:, :, None, None, None, :2] \
+                                 + sampling_offsets / self.num_points * reference_points[:, :, None, None, None, 2:] * 0.5
+        else:
+            raise ValueError(f"Last dim of reference_points must be 2 or 4. Got {reference_points.shape[-1]}.")
+            
+        # 4. Sampling Loop (The Core Logic)
+        output = torch.zeros(
+            bs, num_queries, self.num_heads * self.head_dim, 
+            device=value.device, dtype=value.dtype
+        )
+        
+        # We must split the flattened value back into individual levels to sample from them
+        # split_size_or_sections expects a list of integers
+        split_sizes = [h * w for h, w in value_spatial_shapes]
+        value_list = value.split(split_sizes, dim=1)
+        
+        sampling_grids = 2 * sampling_locations - 1 # Convert [0, 1] to [-1, 1] for grid_sample
+        
+        for level, (h, w) in enumerate(value_spatial_shapes):
+            # Feature map for this level: (Batch, H*W, Head, Dim) -> (Batch, Head, Dim, H, W)
+            value_l = value_list[level].flatten(2).transpose(1, 2).reshape(
+                bs * self.num_heads, self.head_dim, h, w
+            )
+            
+            # Sampling grid for this level
+            # (Batch, Num_Queries, Heads, Points, 2) -> (Batch*Heads, Num_Queries, Points, 2)
+            sampling_grid_l = sampling_grids[:, :, :, level].transpose(1, 2).flatten(0, 1)
+            
+            # Bilinear sampling
+            # Output: (Batch*Heads, Dim, Num_Queries, Points)
+            sampling_value_l = F.grid_sample(
+                value_l, 
+                sampling_grid_l, 
+                mode='bilinear', 
+                padding_mode='zeros', 
+                align_corners=False
+            )
+            
+            # Weighted Sum preparation
+            attention_weights_l = attention_weights[:, :, :, level].transpose(1, 2).reshape(
+                bs * self.num_heads, 1, num_queries, self.num_points
+            )
+            
+            # Apply Weights: (Batch*Heads, Dim, Num_Queries, Points) * (Batch*Heads, 1, Num_Queries, Points)
+            # Sum over points dimension -> (Batch*Heads, Dim, Num_Queries)
+            output_l = (sampling_value_l * attention_weights_l).sum(-1)
+            
+            # Accumulate results across levels (reshaping back to Batch)
+            output += output_l.view(bs, self.num_heads * self.head_dim, num_queries).transpose(1, 2)
+            
+        return self.output_proj(output)
