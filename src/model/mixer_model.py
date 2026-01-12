@@ -55,6 +55,7 @@ class MixerModel(nn.Module):
                        enh_features_dropout = 0,
                        denoise_head_hidden_dropout = 0,
                        denoise_head_output_dropout = 0,
+                       decoder_dropout = 0,
                        n_adapter = 0,
                        n_eye_decoder = 0,
                        use_kv_cache = False,
@@ -107,6 +108,8 @@ class MixerModel(nn.Module):
         self.adapter_dropout = adapter_dropout
         self.use_kv_cache = use_kv_cache
         self.add_denoise_head = add_denoise_head
+        self.decoder_dropout = decoder_dropout
+        
         # SPECIAL TOKENS
         if mixed_image_features:
             self.mix_enh_image_features = GatedFusion(model_dim, dropout_p = mixer_dropout, **factory_mode)
@@ -278,7 +281,7 @@ class MixerModel(nn.Module):
                                            total_dim = total_dim,
                                            n_heads = n_heads,
                                            ff_dim = ff_dim,
-                                           dropout_p = dropout_p,
+                                           dropout_p = self.decoder_dropout,
                                            activation= activation,
                                            norm_first= norm_first,
                                            use_kv_cache = use_kv_cache,
