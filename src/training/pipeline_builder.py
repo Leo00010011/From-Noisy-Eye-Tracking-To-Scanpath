@@ -393,6 +393,7 @@ class PipelineBuilder:
                               mixer_dropout = self.config.model.get('mixer_dropout', 0),
                               eye_encoder_dropout = self.config.model.get('eye_encoder_dropout', 0),
                               end_dropout = self.config.model.get('end_dropout', 0),
+                              add_denoise_head = self.config.model.get('add_denoise_head', True),
                               use_kv_cache = self.config.model.get('use_kv_cache', False))
             
         elif model_name == 'PathModel':

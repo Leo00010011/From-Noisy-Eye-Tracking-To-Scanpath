@@ -58,6 +58,7 @@ class MixerModel(nn.Module):
                        n_adapter = 0,
                        n_eye_decoder = 0,
                        use_kv_cache = False,
+                       add_denoise_head = True,
                        dtype = torch.float32,
                        device = 'cpu'):
         super().__init__()
@@ -105,6 +106,7 @@ class MixerModel(nn.Module):
         self.src_word_dropout_prob = src_word_dropout_prob
         self.adapter_dropout = adapter_dropout
         self.use_kv_cache = use_kv_cache
+        self.add_denoise_head = add_denoise_head
         # SPECIAL TOKENS
         if mixed_image_features:
             self.mix_enh_image_features = GatedFusion(model_dim, dropout_p = mixer_dropout, **factory_mode)
@@ -413,7 +415,7 @@ class MixerModel(nn.Module):
             raise ValueError(f"Unsupported head_type: {head_type}")
         
         # DENOISE HEADS
-        if phases is not None and ('Denoise' in phases or 'Combined' in phases):
+        if self.add_denoise_head and (phases is not None and ('Denoise' in phases or 'Combined' in phases)):
             # self.denoise_head = ResidualRegressor(model_dim, hidden_dropout_p = self.denoise_head_hidden_dropout, output_dropout_p = self.denoise_head_output_dropout, **factory_mode)
             self.denoise_head =  MLP(model_dim,
                                         mlp_head_hidden_dim,
