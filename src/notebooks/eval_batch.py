@@ -89,31 +89,19 @@ def slim_input_output(input, output):
     return slim_input, slim_output
 
 names = ['path model',
-        # 'src dropout path model',
-        # 'drop multi head',
-        # 'only decoder',
-        # 'decoder dropout',
-        # 'clean_eye + gaussian noise'	,
+        'clean_eye + gaussian noise'	,
         'gaussian noise'	,
-        # 'sampling',
-        # 'phase',
-        # 'shared_gaussian_base',
-        'phase',
+        'phase 1',
+        'phase 2',
         'best phase'
         ]
 
 
 
 ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
-             # os.path.join('outputs','2025-12-27','19-45-53'),
-             # os.path.join('outputs','2025-12-28','11-30-12'),
-             # os.path.join('outputs','2025-12-28','19-19-36'),
-             # os.path.join('outputs','2025-12-30','19-13-05'),
-             # os.path.join('outputs','2026-01-04','20-11-06'),
+             os.path.join('outputs','2026-01-04','20-11-06'),
              os.path.join('outputs','2026-01-04','20-44-32'),
-             # os.path.join('outputs','2026-01-04','18-48-31')
-             # os.path.join('outputs','2026-01-05','23-42-29'),
-          #   os.path.join('outputs','2026-01-06','14-14-24'),
+             os.path.join('outputs','2026-01-05','23-42-29'),
              os.path.join('outputs','2026-01-07','20-26-55'),
              os.path.join('outputs','2026-01-11','16-19-26'),
              ]
