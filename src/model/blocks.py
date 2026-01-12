@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from typing import Tuple
+import math
 
 
 class MLP(nn.Module):
@@ -622,182 +623,326 @@ class TrajectoryHeatmapGenerator(nn.Module):
         return heatmaps   
 
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import math
-
-class MultiScaleDeformableAttention(nn.Module):
+class DeformableAttention(nn.Module):
     def __init__(
         self,
         embed_dim=256,
         num_heads=8,
-        num_levels=4,
         num_points=4,
         dropout=0.1
     ):
-        """
-        Args:
-            embed_dim: The dimension of the hidden embeddings (must be divisible by num_heads).
-            num_heads: Number of attention heads.
-            num_levels: Number of feature levels (scales) involved (e.g., 4 for standard Deformable DETR).
-            num_points: Number of sampling points per attention head per feature level.
-            dropout: Dropout probability.
-        """
         super().__init__()
         if embed_dim % num_heads != 0:
             raise ValueError(f"embed_dim ({embed_dim}) must be divisible by num_heads ({num_heads})")
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
-        self.num_levels = num_levels
         self.num_points = num_points
         self.head_dim = embed_dim // num_heads
 
-        # --- Learnable Parameters ---
-        
         # 1. Sampling Offsets: 
-        # Generates (x, y) offsets for each head, level, and point.
-        # Output dim: num_heads * num_levels * num_points * 2 (for x, y)
-        self.sampling_offsets = nn.Linear(embed_dim, num_heads * num_levels * num_points * 2)
+        # Output dim: num_heads * num_points * 2 (x, y)
+        self.sampling_offsets = nn.Linear(embed_dim, num_heads * num_points * 2)
         
         # 2. Attention Weights:
-        # Generates the importance (scalar weight) for each sampled point.
-        # Output dim: num_heads * num_levels * num_points
-        self.attention_weights = nn.Linear(embed_dim, num_heads * num_levels * num_points)
+        # Output dim: num_heads * num_points
+        self.attention_weights = nn.Linear(embed_dim, num_heads * num_points)
         
-        # 3. Value Projection: Project input features to value embeddings
+        # 3. Projections
         self.value_proj = nn.Linear(embed_dim, embed_dim)
-        
-        # 4. Output Projection: Mix heads back to embed_dim
         self.output_proj = nn.Linear(embed_dim, embed_dim)
         
         self.dropout = nn.Dropout(dropout)
-
+        
         self._reset_parameters()
 
     def _reset_parameters(self):
-        """
-        Initialization is critical for Deformable DETR convergence.
-        1. Offsets initialized to 0 so sampling starts at the reference point.
-        2. Attention weights initialized to uniform distribution.
-        3. Grid init trick used in the original paper to bias offsets slightly.
-        """
+        # Initialize offsets to 0
         nn.init.constant_(self.sampling_offsets.weight.data, 0.)
         
-        # Grid initialization for offsets (biases them to look at specific points around center)
+        # Grid Init: Initialize bias to the "Star Pattern"
         thetas = torch.arange(self.num_heads, dtype=torch.float32) * (2.0 * math.pi / self.num_heads)
-        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-        grid_init = (grid_init / grid_init.abs().max(-1, keepdim=True)[0]).view(self.num_heads, 1, 1, 2).repeat(1, self.num_levels, self.num_points, 1)
+        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1) # (Heads, 2)
         
+        # (Heads, Points, 2)
+        grid_init = grid_init.unsqueeze(1).repeat(1, self.num_points, 1) 
+        
+        # Scale the points (Point 0 -> 1x, Point 1 -> 2x, etc.)
         for i in range(self.num_points):
-            grid_init[:, :, i, :] *= i + 1
+            grid_init[:, i, :] *= i + 1
             
         with torch.no_grad():
             self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
             
         nn.init.constant_(self.attention_weights.weight.data, 0.)
         nn.init.constant_(self.attention_weights.bias.data, 0.)
-        
         nn.init.xavier_uniform_(self.value_proj.weight.data)
-        nn.init.constant_(self.value_proj.bias.data, 0.)
         nn.init.xavier_uniform_(self.output_proj.weight.data)
-        nn.init.constant_(self.output_proj.bias.data, 0.)
 
-    def forward(self, query, reference_points, value, value_spatial_shapes, value_mask=None):
+    def forward(self, query, reference_points, value, spatial_shape):
         """
         Args:
             query: (Batch, Num_Queries, Embed_Dim)
-            reference_points: (Batch, Num_Queries, 2) - Normalized [0, 1] coordinates
-            value: (Batch, Total_Num_Pixels, Embed_Dim) - Flattened features from all levels
-            value_spatial_shapes: (Num_Levels, 2) - Shapes (H, W) of each feature map
-            value_mask: Optional mask for padding
+            reference_points: (Batch, Num_Queries, 2) - Normalized [0, 1]
+            value: (Batch, H*W, Embed_Dim) - The image feature map
+            spatial_shape: (H, W) tuple - Shape of the feature map
             
         Returns:
             output: (Batch, Num_Queries, Embed_Dim)
         """
         bs, num_queries, _ = query.shape
-        bs, num_value_tokens, _ = value.shape
+        H, W = spatial_shape
         
-        # 1. Project inputs
+        # 1. Project Input Features
+        # (Batch, H*W, Head, Head_Dim) -> (Batch, Head, Head_Dim, H, W)
         value = self.value_proj(value)
-        if value_mask is not None:
-            value = value.masked_fill(value_mask[..., None], 0.0)
-            
-        # Reshape value to (Batch, Num_Heads, Embed_Dim/Num_Heads, Total_Num_Pixels)
-        # Note: We keep pixels flat here and reshape later for grid_sample
-        value = value.view(bs, num_value_tokens, self.num_heads, self.head_dim)
+        value = value.view(bs, H * W, self.num_heads, self.head_dim)
+        value = value.permute(0, 2, 3, 1).view(bs, self.num_heads, self.head_dim, H, W)
         
-        # 2. Generate Sampling Offsets and Attention Weights from Query
+        # 2. Generate Offsets and Attention Weights
+        # Offsets: (Batch, Num_Queries, Heads, Points, 2)
         sampling_offsets = self.sampling_offsets(query).view(
-            bs, num_queries, self.num_heads, self.num_levels, self.num_points, 2
+            bs, num_queries, self.num_heads, self.num_points, 2
         )
+        
+        # Weights: (Batch, Num_Queries, Heads, Points)
         attention_weights = self.attention_weights(query).view(
-            bs, num_queries, self.num_heads, self.num_levels * self.num_points
+            bs, num_queries, self.num_heads, self.num_points
         )
-        attention_weights = F.softmax(attention_weights, -1).view(
-            bs, num_queries, self.num_heads, self.num_levels, self.num_points
-        )
+        attention_weights = F.softmax(attention_weights, -1)
 
-        # 3. Prepare Reference Points
-        # (Batch, Num_Queries, 1, Num_Levels, 1, 2)
-        if reference_points.shape[-1] == 2:
-            offset_normalizer = torch.stack(
-                [value_spatial_shapes[..., 1], value_spatial_shapes[..., 0]], -1
-            )
-            sampling_locations = reference_points[:, :, None, None, None, :] \
-                                 + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
-        elif reference_points.shape[-1] == 4:
-            # Handle case where reference points are boxes (x, y, w, h)
-            # This logic is specific to Deformable DETR's iterative refinement
-            sampling_locations = reference_points[:, :, None, None, None, :2] \
-                                 + sampling_offsets / self.num_points * reference_points[:, :, None, None, None, 2:] * 0.5
-        else:
-            raise ValueError(f"Last dim of reference_points must be 2 or 4. Got {reference_points.shape[-1]}.")
-            
-        # 4. Sampling Loop (The Core Logic)
-        output = torch.zeros(
-            bs, num_queries, self.num_heads * self.head_dim, 
-            device=value.device, dtype=value.dtype
+        # 3. Compute Sampling Locations
+        # sampling_offsets are unconstrained, so we normalize them by H and W
+        # (Batch, Num_Queries, Heads, Points, 2)
+        offset_normalizer = torch.tensor([W, H], device=query.device, dtype=query.dtype)
+        
+        # Ref Points: (Batch, Num_Queries, 1, 1, 2) -> Broadcasat to Heads & Points
+        sampling_locations = reference_points[:, :, None, None, :] \
+                             + sampling_offsets / offset_normalizer[None, None, None, None, :]
+        
+        # 4. Grid Sample
+        # We need to reshape inputs to use grid_sample efficiently
+        # New Batch Size = Batch * Heads
+        
+        # Reshape Value: (Batch*Heads, Head_Dim, H, W)
+        value_flat = value.view(bs * self.num_heads, self.head_dim, H, W)
+        
+        # Reshape Grid: (Batch*Heads, Num_Queries, Points, 2)
+        # Also convert [0, 1] -> [-1, 1] for grid_sample
+        sampling_grid = 2 * sampling_locations - 1
+        sampling_grid = sampling_grid.permute(0, 2, 1, 3, 4).flatten(0, 1)
+
+        # Sample! 
+        # Output: (Batch*Heads, Head_Dim, Num_Queries, Points)
+        sampled_values = F.grid_sample(
+            value_flat, 
+            sampling_grid, 
+            mode='bilinear', 
+            padding_mode='zeros', 
+            align_corners=False
         )
         
-        # We must split the flattened value back into individual levels to sample from them
-        # split_size_or_sections expects a list of integers
-        split_sizes = [h * w for h, w in value_spatial_shapes]
-        value_list = value.split(split_sizes, dim=1)
+        # 5. Apply Attention Weights
+        # Reshape weights: (Batch*Heads, 1, Num_Queries, Points)
+        attention_weights = attention_weights.permute(0, 2, 1, 3).flatten(0, 1).unsqueeze(1)
         
-        sampling_grids = 2 * sampling_locations - 1 # Convert [0, 1] to [-1, 1] for grid_sample
+        # Weighted Sum over Points
+        # (Batch*Heads, Head_Dim, Num_Queries)
+        output = (sampled_values * attention_weights).sum(-1)
         
-        for level, (h, w) in enumerate(value_spatial_shapes):
-            # Feature map for this level: (Batch, H*W, Head, Dim) -> (Batch, Head, Dim, H, W)
-            value_l = value_list[level].flatten(2).transpose(1, 2).reshape(
-                bs * self.num_heads, self.head_dim, h, w
-            )
-            
-            # Sampling grid for this level
-            # (Batch, Num_Queries, Heads, Points, 2) -> (Batch*Heads, Num_Queries, Points, 2)
-            sampling_grid_l = sampling_grids[:, :, :, level].transpose(1, 2).flatten(0, 1)
-            
-            # Bilinear sampling
-            # Output: (Batch*Heads, Dim, Num_Queries, Points)
-            sampling_value_l = F.grid_sample(
-                value_l, 
-                sampling_grid_l, 
-                mode='bilinear', 
-                padding_mode='zeros', 
-                align_corners=False
-            )
-            
-            # Weighted Sum preparation
-            attention_weights_l = attention_weights[:, :, :, level].transpose(1, 2).reshape(
-                bs * self.num_heads, 1, num_queries, self.num_points
-            )
-            
-            # Apply Weights: (Batch*Heads, Dim, Num_Queries, Points) * (Batch*Heads, 1, Num_Queries, Points)
-            # Sum over points dimension -> (Batch*Heads, Dim, Num_Queries)
-            output_l = (sampling_value_l * attention_weights_l).sum(-1)
-            
-            # Accumulate results across levels (reshaping back to Batch)
-            output += output_l.view(bs, self.num_heads * self.head_dim, num_queries).transpose(1, 2)
-            
+        # 6. Final Projection
+        # (Batch, Num_Queries, Embed_Dim)
+        output = output.view(bs, self.num_heads * self.head_dim, num_queries).transpose(1, 2)
+        
         return self.output_proj(output)
+    
+    
+class DeformableDecoder(nn.Module):
+    def __init__(self, model_dim = 1024,
+                      total_dim = 1024,
+                      n_heads = 8,
+                      ff_dim = 2048,
+                      dropout_p = 0,
+                      activation = F.relu,
+                      eps = 1e-5,
+                      norm_first = False,
+                      num_points = 4,
+                      spatial_shape = (256, 256),
+                      device = 'cpu',
+                      dtype = torch.float32):
+        super().__init__()
+        self.spatial_shape = spatial_shape
+        self.model_dim = model_dim
+        self.total_dim = total_dim
+        self.n_heads = n_heads
+        self.ff_dim = ff_dim
+        self.dropout_p = dropout_p
+        self.eps = eps
+        self.activation = activation
+        self.norm_first = norm_first
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        # sa
+        self.self_attn = MultiHeadedAttention(model_dim,
+                                             total_dim,
+                                             n_heads,
+                                             is_self_attention=True,
+                                             is_causal= True,
+                                             **factory_kwargs)
+        self.norm1 = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
+        self.dropout1 = nn.Dropout(dropout_p)
+        # ca
+        self.cross_attn = DeformableAttention(embed_dim=model_dim,
+                                            num_heads=n_heads,
+                                            num_points=num_points,
+                                            dropout= dropout_p,
+                                            **factory_kwargs)
+        self.norm2 = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
+        self.dropout2 = nn.Dropout(dropout_p)
+        # ff
+        self.linear1 = nn.Linear(model_dim, ff_dim, **factory_kwargs)
+        self.dropout3 = nn.Dropout(dropout_p)
+        self.linear2 = nn.Linear(ff_dim, model_dim, **factory_kwargs)
+        self.norm3 = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
+        self.dropout4 = nn.Dropout(dropout_p)
+
+    def __self_attention(self, x, attn_mask = None):
+        return self.dropout1(self.self_attn(x, attn_mask=attn_mask))
+
+    def __cross_attention(self, src, mem, reference_points = None):
+        return self.dropout2(self.cross_attn(query=src, reference_points=reference_points, value=mem, spatial_shape=self.spatial_shape))
+
+    def __feed_forward(self, x):
+        return self.dropout4(self.linear2(self.dropout3(self.activation(self.linear1(x)))))
+
+    
+    def forward(self, src, mem, tgt_mask = None, reference_points = None):
+        x = src
+        if self.norm_first:
+            x = x + self.__self_attention(self.norm1(x), attn_mask=tgt_mask)
+            x = x + self.__cross_attention(self.norm2(x), mem, reference_points=reference_points)
+            x = x + self.__feed_forward(self.norm3(x))
+        else:
+            x = self.norm1(x + self.__self_attention(x, attn_mask=tgt_mask))
+            x = self.norm2(x + self.__cross_attention(x, mem, reference_points=reference_points))
+            x = self.norm3(x + self.__feed_forward(x))
+        
+        return x
+        
+
+    
+class DeformableDoubleInputDecoder(nn.Module):
+    def __init__(self, model_dim = 1024,
+                      total_dim = 1024,
+                      n_heads = 8,
+                      ff_dim = 2048,
+                      dropout_p = 0,
+                      activation = F.relu,
+                      eps = 1e-5,
+                      norm_first = False,
+                      use_kv_cache = False,
+                      num_points = 4,
+                      device = 'cpu',
+                      dtype = torch.float32):
+        super().__init__()
+        self.model_dim = model_dim
+        self.total_dim = total_dim
+        self.n_heads = n_heads
+        self.ff_dim = ff_dim
+        self.dropout_p = dropout_p
+        self.eps = eps
+        self.activation = activation
+        self.norm_first = norm_first
+        self.use_kv_cache = use_kv_cache
+        self.num_points = num_points
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        # sa
+        self.self_attn = MultiHeadedAttention(model_dim,
+                                            total_dim,
+                                            n_heads,
+                                            is_self_attention=True,
+                                            is_causal= True,
+                                            use_kv_cache=use_kv_cache,
+                                            **factory_kwargs)
+        self.self_attn_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
+        self.self_attn_dropout = nn.Dropout(dropout_p)
+        # ca1
+        
+        self.first_cross_attn = DeformableAttention(embed_dim=model_dim,
+                                                    num_heads=n_heads,
+                                                    num_points=num_points,
+                                                    dropout= dropout_p,
+                                            **factory_kwargs)
+        self.first_cross_attn_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
+        self.first_cross_attn_dropout = nn.Dropout(dropout_p)
+        # ca2
+        self.second_cross_attn = MultiHeadedAttention(model_dim,
+                                            total_dim,
+                                            n_heads,
+                                            is_self_attention=False,
+                                            is_causal= False,
+                                            use_kv_cache=use_kv_cache,
+                                            **factory_kwargs)
+        self.second_cross_attn_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
+        self.second_cross_attn_dropout = nn.Dropout(dropout_p)
+        # ff
+        self.linear_up = nn.Linear(model_dim, ff_dim, **factory_kwargs)
+        self.linear_up_dropout = nn.Dropout(dropout_p)
+        self.linear_down = nn.Linear(ff_dim, model_dim, **factory_kwargs)
+        self.linear_down_dropout = nn.Dropout(dropout_p)
+        self.linear_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
+
+    def __self_attention(self, x, attn_mask = None, src_rope = None):
+        return self.self_attn_dropout(self.self_attn(x, attn_mask=attn_mask, q_rope=src_rope))
+
+    def __cross_attention1(self, src, mem, attn_mask = None,src_rope = None, mem1_rope = None):
+        return self.first_cross_attn_dropout(self.first_cross_attn(src, mem, attn_mask=attn_mask, q_rope=src_rope, k_rope=mem1_rope))
+
+    def __cross_attention2(self, src, mem, attn_mask = None,src_rope = None, mem2_rope = None):
+        return self.second_cross_attn_dropout(self.second_cross_attn(src, mem, attn_mask=attn_mask, q_rope=src_rope, k_rope=mem2_rope))
+
+    def __feed_forward(self, x):
+        return self.linear_down_dropout(self.linear_down(self.linear_up_dropout(self.activation(self.linear_up(x)))))
+
+    def get_cached_input_count(self):
+        if self.use_kv_cache:
+            if self.self_attn.kv_cache is not None:
+                return self.self_attn.kv_cache[0].shape[2]
+            else:
+                return 0
+        else:
+            return 0
+
+    def clear_kv_cache(self):
+        self.self_attn.clear_kv_cache()
+        self.first_cross_attn.clear_kv_cache()
+        self.second_cross_attn.clear_kv_cache()
+    
+    def disable_kv_cache(self):
+        self.use_kv_cache = False
+        self.self_attn.disable_kv_cache()
+        self.first_cross_attn.disable_kv_cache()
+        self.second_cross_attn.disable_kv_cache()
+    
+    def forward(self, src,
+                      mem1,
+                      mem2,
+                      tgt_mask = None,
+                      mem1_mask = None,
+                      mem2_mask = None,
+                      src_rope = None,
+                      mem1_rope = None,
+                      mem2_rope = None):
+        raise NotImplementedError("DoubleInputDecoder.forward is not yet implemented")
+        x = src
+        if self.norm_first:
+            x = x + self.__self_attention(self.self_attn_norm(x), attn_mask=tgt_mask, src_rope=src_rope)
+            x = x + self.__cross_attention1(self.first_cross_attn_norm(x), mem1, attn_mask=mem1_mask, src_rope=src_rope, mem1_rope=mem1_rope)
+            x = x + self.__cross_attention2(self.second_cross_attn_norm(x), mem2, attn_mask=mem2_mask, src_rope=src_rope, mem2_rope=mem2_rope)
+            x = x + self.__feed_forward(self.linear_norm(x))
+        else:
+            x = self.self_attn_norm(x + self.__self_attention(x, attn_mask=tgt_mask, src_rope=src_rope))
+            x = self.first_cross_attn_norm(x + self.__cross_attention1(x, mem1, attn_mask=mem1_mask, src_rope=src_rope, mem1_rope=mem1_rope))
+            x = self.second_cross_attn_norm(x + self.__cross_attention2(x, mem2, attn_mask=mem2_mask, src_rope=src_rope, mem2_rope=mem2_rope))
+            x = self.linear_norm(x + self.__feed_forward(x))
+        
+        return x

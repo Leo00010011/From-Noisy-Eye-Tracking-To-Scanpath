@@ -35,6 +35,7 @@ class MixerModel(nn.Module):
                        head_type = None,
                        mlp_head_hidden_dim = None,
                        image_encoder = None,
+                       use_deformable_decoder = False,
                        n_feature_enhancer = 1,
                        use_denoised_coordinates = False,
                        image_dim = None,
