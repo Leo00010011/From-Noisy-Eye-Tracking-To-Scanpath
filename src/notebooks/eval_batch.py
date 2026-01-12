@@ -98,8 +98,8 @@ names = ['path model',
 
 ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
              os.path.join('outputs','2026-01-04','20-11-06'),
-             os.path.join('outputs','2026-01-04','20-44-32'),
              os.path.join('outputs','2026-01-12','12-43-48'),
+             os.path.join('outputs','2026-01-11','16-19-26'),
              ]
 
 
