@@ -91,8 +91,6 @@ def slim_input_output(input, output):
 names = ['path model',
         'clean_eye + gaussian noise'	,
         'gaussian noise'	,
-        'phase 1',
-        'phase 2',
         'best phase'
         ]
 
@@ -101,9 +99,7 @@ names = ['path model',
 ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
              os.path.join('outputs','2026-01-04','20-11-06'),
              os.path.join('outputs','2026-01-04','20-44-32'),
-             os.path.join('outputs','2026-01-05','23-42-29'),
-             os.path.join('outputs','2026-01-07','20-26-55'),
-             os.path.join('outputs','2026-01-11','16-19-26'),
+             os.path.join('outputs','2026-01-12','12-43-48'),
              ]
 
 
