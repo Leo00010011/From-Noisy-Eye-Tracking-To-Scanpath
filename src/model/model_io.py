@@ -154,7 +154,12 @@ def load_model_for_eval(pipe, path):
             # Keep other keys as they are
             new_state_dict[k] = v
 
-    model.load_state_dict(new_state_dict)
+    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
+    print(f"Info: {len(missing_keys)} missing keys and {len(unexpected_keys)} unexpected keys when loading checkpoint.")
+    if missing_keys:
+        print(f"Missing keys: {missing_keys}")
+    if unexpected_keys:
+        print(f"Unexpected keys: {unexpected_keys}")
     return model
 
 
