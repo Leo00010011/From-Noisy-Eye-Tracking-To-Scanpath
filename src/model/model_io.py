@@ -68,7 +68,13 @@ def load_checkpoint(
         print(f"\n--- Loading Checkpoint from: {filepath} ---")
 
     checkpoint = torch.load(filepath, map_location=torch.device('cpu'))
-    model.load_state_dict(checkpoint['model_state_dict'])
+    missing_keys, unexpected_keys = model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+    if log:
+        print(f"Info: {len(missing_keys)} missing keys and {len(unexpected_keys)} unexpected keys when loading checkpoint.")
+        if missing_keys:
+            print(f"Missing keys: {missing_keys}")
+        if unexpected_keys:
+            print(f"Unexpected keys: {unexpected_keys}")
 
     if checkpoint.get('save_full_state', False) and load_full_state:
         if log:
