@@ -27,8 +27,8 @@ eye_decoder_dropout: 0.1
 reg_head_dropout: 0.1
 enh_features_dropout: 0
 word_dropout_prob: 0
-denoise_head_hidden_dropout: 0.1
-denoise_head_output_dropout: 0.1
+denoise_head_hidden_dropout: 0.2
+denoise_head_output_dropout: 0
 use_enh_img_features: False
 mixed_image_features: False
 use_denoised_coordinates: False
