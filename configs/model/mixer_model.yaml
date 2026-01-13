@@ -15,8 +15,8 @@ max_pos_dec: 26
 src_word_dropout_prob: 0
 dur_head_dropout: 0.1
 end_dropout: 0.1
-image_features_dropout: 0
-src_dropout: 0.3
+image_features_dropout: 0.1
+src_dropout: 0.2
 tgt_dropout: 0
 adapter_dropout: 0
 decoder_dropout: 0.1
