@@ -206,7 +206,7 @@ class MixerModel(nn.Module):
                                            model_dim,
                                            hidden_dropout_p = image_features_dropout,
                                            **factory_mode)
-            self.fixation_modules.append(self.img_input_proj)
+            self.denoise_modules.append(self.img_input_proj)
             if use_rope:
                 self.rope_pos = RopePositionEmbedding(embed_dim = self.model_dim,
                                                       num_heads = self.n_heads,
