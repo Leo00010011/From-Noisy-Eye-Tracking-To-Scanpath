@@ -3,7 +3,7 @@ input_dim: 3
 output_dim: 3
 n_encoder: 4
 n_decoder: 4
-n_adapter: 0
+n_adapter: 4
 n_feature_enhancer: 0
 n_eye_decoder: 4
 model_dim: 512
@@ -15,10 +15,10 @@ max_pos_dec: 26
 src_word_dropout_prob: 0
 dur_head_dropout: 0.1
 end_dropout: 0.1
-image_features_dropout: 0
+image_features_dropout: 0.1
 src_dropout: 0.2
 tgt_dropout: 0
-adapter_dropout: 0
+adapter_dropout: 0.1
 decoder_dropout: 0.1
 use_deformable_eye_decoder: True
 geometric_sigma: 0

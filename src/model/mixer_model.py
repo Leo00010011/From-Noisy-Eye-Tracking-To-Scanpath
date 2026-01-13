@@ -211,6 +211,7 @@ class MixerModel(nn.Module):
                                            mlp_head_hidden_dim,
                                            model_dim,
                                            hidden_dropout_p = image_features_dropout,
+                                           
                                            **factory_mode)
             self.denoise_modules.append(self.img_input_proj)
             if use_rope:
