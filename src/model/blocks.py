@@ -810,7 +810,7 @@ class DeformableDecoder(nn.Module):
                                             num_heads=n_heads,
                                             num_points=num_points,
                                             geometric_sigma=geometric_sigma,
-                                            dropout= dropout_p,
+                                            dropout= 0,
                                             **factory_kwargs)
         self.norm2 = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
         self.dropout2 = nn.Dropout(dropout_p)
