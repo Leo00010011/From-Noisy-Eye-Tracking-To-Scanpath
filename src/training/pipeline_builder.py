@@ -1,4 +1,3 @@
-from pickle import NONE
 import torch
 from src.data.transforms import AddCurriculumNoise
 from src.training.training_utils import DenoiseDropoutScheduler
