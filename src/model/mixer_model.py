@@ -466,7 +466,7 @@ class MixerModel(nn.Module):
                     p for n, p in self.named_parameters() 
                     if "sampling_offsets" in n and p.requires_grad
                 ],
-                "lr": lr ,  # 10x larger LR (e.g., 1e-3)
+                "lr": lr * 10,  # 10x larger LR (e.g., 1e-3)
             },
             ]
         else:
