@@ -697,7 +697,6 @@ class DeformableAttention(nn.Module):
         """
         bs, num_queries, _ = query.shape
         H, W = spatial_shape
-        
         # 1. Project Input Features
         # (Batch, H*W, Head, Head_Dim) -> (Batch, Head, Head_Dim, H, W)
         value = self.value_proj(value)
@@ -824,11 +823,11 @@ class DeformableDecoder(nn.Module):
         x = src
         if self.norm_first:
             x = x + self.__self_attention(self.norm1(x), attn_mask=tgt_mask)
-            x = x + self.__cross_attention(self.norm2(x), mem, reference_points=reference_points)
+            x = x + self.__cross_attention(self.norm2(x), mem[:,1:,:], reference_points=reference_points)
             x = x + self.__feed_forward(self.norm3(x))
         else:
             x = self.norm1(x + self.__self_attention(x, attn_mask=tgt_mask))
-            x = self.norm2(x + self.__cross_attention(x, mem, reference_points=reference_points))
+            x = self.norm2(x + self.__cross_attention(x, mem[:,1:,:], reference_points=reference_points))
             x = self.norm3(x + self.__feed_forward(x))
         
         return x
