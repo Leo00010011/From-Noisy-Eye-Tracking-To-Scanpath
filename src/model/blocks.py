@@ -715,6 +715,7 @@ class DeformableAttention(nn.Module):
         )
         attention_weights = F.softmax(attention_weights, -1)
 
+        attention_weights = self.dropout(attention_weights)
         # 3. Compute Sampling Locations
         # sampling_offsets are unconstrained, so we normalize them by H and W
         # (Batch, Num_Queries, Heads, Points, 2)
