@@ -629,9 +629,14 @@ class DeformableAttention(nn.Module):
         embed_dim=256,
         num_heads=8,
         num_points=4,
-        dropout=0.1
+        dropout=0.1,
+        device = 'cpu',
+        dtype = torch.float32
     ):
         super().__init__()
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        self.device = device
+        self.dtype = dtype
         if embed_dim % num_heads != 0:
             raise ValueError(f"embed_dim ({embed_dim}) must be divisible by num_heads ({num_heads})")
 
@@ -642,15 +647,15 @@ class DeformableAttention(nn.Module):
 
         # 1. Sampling Offsets: 
         # Output dim: num_heads * num_points * 2 (x, y)
-        self.sampling_offsets = nn.Linear(embed_dim, num_heads * num_points * 2)
+        self.sampling_offsets = nn.Linear(embed_dim, num_heads * num_points * 2, **factory_kwargs)
         
         # 2. Attention Weights:
         # Output dim: num_heads * num_points
-        self.attention_weights = nn.Linear(embed_dim, num_heads * num_points)
+        self.attention_weights = nn.Linear(embed_dim, num_heads * num_points, **factory_kwargs)
         
         # 3. Projections
-        self.value_proj = nn.Linear(embed_dim, embed_dim)
-        self.output_proj = nn.Linear(embed_dim, embed_dim)
+        self.value_proj = nn.Linear(embed_dim, embed_dim, **factory_kwargs)
+        self.output_proj = nn.Linear(embed_dim, embed_dim, **factory_kwargs)
         
         self.dropout = nn.Dropout(dropout)
         
@@ -661,7 +666,7 @@ class DeformableAttention(nn.Module):
         nn.init.constant_(self.sampling_offsets.weight.data, 0.)
         
         # Grid Init: Initialize bias to the "Star Pattern"
-        thetas = torch.arange(self.num_heads, dtype=torch.float32) * (2.0 * math.pi / self.num_heads)
+        thetas = torch.arange(self.num_heads, dtype=self.dtype, device=self.device) * (2.0 * math.pi / self.num_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1) # (Heads, 2)
         
         # (Heads, Points, 2)
