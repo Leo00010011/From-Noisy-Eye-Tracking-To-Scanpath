@@ -1,3 +1,4 @@
+from pickle import NONE
 import torch
 from src.data.transforms import AddCurriculumNoise
 from src.training.training_utils import DenoiseDropoutScheduler
@@ -177,10 +178,12 @@ class PipelineBuilder:
             load_config = self.config.data.load
         else:
             load_config = self.config.data
+        self.img_size = load_config.img_size
         if hasattr(load_config, 'use_img_dataset') and load_config.use_img_dataset:
             if self.data is None:
                 self.data = CocoFreeView()
                 self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
+            
             transform = PipelineBuilder.make_transform(resize_size= load_config.img_size)
             if self.img_dataset is None:
                 self.img_dataset = DeduplicatedMemoryDataset(self.data, resize_size= load_config.img_size, transform=transform)
@@ -351,6 +354,7 @@ class PipelineBuilder:
 
             model = MixerModel(input_dim = self.config.model.input_dim,
                               output_dim = self.config.model.output_dim,
+                              img_size = self.img_size,
                               n_encoder = self.config.model.n_encoder,
                               n_decoder = self.config.model.n_decoder,
                               model_dim = self.config.model.model_dim,

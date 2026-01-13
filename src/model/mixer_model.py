@@ -115,6 +115,13 @@ class MixerModel(nn.Module):
         self.use_deformable_eye_decoder = use_deformable_eye_decoder
         self.decoder_dropout = decoder_dropout
         self.geometric_sigma = geometric_sigma
+        
+        if image_encoder is not None:
+            img_embed_dim = image_encoder.embed_dim
+            patch_resolution = int((self.img_size / image_encoder.model.patch_size))
+            self.patch_resolution = (patch_resolution, patch_resolution)
+            print(self.patch_resolution)
+        
         # SPECIAL TOKENS
         if mixed_image_features:
             self.mix_enh_image_features = GatedFusion(model_dim, dropout_p = mixer_dropout, **factory_mode)
@@ -175,18 +182,18 @@ class MixerModel(nn.Module):
             self.fixation_modules.append(self.dec_input_proj)
             self.fixation_modules.append(self.mix_image_features)
         elif input_encoder == "shared_gaussian":
-            self.pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
-            self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
-            self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
+            self.pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution ,**factory_mode)
+            self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.pach_resolution ,**factory_mode)
+            self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution ,**factory_mode)
             self.denoise_modules.append(self.pos_proj)
             self.denoise_modules.append(self.time_proj)
             self.fixation_modules.append(self.dur_proj)
         elif input_encoder == "shared_gaussian_base":
-            self.eye_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
-            self.fix_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,base = self.eye_pos_proj.B,**factory_mode)
-            self.img_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,base = self.eye_pos_proj.B,**factory_mode)
-            self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
-            self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = 16 ,**factory_mode)
+            self.eye_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution ,**factory_mode)
+            self.fix_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution ,base = self.eye_pos_proj.B,**factory_mode)
+            self.img_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution ,base = self.eye_pos_proj.B,**factory_mode)
+            self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution ,**factory_mode)
+            self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution ,**factory_mode)
             self.denoise_modules.append(self.eye_pos_proj)
             self.denoise_modules.append(self.time_proj)
             self.fixation_modules.append(self.fix_pos_proj)
@@ -196,10 +203,6 @@ class MixerModel(nn.Module):
             raise ValueError(f"Unsupported input_encoder: {input_encoder}")
         
         if image_encoder is not None:
-            img_embed_dim = image_encoder.embed_dim
-            patch_resolution = int((self.img_size / image_encoder.model.patch_size))
-            self.patch_resolution = (patch_resolution, patch_resolution)
-            print(self.patch_resolution)
             if img_embed_dim == model_dim:
                 self.img_input_proj = nn.Identity()
             else:
@@ -759,7 +762,7 @@ class MixerModel(nn.Module):
         if self.input_encoder == 'image_features_concat' and tgt_coords is not None:
             visual_tokens = image_src[:,1:,:]
             B = tgt_coords.size(0)
-            coords = torch.floor(tgt_coords*16).long()
+            coords = torch.floor(tgt_coords*self.patch_resolution[0]).long()
             coords[coords > 15] = 15
             visual_tokens = visual_tokens.view(B, self.patch_resolution[0], self.patch_resolution[1], self.model_dim)
             grid_h = coords[:, :, 0] 
