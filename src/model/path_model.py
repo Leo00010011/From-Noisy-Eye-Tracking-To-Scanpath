@@ -119,6 +119,17 @@ class PathModel(nn.Module):
                                      **factory_mode)
         else:
             raise ValueError(f"Unsupported head_type: {head_type}")
+    def get_parameter_groups(self, lr):
+        param_dicts = [
+            {
+                "params": [
+                    p for n, p in self.named_parameters() 
+                    if p.requires_grad
+                ],
+                "lr": lr,  # Standard LR (e.g., 1e-4)
+            },
+        ]
+        return param_dicts
 
     def param_summary(self):
         # When iterating, each element is automatically resolved

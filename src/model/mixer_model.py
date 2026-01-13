@@ -443,6 +443,36 @@ class MixerModel(nn.Module):
                                         **factory_mode)
             self.denoise_modules.append(self.denoise_head)
 
+    def get_parameter_groups(self, lr):
+        if self.use_deformable_eye_decoder:
+            param_dicts = [
+            {
+                "params": [
+                    p for n, p in self.named_parameters() 
+                    if "sampling_offsets" not in n and p.requires_grad
+                ],
+                "lr": lr,  # Standard LR (e.g., 1e-4)
+            },
+            {
+                "params": [
+                    p for n, p in self.named_parameters() 
+                    if "sampling_offsets" in n and p.requires_grad
+                ],
+                "lr": lr * 10,  # 10x larger LR (e.g., 1e-3)
+            },
+            ]
+        else:
+            param_dicts = [
+                {
+                    "params": [
+                        p for n, p in self.named_parameters() 
+                        if p.requires_grad
+                    ],
+                    "lr": lr,  # Standard LR (e.g., 1e-4)
+                },
+            ]
+        return param_dicts
+
     def get_key_name(self, model, module_list):
         # 1. Create a set of object IDs for your target list for O(1) lookup
         target_ids = {id(m) for m in module_list}
