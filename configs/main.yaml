@@ -9,7 +9,7 @@ training:
   num_epochs: 100
   validate: True
   val_interval: 10
-  learning_rate: 0.0001
+  learning_rate: 0.001
   decisive_metric: "reg_error_val"
   use_denoise_dropout_scheduler: False
   save_best_only: True
