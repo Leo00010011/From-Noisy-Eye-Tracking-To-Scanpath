@@ -729,11 +729,8 @@ class DeformableAttention(nn.Module):
         # New Batch Size = Batch * Heads
         
         # Reshape Value: (Batch*Heads, Head_Dim, H, W)
-        print(value.shape)
         # log view parameters
-        print(f"value.shape: {value.shape}")
-        print(f"bs: {bs}, self.num_heads: {self.num_heads}, self.head_dim: {self.head_dim}, H: {H}, W: {W}")
-        value_flat = value.view(bs * self.num_heads, self.head_dim, H, W)
+        value_flat = value.reshape(bs * self.num_heads, self.head_dim, H, W)
         
         # Reshape Grid: (Batch*Heads, Num_Queries, Points, 2)
         # Also convert [0, 1] -> [-1, 1] for grid_sample
