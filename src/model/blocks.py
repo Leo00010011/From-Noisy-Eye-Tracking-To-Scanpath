@@ -767,7 +767,7 @@ class DeformableDecoder(nn.Module):
                       eps = 1e-5,
                       norm_first = False,
                       num_points = 4,
-                      spatial_shape = (256, 256),
+                      spatial_shape = (16, 16),
                       device = 'cpu',
                       dtype = torch.float32):
         super().__init__()

@@ -392,6 +392,7 @@ class PipelineBuilder:
                               n_adapter = self.config.model.get('n_adapter', 0),
                               decoder_dropout = self.config.model.get('decoder_dropout', 0),
                               mixer_dropout = self.config.model.get('mixer_dropout', 0),
+                              use_deformable_eye_decoder = self.config.model.get('use_deformable_eye_decoder', False),
                               eye_encoder_dropout = self.config.model.get('eye_encoder_dropout', 0),
                               end_dropout = self.config.model.get('end_dropout', 0),
                               add_denoise_head = self.config.model.get('add_denoise_head', True),

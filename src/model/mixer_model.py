@@ -5,7 +5,7 @@ import copy
 import numpy as np
 from src.model.blocks import (TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer, ArgMaxRegressor,
                               LearnableCoordinateDropout, ResidualRegressor, GatedFusion, TransformerDecoder,
-                              TrajectoryHeatmapGenerator)
+                              TrajectoryHeatmapGenerator, DeformableDecoder)
 from src.model.pos_encoders import PositionalEncoding, GaussianFourierPosEncoder, FourierPosEncoder
 from src.model.rope_positional_embeddings import RopePositionEmbedding
 
@@ -35,7 +35,7 @@ class MixerModel(nn.Module):
                        head_type = None,
                        mlp_head_hidden_dim = None,
                        image_encoder = None,
-                       use_deformable_decoder = False,
+                       use_deformable_eye_decoder = False,
                        n_feature_enhancer = 1,
                        use_denoised_coordinates = False,
                        image_dim = None,
@@ -109,6 +109,7 @@ class MixerModel(nn.Module):
         self.adapter_dropout = adapter_dropout
         self.use_kv_cache = use_kv_cache
         self.add_denoise_head = add_denoise_head
+        self.use_deformable_eye_decoder = use_deformable_eye_decoder
         self.decoder_dropout = decoder_dropout
         
         # SPECIAL TOKENS
@@ -244,20 +245,6 @@ class MixerModel(nn.Module):
             for mod in self.feature_enhancer:
                 self.denoise_modules.append(mod)
                 
-        if self.n_eye_decoder > 0:
-            eye_decoder_layer = TransformerDecoder(model_dim = model_dim,
-                                            total_dim = total_dim,
-                                            n_heads = n_heads,
-                                            ff_dim = ff_dim,
-                                            dropout_p = eye_encoder_dropout,
-                                            activation= activation,
-                                            norm_first= norm_first,
-                                            **factory_mode)
-            self.eye_decoder = _get_clones(eye_decoder_layer,n_eye_decoder)
-            for mod in self.eye_decoder:
-                self.denoise_modules.append(mod)
-                
-            
         if self.n_adapter > 0:
             adapter_layer = TransformerEncoder(model_dim = model_dim,
                                         total_dim = total_dim,
@@ -273,6 +260,33 @@ class MixerModel(nn.Module):
             if self.norm_first:
                 self.adapter_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
                 self.fixation_modules.append(self.adapter_norm)
+                
+        if self.n_eye_decoder > 0:
+            if self.use_deformable_eye_decoder:
+                eye_decoder_layer = DeformableDecoder(model_dim = model_dim,
+                                                total_dim = total_dim,
+                                                n_heads = n_heads,
+                                                ff_dim = ff_dim,
+                                                dropout_p = eye_encoder_dropout,
+                                                activation= activation,
+                                                norm_first= norm_first,
+                                                num_points = 4,
+                                                spatial_shape = self.patch_resolution,
+                                                **factory_mode)
+            else:
+                eye_decoder_layer = TransformerDecoder(model_dim = model_dim,
+                                                total_dim = total_dim,
+                                                n_heads = n_heads,
+                                                ff_dim = ff_dim,
+                                                dropout_p = eye_encoder_dropout,
+                                                activation= activation,
+                                                norm_first= norm_first,
+                                                **factory_mode)
+            self.eye_decoder = _get_clones(eye_decoder_layer,n_eye_decoder)
+            for mod in self.eye_decoder:
+                self.denoise_modules.append(mod)
+                
+            
                     
                 
         
@@ -631,9 +645,13 @@ class MixerModel(nn.Module):
                 if self.norm_first:
                     image_src = self.adapter_norm(image_src)
             if self.n_eye_decoder > 0:
+                
                 for mod in self.eye_decoder:
                     for mod in self.eye_decoder:
-                        src = mod(src, image_src, src_mask, None)
+                        if self.use_deformable_eye_decoder:
+                            src = mod(src, image_src, src_mask, None, reference_points = src_coords)
+                        else:   
+                            src = mod(src, image_src, src_mask, None)
                 if self.norm_first:
                     src = self.final_fenh_norm_src(src)
                 
