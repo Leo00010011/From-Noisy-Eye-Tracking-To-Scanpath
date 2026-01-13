@@ -845,6 +845,7 @@ class DeformableDoubleInputDecoder(nn.Module):
                       eps = 1e-5,
                       norm_first = False,
                       use_kv_cache = False,
+                      spatial_shape = (16, 16),
                       num_points = 4,
                       device = 'cpu',
                       dtype = torch.float32):
@@ -859,6 +860,7 @@ class DeformableDoubleInputDecoder(nn.Module):
         self.norm_first = norm_first
         self.use_kv_cache = use_kv_cache
         self.num_points = num_points
+        self.spatial_shape = spatial_shape
         factory_kwargs = {'device': device, 'dtype': dtype}
         # sa
         self.self_attn = MultiHeadedAttention(model_dim,
@@ -902,8 +904,8 @@ class DeformableDoubleInputDecoder(nn.Module):
     def __cross_attention1(self, src, mem, attn_mask = None,src_rope = None, mem1_rope = None):
         return self.first_cross_attn_dropout(self.first_cross_attn(src, mem, attn_mask=attn_mask, q_rope=src_rope, k_rope=mem1_rope))
 
-    def __cross_attention2(self, src, mem, attn_mask = None,src_rope = None, mem2_rope = None):
-        return self.second_cross_attn_dropout(self.second_cross_attn(src, mem, attn_mask=attn_mask, q_rope=src_rope, k_rope=mem2_rope))
+    def __cross_attention2(self, src, mem, reference_points = None):
+        return self.dropout2(self.cross_attn(query=src, reference_points=reference_points, value=mem, spatial_shape=self.spatial_shape))
 
     def __feed_forward(self, x):
         return self.linear_down_dropout(self.linear_down(self.linear_up_dropout(self.activation(self.linear_up(x)))))
@@ -934,20 +936,17 @@ class DeformableDoubleInputDecoder(nn.Module):
                       tgt_mask = None,
                       mem1_mask = None,
                       mem2_mask = None,
-                      src_rope = None,
-                      mem1_rope = None,
-                      mem2_rope = None):
-        raise NotImplementedError("DoubleInputDecoder.forward is not yet implemented")
+                      reference_points = None):
         x = src
         if self.norm_first:
-            x = x + self.__self_attention(self.self_attn_norm(x), attn_mask=tgt_mask, src_rope=src_rope)
-            x = x + self.__cross_attention1(self.first_cross_attn_norm(x), mem1, attn_mask=mem1_mask, src_rope=src_rope, mem1_rope=mem1_rope)
-            x = x + self.__cross_attention2(self.second_cross_attn_norm(x), mem2, attn_mask=mem2_mask, src_rope=src_rope, mem2_rope=mem2_rope)
+            x = x + self.__self_attention(self.self_attn_norm(x), attn_mask=tgt_mask, src_rope= None)
+            x = x + self.__cross_attention1(self.first_cross_attn_norm(x), mem1, attn_mask=mem1_mask, src_rope=None, mem1_rope=None)
+            x = x + self.__cross_attention2(self.norm2(x), mem2[:,1:,:], reference_points=reference_points)
             x = x + self.__feed_forward(self.linear_norm(x))
         else:
-            x = self.self_attn_norm(x + self.__self_attention(x, attn_mask=tgt_mask, src_rope=src_rope))
-            x = self.first_cross_attn_norm(x + self.__cross_attention1(x, mem1, attn_mask=mem1_mask, src_rope=src_rope, mem1_rope=mem1_rope))
-            x = self.second_cross_attn_norm(x + self.__cross_attention2(x, mem2, attn_mask=mem2_mask, src_rope=src_rope, mem2_rope=mem2_rope))
+            x = self.self_attn_norm(x + self.__self_attention(x, attn_mask=tgt_mask, src_rope= None))
+            x = self.first_cross_attn_norm(x + self.__cross_attention1(x, mem1, attn_mask=mem1_mask, src_rope= None, mem1_rope=None))
+            x = self.second_cross_attn_norm(x + self.__cross_attention2(x, mem2, attn_mask=mem2_mask, src_rope= None, mem2_rope= None))
             x = self.linear_norm(x + self.__feed_forward(x))
         
         return x

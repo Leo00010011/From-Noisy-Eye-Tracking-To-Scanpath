@@ -53,6 +53,7 @@ class MixerModel(nn.Module):
                        adapter_dropout = 0,
                        tgt_dropout = 0,
                        eye_encoder_dropout = 0,
+                       eye_decoder_dropout = 0,
                        enh_features_dropout = 0,
                        denoise_head_hidden_dropout = 0,
                        denoise_head_output_dropout = 0,
@@ -92,6 +93,7 @@ class MixerModel(nn.Module):
         self.src_dropout = src_dropout
         self.tgt_dropout = tgt_dropout
         self.eye_encoder_dropout = eye_encoder_dropout
+        self.eye_decoder_dropout = eye_decoder_dropout
         self.dur_head_dropout = dur_head_dropout
         self.end_dropout = end_dropout
         self.reg_head_dropout = reg_head_dropout
@@ -267,7 +269,7 @@ class MixerModel(nn.Module):
                                                 total_dim = total_dim,
                                                 n_heads = n_heads,
                                                 ff_dim = ff_dim,
-                                                dropout_p = eye_encoder_dropout,
+                                                dropout_p = eye_decoder_dropout,
                                                 activation= activation,
                                                 norm_first= norm_first,
                                                 num_points = 4,
@@ -278,7 +280,7 @@ class MixerModel(nn.Module):
                                                 total_dim = total_dim,
                                                 n_heads = n_heads,
                                                 ff_dim = ff_dim,
-                                                dropout_p = eye_encoder_dropout,
+                                                dropout_p = eye_decoder_dropout,
                                                 activation= activation,
                                                 norm_first= norm_first,
                                                 **factory_mode)
