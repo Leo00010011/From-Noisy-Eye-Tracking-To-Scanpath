@@ -630,6 +630,7 @@ class DeformableAttention(nn.Module):
         num_heads=8,
         num_points=4,
         dropout=0.1,
+        geometric_sigma = 0,
         device = 'cpu',
         dtype = torch.float32
     ):
@@ -644,6 +645,7 @@ class DeformableAttention(nn.Module):
         self.num_heads = num_heads
         self.num_points = num_points
         self.head_dim = embed_dim // num_heads
+        self.geometric_sigma = geometric_sigma
 
         # 1. Sampling Offsets: 
         # Output dim: num_heads * num_points * 2 (x, y)
@@ -719,6 +721,12 @@ class DeformableAttention(nn.Module):
         # 3. Compute Sampling Locations
         # sampling_offsets are unconstrained, so we normalize them by H and W
         # (Batch, Num_Queries, Heads, Points, 2)
+        if self.training and self.geometric_sigma > 0:
+            # Create noise: (Batch, Num_Queries, Heads, Points, 2)
+            # Use a small sigma, e.g., 0.1 or 0.05
+            noise = torch.randn_like(sampling_offsets) * self.geometric_sigma
+            sampling_offsets = sampling_offsets + noise
+            
         offset_normalizer = torch.tensor([W, H], device=query.device, dtype=query.dtype)
         
         # Ref Points: (Batch, Num_Queries, 1, 1, 2) -> Broadcasat to Heads & Points
@@ -774,6 +782,7 @@ class DeformableDecoder(nn.Module):
                       norm_first = False,
                       num_points = 4,
                       spatial_shape = (16, 16),
+                      geometric_sigma = 0,
                       device = 'cpu',
                       dtype = torch.float32):
         super().__init__()
@@ -800,6 +809,7 @@ class DeformableDecoder(nn.Module):
         self.cross_attn = DeformableAttention(embed_dim=model_dim,
                                             num_heads=n_heads,
                                             num_points=num_points,
+                                            geometric_sigma=geometric_sigma,
                                             dropout= dropout_p,
                                             **factory_kwargs)
         self.norm2 = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)

@@ -56,6 +56,7 @@ class MixerModel(nn.Module):
                        eye_decoder_dropout = 0,
                        enh_features_dropout = 0,
                        denoise_head_hidden_dropout = 0,
+                       geometric_sigma = 0,
                        denoise_head_output_dropout = 0,
                        decoder_dropout = 0,
                        n_adapter = 0,
@@ -113,7 +114,7 @@ class MixerModel(nn.Module):
         self.add_denoise_head = add_denoise_head
         self.use_deformable_eye_decoder = use_deformable_eye_decoder
         self.decoder_dropout = decoder_dropout
-        
+        self.geometric_sigma = geometric_sigma
         # SPECIAL TOKENS
         if mixed_image_features:
             self.mix_enh_image_features = GatedFusion(model_dim, dropout_p = mixer_dropout, **factory_mode)
@@ -270,6 +271,7 @@ class MixerModel(nn.Module):
                                                 n_heads = n_heads,
                                                 ff_dim = ff_dim,
                                                 dropout_p = eye_decoder_dropout,
+                                                geometric_sigma = self.geometric_sigma,
                                                 activation= activation,
                                                 norm_first= norm_first,
                                                 num_points = 4,
