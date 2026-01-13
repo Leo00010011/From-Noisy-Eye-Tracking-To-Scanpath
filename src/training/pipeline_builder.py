@@ -424,7 +424,7 @@ class PipelineBuilder:
     
     def build_optimizer(self, model: PathModel):
         param_dicts = model.get_parameter_groups(self.config.training.learning_rate)
-        optimizer = torch.optim.Adam(param_dicts, 
+        optimizer = torch.optim.AdamW(param_dicts, 
                                      weight_decay = self.config.training.get('weight_decay', 0))
         return optimizer
     
