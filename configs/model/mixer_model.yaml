@@ -21,7 +21,7 @@ tgt_dropout: 0
 adapter_dropout: 0
 decoder_dropout: 0.1
 use_deformable_eye_decoder: True
-geometric_sigma: 0.05
+geometric_sigma: 0.1
 eye_encoder_dropout: 0.1
 eye_decoder_dropout: 0.1
 reg_head_dropout: 0.1
