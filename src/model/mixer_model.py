@@ -649,7 +649,7 @@ class MixerModel(nn.Module):
                 for mod in self.eye_decoder:
                     for mod in self.eye_decoder:
                         if self.use_deformable_eye_decoder:
-                            src = mod(src, image_src, src_mask, None, reference_points = src_coords)
+                            src = mod(src, image_src, src_mask, reference_points = src_coords)
                         else:   
                             src = mod(src, image_src, src_mask, None)
                 if self.norm_first:
