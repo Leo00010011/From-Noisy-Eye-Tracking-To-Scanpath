@@ -377,13 +377,13 @@ class MixerModel(nn.Module):
             self.dur_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
                                            1,
-                                           hidden_dropout_p = dur_head_dropout,
+                                           output_dropout_p = dur_head_dropout,
                                            **factory_mode)
             
             self.end_head = MLP(model_dim,
                                      mlp_head_hidden_dim,
                                      1,
-                                     hidden_dropout_p = end_dropout,
+                                     output_dropout_p = end_dropout,
                                      **factory_mode)
             self.fixation_modules.append(self.coord_head)
             self.fixation_modules.append(self.dur_head)
