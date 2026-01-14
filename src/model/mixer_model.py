@@ -5,7 +5,7 @@ import copy
 import numpy as np
 from src.model.blocks import (TransformerEncoder, DoubleInputDecoder, MLP, FeatureEnhancer, ArgMaxRegressor,
                               LearnableCoordinateDropout, ResidualRegressor, GatedFusion, TransformerDecoder,
-                              TrajectoryHeatmapGenerator, DeformableDecoder)
+                              TrajectoryHeatmapGenerator, DeformableDecoder, DeformableDoubleInputDecoder)
 from src.model.pos_encoders import PositionalEncoding, GaussianFourierPosEncoder, FourierPosEncoder
 from src.model.rope_positional_embeddings import RopePositionEmbedding
 
@@ -48,6 +48,7 @@ class MixerModel(nn.Module):
                        mixed_image_features = False,
                        mixer_dropout = 0,
                        end_dropout = 0,
+                       use_deformable_fixation_decoder = False,
                        phases = None,
                        src_dropout = 0,
                        adapter_dropout = 0,
@@ -115,7 +116,7 @@ class MixerModel(nn.Module):
         self.use_deformable_eye_decoder = use_deformable_eye_decoder
         self.decoder_dropout = decoder_dropout
         self.geometric_sigma = geometric_sigma
-        
+        self.use_deformable_fixation_decoder = use_deformable_fixation_decoder
         if image_encoder is not None:
             img_embed_dim = image_encoder.embed_dim
             patch_resolution = int((self.img_size / image_encoder.model.patch_size))
@@ -300,7 +301,18 @@ class MixerModel(nn.Module):
         
         
         # DECODER
-        decoder_layer = DoubleInputDecoder(model_dim = model_dim,
+        if self.use_deformable_fixation_decoder:
+            decoder_layer = DeformableDoubleInputDecoder(model_dim = model_dim,
+                                           total_dim = total_dim,
+                                           n_heads = n_heads,
+                                           ff_dim = ff_dim,
+                                           dropout_p = self.decoder_dropout,
+                                           activation= activation,
+                                           norm_first= norm_first,
+                                           use_kv_cache = use_kv_cache,
+                                           **factory_mode)
+        else:
+            decoder_layer = DoubleInputDecoder(model_dim = model_dim,
                                            total_dim = total_dim,
                                            n_heads = n_heads,
                                            ff_dim = ff_dim,
