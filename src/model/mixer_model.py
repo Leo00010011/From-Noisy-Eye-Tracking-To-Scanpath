@@ -797,7 +797,7 @@ class MixerModel(nn.Module):
             if self.use_deformable_fixation_decoder:
                 # 1. Create the start point (Batch, 1, Dim)
                 # We use .expand to match the batch size without allocating extra memory
-                start_point = torch.full((1, 1, feature_dim), 0.5, 
+                start_point = torch.full((1, 1, 2), 0.5, 
                                         device=src.device, 
                                         dtype=src.dtype).expand(batch_size, -1, -1)
                 if tgt_coords is None:
