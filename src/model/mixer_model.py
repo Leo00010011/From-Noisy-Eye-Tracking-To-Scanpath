@@ -45,6 +45,7 @@ class MixerModel(nn.Module):
                        src_word_dropout_prob = 0,
                        dur_head_dropout = 0,
                        reg_head_dropout = 0,
+                       reg_head_output_dropout = 0,
                        mixed_image_features = False,
                        mixer_dropout = 0,
                        adapter_hidden_dims = [],
@@ -118,6 +119,7 @@ class MixerModel(nn.Module):
         self.use_deformable_eye_decoder = use_deformable_eye_decoder
         self.decoder_dropout = decoder_dropout
         self.geometric_sigma = geometric_sigma
+        self.reg_head_output_dropout = reg_head_output_dropout
         self.use_deformable_fixation_decoder = use_deformable_fixation_decoder
         if image_encoder is not None:
             img_embed_dim = image_encoder.embed_dim
@@ -370,6 +372,7 @@ class MixerModel(nn.Module):
                                            mlp_head_hidden_dim,
                                            2,
                                            hidden_dropout_p = reg_head_dropout,
+                                           output_dropout_p = reg_head_output_dropout,
                                            **factory_mode)
             self.dur_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
@@ -803,8 +806,6 @@ class MixerModel(nn.Module):
                 if tgt_coords is None:
                     reference_points = start_point
                 else:
-                    batch_size, seq_len, feature_dim = tgt_coords.size()
-                    # 2. Concatenate with the existing coordinates
                     reference_points = torch.cat([start_point, tgt_coords], dim=1)
                 output = mod(output,src ,image_src , tgt_mask, mem1_mask = src_mask, reference_points = reference_points)
             else:
