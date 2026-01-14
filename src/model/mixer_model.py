@@ -799,7 +799,7 @@ class MixerModel(nn.Module):
                 # We use .expand to match the batch size without allocating extra memory
                 start_point = torch.full((1, 1, 2), 0.5, 
                                         device=src.device, 
-                                        dtype=src.dtype).expand(batch_size, -1, -1)
+                                        dtype=src.dtype).expand(src.size(0), -1, -1)
                 if tgt_coords is None:
                     reference_points = start_point
                 else:
