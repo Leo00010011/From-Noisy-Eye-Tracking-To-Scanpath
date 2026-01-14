@@ -320,6 +320,8 @@ class MixerModel(nn.Module):
                                            activation= activation,
                                            norm_first= norm_first,
                                            use_kv_cache = use_kv_cache,
+                                           num_points = 4,
+                                           spatial_shape = self.patch_resolution,
                                            **factory_mode)
         self.decoder = _get_clones(decoder_layer,n_decoder)
         for mod in self.decoder:
@@ -790,7 +792,10 @@ class MixerModel(nn.Module):
             src_rope = tgt_rope = image_rope = None
             if self.use_rope and tgt_coords is not None:
                 [src_rope, tgt_rope], image_rope = self.rope_pos(traj_coords = [src_coords, tgt_coords], patch_res = self.patch_resolution)
-            output = mod(output, image_src,src , tgt_mask, src_mask, src_rope = tgt_rope, mem1_rope = image_rope, mem2_rope = src_rope)
+            if self.use_deformable_fixation_decoder:
+                output = mod(output,src ,image_src , tgt_mask, mem1_mask = src_mask, reference_points = tgt_coords)
+            else:
+                output = mod(output, image_src,src , tgt_mask, mem2_mask = src_mask, src_rope = tgt_rope, mem1_rope = image_rope, mem2_rope = src_rope)
 
         if self.norm_first:
             output = self.final_dec_norm(output)
