@@ -21,6 +21,7 @@ tgt_dropout: 0
 adapter_dropout: 0
 decoder_dropout: 0.1
 use_deformable_eye_decoder: True
+use_deformable_fixation_decoder: True
 geometric_sigma: 0
 eye_encoder_dropout: 0.1
 eye_decoder_dropout: 0.1
@@ -44,8 +45,8 @@ use_kv_cache: False
 compilate: False
 head_type: "linear"
 activation:  "gelu"
-# pretrined_encoder_path: "outputs/2026-01-10/14-14-39/model.pth"
-pretrined_encoder_path: null
+pretrined_encoder_path: "outputs/2026-01-14/13-17-03/model.pth"
+#pretrined_encoder_path: null
 device: "cuda"
 image_encoder:
   enabled: True

@@ -361,6 +361,7 @@ class PipelineBuilder:
                               denoise_head_hidden_dropout = self.config.model.get('denoise_head_hidden_dropout', 0),
                               denoise_head_output_dropout = self.config.model.get('denoise_head_output_dropout', 0),
                               eye_decoder_dropout = self.config.model.get('eye_decoder_dropout', 0),
+                              use_deformable_fixation_decoder = self.config.model.get('use_deformable_fixation_decoder', False),
                               use_denoised_coordinates = self.config.model.get('use_denoised_coordinates', False),
                               adapter_dropout = self.config.model.get('adapter_dropout', 0),
                               n_heads = self.config.model.n_heads,
