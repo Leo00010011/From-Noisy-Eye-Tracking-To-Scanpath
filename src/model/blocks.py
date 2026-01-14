@@ -916,7 +916,7 @@ class DeformableDoubleInputDecoder(nn.Module):
         return self.first_cross_attn_dropout(self.first_cross_attn(src, mem, attn_mask=attn_mask, q_rope=src_rope, k_rope=mem1_rope))
 
     def __cross_attention2(self, src, mem, reference_points = None):
-        return self.second_cross_attn_dropout(self.cross_attn(query=src, reference_points=reference_points, value=mem, spatial_shape=self.spatial_shape))
+        return self.second_cross_attn_dropout(self.second_cross_attn(query=src, reference_points=reference_points, value=mem, spatial_shape=self.spatial_shape))
 
     def __feed_forward(self, x):
         return self.linear_down_dropout(self.linear_down(self.linear_up_dropout(self.activation(self.linear_up(x)))))
