@@ -795,7 +795,12 @@ class MixerModel(nn.Module):
             if self.use_rope and tgt_coords is not None:
                 [src_rope, tgt_rope], image_rope = self.rope_pos(traj_coords = [src_coords, tgt_coords], patch_res = self.patch_resolution)
             if self.use_deformable_fixation_decoder:
-                output = mod(output,src ,image_src , tgt_mask, mem1_mask = src_mask, reference_points = tgt_coords)
+                bs,l,f = tgt_coords.size()
+                center_start = torch.empty(bs,l+1,f, device = tgt_coords.device, dtype = tgt_coords.dtype)
+                center_start[:,1:,:] = tgt_coords[:,:,:]
+                center_start[:,0,0] = 0.5 
+                center_start[:,0,1] = 0.5 
+                output = mod(output,src ,image_src , tgt_mask, mem1_mask = src_mask, reference_points = center_start)
             else:
                 output = mod(output, image_src,src , tgt_mask, mem2_mask = src_mask, src_rope = tgt_rope, mem1_rope = image_rope, mem2_rope = src_rope)
 
