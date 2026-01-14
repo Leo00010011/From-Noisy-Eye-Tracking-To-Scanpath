@@ -47,6 +47,7 @@ class MixerModel(nn.Module):
                        reg_head_dropout = 0,
                        mixed_image_features = False,
                        mixer_dropout = 0,
+                       adapter_hidden_dims = [],
                        end_dropout = 0,
                        use_deformable_fixation_decoder = False,
                        phases = None,
@@ -80,6 +81,7 @@ class MixerModel(nn.Module):
         self.norm_first = norm_first
         self.head_type = head_type
         self.mlp_head_hidden_dim = mlp_head_hidden_dim
+        self.adapter_hidden_dims = adapter_hidden_dims
         self.image_encoder = image_encoder
         self.n_feature_enhancer = n_feature_enhancer
         self.img_size = img_size
@@ -209,7 +211,7 @@ class MixerModel(nn.Module):
             else:
                 # self.img_input_proj = nn.Linear(img_embed_dim, model_dim, **factory_mode)
                 self.img_input_proj = MLP(img_embed_dim,
-                                           mlp_head_hidden_dim,
+                                           self.adapter_hidden_dims,
                                            model_dim,
                                            hidden_dropout_p = image_features_dropout,
                                            

@@ -401,7 +401,8 @@ class PipelineBuilder:
                               end_dropout = self.config.model.get('end_dropout', 0),
                               add_denoise_head = self.config.model.get('add_denoise_head', True),
                               use_kv_cache = self.config.model.get('use_kv_cache', False),
-                              geometric_sigma = self.config.model.get('geometric_sigma', 0))
+                              geometric_sigma = self.config.model.get('geometric_sigma', 0),
+                              adapter_hidden_dims = self.config.model.image_encoder.get('adapter_hidden_dims', self.config.model.get('mlp_head_hidden_dim', None)))
             
         elif model_name == 'PathModel':
             model = PathModel(input_dim = self.config.model.input_dim,

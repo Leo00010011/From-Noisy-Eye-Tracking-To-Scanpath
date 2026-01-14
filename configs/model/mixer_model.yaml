@@ -54,4 +54,5 @@ image_encoder:
   weights: "dinov3_vits16_weights.pth"
   freeze: True
   regularization: True
+  adapter_hidden_dims: []
   image_dim: 256

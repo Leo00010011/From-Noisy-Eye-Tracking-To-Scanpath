@@ -1,4 +1,4 @@
 # @package _global_
 model: 
   head_type: "multi_mlp"
-  mlp_head_hidden_dim: ["${double:${model.model_dim}}","${model.model_dim}"]
+  mlp_head_hidden_dim: [256,128]
