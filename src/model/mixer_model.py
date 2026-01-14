@@ -310,6 +310,8 @@ class MixerModel(nn.Module):
                                            activation= activation,
                                            norm_first= norm_first,
                                            use_kv_cache = use_kv_cache,
+                                           num_points = 4,
+                                           spatial_shape = self.patch_resolution,
                                            **factory_mode)
         else:
             decoder_layer = DoubleInputDecoder(model_dim = model_dim,
@@ -320,8 +322,6 @@ class MixerModel(nn.Module):
                                            activation= activation,
                                            norm_first= norm_first,
                                            use_kv_cache = use_kv_cache,
-                                           num_points = 4,
-                                           spatial_shape = self.patch_resolution,
                                            **factory_mode)
         self.decoder = _get_clones(decoder_layer,n_decoder)
         for mod in self.decoder:
