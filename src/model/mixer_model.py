@@ -213,7 +213,7 @@ class MixerModel(nn.Module):
                 self.img_input_proj = MLP(img_embed_dim,
                                            self.adapter_hidden_dims,
                                            model_dim,
-                                           hidden_dropout_p = image_features_dropout,
+                                           output_dropout_p = image_features_dropout,
                                            
                                            **factory_mode)
             self.denoise_modules.append(self.img_input_proj)
