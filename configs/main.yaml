@@ -1,5 +1,5 @@
 defaults:
-  - scheduler: multistep_lr
+  - scheduler: warmup
   - data: default
   - model: mixer_model
   - loss: separated_loss
@@ -14,7 +14,7 @@ training:
   use_denoise_dropout_scheduler: False
   save_best_only: True
   save_full_state: True
-  use_scheduled_sampling: False
+  use_scheduled_sampling: True
   weight_decay: 0.01
   log: True
   weights_scheduler:
@@ -23,7 +23,7 @@ training:
     end_b: 0.999
     alpha: 10
     epochs: 50
-  Phases: ["Denoise", ]
+  Phases: ["Fixation", "Combined"]
   Denoise:
     name: "Denoise"
     denoise_weight: 1 
