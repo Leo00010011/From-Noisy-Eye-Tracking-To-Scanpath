@@ -487,6 +487,13 @@ class MixerModel(nn.Module):
                 ],
                 "lr": lr * 10,  # 10x larger LR (e.g., 1e-3)
             },
+            {
+                "params": [
+                    p for n, p in self.named_parameters() 
+                    if "image_encoder" in n and p.requires_grad
+                ],
+                "lr": lr * 0.1,  # 0.1x smaller LR (e.g., 1e-4)
+            }
             ]
         else:
             param_dicts = [

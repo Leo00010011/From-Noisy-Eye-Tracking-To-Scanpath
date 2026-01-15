@@ -54,7 +54,7 @@ image_encoder:
   repo_path: "C:\\Users\\ulloa\\OneDrive\\Desktop\\Practicas\\projectes\\dinov3"
   name: "dinov3_vits16"
   weights: "dinov3_vits16_weights.pth"
-  freeze: True
+  freeze: False
   regularization: True
   adapter_hidden_dims: []
   image_dim: 256
