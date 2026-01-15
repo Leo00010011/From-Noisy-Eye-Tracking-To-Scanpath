@@ -122,7 +122,6 @@ class MixerModel(nn.Module):
         self.reg_head_output_dropout = reg_head_output_dropout
         self.use_deformable_fixation_decoder = use_deformable_fixation_decoder
         if image_encoder is not None:
-            self.denoise_modules.append(image_encoder.model)
             img_embed_dim = image_encoder.embed_dim
             patch_resolution = int((self.img_size / image_encoder.model.patch_size))
             self.patch_resolution = (patch_resolution, patch_resolution)
@@ -490,13 +489,13 @@ class MixerModel(nn.Module):
                 ],
                 "lr": lr * 10,  # 10x larger LR (e.g., 1e-3)
             },
-            {
-                "params": [
-                    p for n, p in self.named_parameters() 
-                    if "image_encoder" in n and p.requires_grad
-                ],
-                "lr": lr * 0.1,  # 0.1x smaller LR (e.g., 1e-4)
-            }
+            # {
+            #     "params": [
+            #         p for n, p in self.named_parameters() 
+            #         if "image_encoder" in n and p.requires_grad
+            #     ],
+            #     "lr": lr * 0.1,  # 0.1x smaller LR (e.g., 1e-4)
+            # }
             ]
             print("DINO PARAMS")
             if len(param_dicts[2]["params"]) > 0:
