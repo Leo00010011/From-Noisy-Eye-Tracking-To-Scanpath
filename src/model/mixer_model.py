@@ -476,7 +476,9 @@ class MixerModel(nn.Module):
             {
                 "params": [
                     p for n, p in self.named_parameters() 
-                    if "sampling_offsets" not in n and p.requires_grad
+                    if ("sampling_offsets" not in n 
+                        and "image_encoder" not in n 
+                        and p.requires_grad)
                 ],
                 "lr": lr,  # Standard LR (e.g., 1e-4)
             },
