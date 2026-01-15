@@ -497,9 +497,9 @@ class MixerModel(nn.Module):
             #     "lr": lr * 0.1,  # 0.1x smaller LR (e.g., 1e-4)
             # }
             ]
-            print("DINO PARAMS")
-            if len(param_dicts[2]["params"]) > 0:
-                print("DINO PARAMS FOUND")
+            # print("DINO PARAMS")
+            # if len(param_dicts[2]["params"]) > 0:
+            #     print("DINO PARAMS FOUND")
         else:
             param_dicts = [
                 {
