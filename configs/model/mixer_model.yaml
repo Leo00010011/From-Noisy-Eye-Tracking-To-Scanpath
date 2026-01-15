@@ -1,7 +1,7 @@
 name: "MixerModel"
 input_dim: 3
 output_dim: 3
-n_encoder: 0
+n_encoder: 4
 n_decoder: 4
 n_adapter: 0
 n_feature_enhancer: 0
