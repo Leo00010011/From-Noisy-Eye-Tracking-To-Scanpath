@@ -122,6 +122,7 @@ class MixerModel(nn.Module):
         self.reg_head_output_dropout = reg_head_output_dropout
         self.use_deformable_fixation_decoder = use_deformable_fixation_decoder
         if image_encoder is not None:
+            self.denoise_modules.append(image_encoder.model)
             img_embed_dim = image_encoder.embed_dim
             patch_resolution = int((self.img_size / image_encoder.model.patch_size))
             self.patch_resolution = (patch_resolution, patch_resolution)
