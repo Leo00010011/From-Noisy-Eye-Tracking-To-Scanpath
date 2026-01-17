@@ -12,6 +12,7 @@ training:
   learning_rate: 0.0001
   decisive_metric: "reg_error_val"
   use_denoise_dropout_scheduler: False
+  pretrained_model: "outputs/2026-01-17/14-01-07"
   save_best_only: True
   save_full_state: True
   use_scheduled_sampling: False
@@ -23,7 +24,7 @@ training:
     end_b: 0.999
     alpha: 10
     epochs: 50
-  Phases: ["Fixation","Combined"]
+  Phases: ["Combined"]
   Denoise:
     name: "Denoise"
     denoise_weight: 1 
@@ -38,16 +39,16 @@ training:
     name: "Combined"
     denoise_weight: 0.05
     decisive_metric: ${training.decisive_metric}
-    epochs: 60
+    epochs: 150
 loss:
   complex_type: "combined"
   denoise_loss_type: "l1"
   fixation_loss_type: "separated_reg"
 scheduled_sampling:
-  warmup_epochs: 20
+  warmup_epochs: 0
   active_epochs: 50
-  n_updates: 5
-  min_prob: 0.3
+  n_updates: -1
+  min_prob: 0
 denoise_dropout_scheduler:
   base_prob: 0.2
   warmup_epochs: 0

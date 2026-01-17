@@ -105,12 +105,17 @@ def load_models_with_data(path_list):
         pipe = load_pipeline(path, pipe)
         pipe.load_dataset()
         train, val, test = load_test_data(pipe, path)
-        model = load_model_for_eval(pipe, path)
+        model = load_model(pipe, path)
         scheduled_sampling = pipe.build_scheduled_sampling(len(test))
         if scheduled_sampling is not None:
             print('>>>>>Loading scheduled sampling')
             model.set_scheduled_sampling(scheduled_sampling)
         yield (model, train, val, test)
+        
+def load_model_from_path(path):
+    pipe = load_pipeline(path)
+    model = load_model(pipe, path)
+    return model
 
 def load_pipeline(path, pipe=None):
     model_config = OmegaConf.load(os.path.join(path, '.hydra', 'config.yaml'))
@@ -137,7 +142,7 @@ def load_test_data(pipe: PipelineBuilder, path: str):
     train, val, test = pipe.build_dataloader(index_dict['train'], index_dict['val'], index_dict['test'])
     return train, val, test
 
-def load_model_for_eval(pipe, path):
+def load_model(pipe, path):
     weight_path = os.path.join(path, 'model.pth')
     model = pipe.build_model()
     state_dict = torch.load(weight_path, map_location = 'cpu')

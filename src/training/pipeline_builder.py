@@ -1,4 +1,5 @@
 import torch
+from src.model.model_io import load_model_from_path
 from src.data.transforms import AddCurriculumNoise
 from src.training.training_utils import DenoiseDropoutScheduler
 from src.training.weights_scheduler import WeightsScheduler
@@ -321,6 +322,9 @@ class PipelineBuilder:
         self.data = None
 
     def build_model(self) -> torch.nn.Module:
+        if self.config.training.pretrained_model is not None:
+            model = load_model_from_path(self.config.training.pretrained_model)
+            return model
         activation = None
         if self.config.model.activation == "relu":
             activation = torch.nn.ReLU()
