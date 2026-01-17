@@ -39,7 +39,7 @@ training:
     name: "Combined"
     denoise_weight: 0.05
     decisive_metric: ${training.decisive_metric}
-    epochs: 130
+    epochs: 150
 loss:
   complex_type: "combined"
   denoise_loss_type: "l1"
