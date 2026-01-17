@@ -2,7 +2,7 @@ defaults:
   - scheduler: warmup
   - data: default
   - model: mixer_model
-  - loss: separated_reg
+  - loss: separated_loss
   - _self_
 
 training:
