@@ -297,7 +297,10 @@ class ScheduledSampling:
             self.use_model_prob = .8
 
     def get_current_ratio(self):
-        return self.use_model_prob
+        if self.model.training:
+           return self.use_model_prob
+        else:
+            return 1
 
     def get_latest_output(self, output):
         latest_output = {}
