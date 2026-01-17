@@ -2,7 +2,7 @@ name: "MixerModel"
 input_dim: 3
 output_dim: 3
 n_encoder: 4
-n_decoder: 4
+n_decoder: 8
 n_adapter: 0
 n_feature_enhancer: 0
 n_eye_decoder: 4
@@ -47,8 +47,8 @@ compilate: False
 head_type: "linear"
 activation:  "gelu"
 # pretrined_encoder_path: "outputs/2026-01-15/17-11-30/model.pth"  # Only decoder
-# pretrined_encoder_path: "outputs/2026-01-15/18-00-24/model.pth"  # encoder decoder
-pretrined_encoder_path: null
+pretrined_encoder_path: "outputs/2026-01-15/18-00-24/model.pth"  # encoder decoder
+# pretrined_encoder_path: null
 device: "cuda"
 image_encoder:
   enabled: True
