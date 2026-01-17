@@ -91,7 +91,7 @@ def slim_input_output(input, output):
 names = ['path model',
          'schedule',
          '300',
-        'no schedule'
+        'no schedule',
         'no gaussian'
         ]
 
