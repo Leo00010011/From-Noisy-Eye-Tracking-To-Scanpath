@@ -25,7 +25,7 @@ transforms:
   transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'SaveCleanX','AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
                    'NormalizeCoords', 'NormalizeTime'
                    #,'AddGaussianNoiseToFixations'
-                   , 'NormalizeFixationCoords', 'NormalizeDuration', GenerateHeatmaps]
+                   , 'NormalizeFixationCoords', 'NormalizeDuration']
 # Quantile Normalization of durations
 #  transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'AddRandomCenterCorrelatedRadialNoise','DiscretizationNoise',
 #                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'QuantileNormalizeDuration']                    

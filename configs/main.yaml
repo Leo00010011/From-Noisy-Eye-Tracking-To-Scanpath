@@ -2,7 +2,7 @@ defaults:
   - scheduler: warmup
   - data: default
   - model: mixer_model
-  - loss: focal_loss
+  - loss: separated_reg
   - _self_
 
 training:
@@ -43,7 +43,7 @@ training:
 loss:
   complex_type: "combined"
   denoise_loss_type: "l1"
-  fixation_loss_type: "focal_loss"
+  fixation_loss_type: "separated_reg"
 scheduled_sampling:
   warmup_epochs: 40
   active_epochs: 40
