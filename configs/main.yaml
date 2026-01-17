@@ -43,7 +43,7 @@ training:
 loss:
   complex_type: "combined"
   denoise_loss_type: "l1"
-  fixation_loss_type: "separated_reg"
+  fixation_loss_type: "focal_loss"
 scheduled_sampling:
   warmup_epochs: 20
   active_epochs: 40
