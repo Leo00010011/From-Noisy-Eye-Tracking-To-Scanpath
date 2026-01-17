@@ -89,6 +89,13 @@ class PipelineBuilder:
         self.PathDataset = None
         self.img_dataset = None
         self.data = None
+        load_config = None
+        if hasattr(self.config.data, 'load'):
+            load_config = self.config.data.load
+        else:
+            load_config = self.config.data
+        self.img_size = load_config.img_size
+        self.load_config = load_config
         self.curriculum_noise = None
         if self.config.model.device.startswith('cuda') and torch.cuda.is_available():
             self.device = torch.device(self.config.model.device)
@@ -172,22 +179,18 @@ class PipelineBuilder:
         else:
             self.PathDataset.transforms = transforms
         # Check 'use_img_dataset' in 'load', if not, look in data directly
-        load_config = None
-        if hasattr(self.config.data, 'load'):
-            load_config = self.config.data.load
-        else:
-            load_config = self.config.data
-        self.img_size = load_config.img_size
-        if hasattr(load_config, 'use_img_dataset') and load_config.use_img_dataset:
+        
+        
+        if hasattr(self.load_config, 'use_img_dataset') and self.load_config.use_img_dataset:
             if self.data is None:
                 self.data = CocoFreeView()
                 self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
             
-            transform = PipelineBuilder.make_transform(resize_size= load_config.img_size)
+            transform = PipelineBuilder.make_transform(resize_size= self.load_config.img_size)
             if self.img_dataset is None:
-                self.img_dataset = DeduplicatedMemoryDataset(self.data, resize_size= load_config.img_size, transform=transform)
+                self.img_dataset = DeduplicatedMemoryDataset(self.data, resize_size= self.load_config.img_size, transform=transform)
             else:
-                self.img_dataset.resize_size = load_config.img_size
+                self.img_dataset.resize_size = self.load_config.img_size
                 self.img_dataset.runtime_transform = transform
 
     def log_split(self,train_subjects,val_subjects,test_subjects,train_stimuli,
