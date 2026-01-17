@@ -868,7 +868,7 @@ class MixerModel(nn.Module):
         
     def forward(self, **kwargs):
         # src, tgt shape (B,L,F)
-        if self.scheduled_sampling is not None and ('pass_sampler' not in kwargs or kwargs['pass_sampler'] is False):
+        if self.scheduled_sampling is not None and ('pass_sampler' not in kwargs or kwargs['pass_sampler'] is False) and self.scheduled_sampling.get_current_ratio() > 0:
             return self.scheduled_sampling(**kwargs)
         if 'pass_sampler' not in kwargs or kwargs['pass_sampler'] is False:
             self.encode(**kwargs)
