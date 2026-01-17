@@ -321,7 +321,7 @@ class PipelineBuilder:
         self.data = None
 
     def build_model(self) -> torch.nn.Module:
-        if self.config.training.pretrained_model is not None:
+        if self.config.training.get('pretrained_model', None) is not None:
             from src.model.model_io import load_model_from_path
             model = load_model_from_path(self.config.training.pretrained_model)
             return model
