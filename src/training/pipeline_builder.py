@@ -1,5 +1,4 @@
 import torch
-from src.model.model_io import load_model_from_path
 from src.data.transforms import AddCurriculumNoise
 from src.training.training_utils import DenoiseDropoutScheduler
 from src.training.weights_scheduler import WeightsScheduler
@@ -323,6 +322,7 @@ class PipelineBuilder:
 
     def build_model(self) -> torch.nn.Module:
         if self.config.training.pretrained_model is not None:
+            from src.model.model_io import load_model_from_path
             model = load_model_from_path(self.config.training.pretrained_model)
             return model
         activation = None
