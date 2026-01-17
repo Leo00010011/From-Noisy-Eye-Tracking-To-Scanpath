@@ -24,7 +24,7 @@ training:
     end_b: 0.999
     alpha: 10
     epochs: 50
-  Phases: ["Fixation","Combined"]
+  Phases: ["Combined"]
   Denoise:
     name: "Denoise"
     denoise_weight: 1 
