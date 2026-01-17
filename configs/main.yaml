@@ -12,7 +12,7 @@ training:
   learning_rate: 0.0001
   decisive_metric: "reg_error_val"
   use_denoise_dropout_scheduler: False
-  pretrained_model: "outputs/2026-01-17/14-01-07"
+  # pretrained_model: "outputs/2026-01-17/14-01-07"
   save_best_only: True
   save_full_state: True
   use_scheduled_sampling: True
