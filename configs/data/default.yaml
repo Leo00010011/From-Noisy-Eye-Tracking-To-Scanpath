@@ -8,7 +8,7 @@ load:
   num_workers: 4
   persistent_workers: True
   prefetch_factor: 2
-  downsample_int: 200
+  downsample_int: null
   pin_memory: True
   use_cached_img_dataset: True
   img_size: 256
