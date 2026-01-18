@@ -24,7 +24,7 @@ training:
     end_b: 0.999
     alpha: 10
     epochs: 50
-  Phases: ["Combined"]
+  Phases: ["Fixation","Combined"]
   Denoise:
     name: "Denoise"
     denoise_weight: 1 
@@ -37,7 +37,7 @@ training:
     epochs: 0
   Combined:
     name: "Combined"
-    denoise_weight: 0
+    denoise_weight: 0.05
     decisive_metric: ${training.decisive_metric}
     epochs: 150
 
