@@ -10,7 +10,7 @@ class ExtractRandomPeriod:
         self.start_index = start_index
         self.period_duration = period_duration
         self.sampling_rate = sampling_rate
-        self.downsample_period = downsample_period
+        self.downsample_period = downsample_period if downsample_period is not None else 200
         self.random_offset = random_offset
         self.modify_y = key == 'y'
         self.key = key
