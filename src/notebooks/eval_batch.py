@@ -88,15 +88,16 @@ def slim_input_output(input, output):
     }
     return slim_input, slim_output
 
-names = ['path model',
-         'scheduled no noise'
+names = ['scheduled no noise'
          'scheduled'
+         'scheduled no noise'
         ]
 
 
 
 ckpt_path = [os.path.join('outputs','2025-12-10','15-57-12'),
-             os.path.join('outputs','2026-01-17','22-12-17')
+             os.path.join('outputs','2026-01-17','18-37-01'),
+             os.path.join('outputs','2026-01-18','12-33-47')
              ]
 
 

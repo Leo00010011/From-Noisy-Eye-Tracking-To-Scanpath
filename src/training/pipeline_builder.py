@@ -175,7 +175,7 @@ class PipelineBuilder:
                 log_value = self.config.data.log
             else:
                 raise AttributeError("Neither 'load.log' nor 'log' is present in self.config.data")
-            self.PathDataset = FreeViewInMemory(transforms=transforms, log=log_value)
+            self.PathDataset = FreeViewInMemory(transforms=transforms, log=log_value, downsample_int=self.load_config.get('downsample_int', None))
         else:
             self.PathDataset.transforms = transforms
         # Check 'use_img_dataset' in 'load', if not, look in data directly

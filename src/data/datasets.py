@@ -220,6 +220,7 @@ class FreeViewInMemory(Dataset):
     def __init__(self,
                  data_path = None,
                  transforms = [],
+                 downsample_int = None,
                  log = False):
         self.data_path = data_path
         self.log = log
@@ -229,7 +230,10 @@ class FreeViewInMemory(Dataset):
         if data_path is None:
             data_path = os.path.join('data','Coco FreeView')
         self.data_path = data_path
-        file_path = os.path.join(data_path, 'dataset.hdf5')
+        if downsample_int is not None:
+            file_path = os.path.join(data_path, f'dataset_{downsample_int}.hdf5')
+        else:
+            file_path = os.path.join(data_path, 'dataset.hdf5')
 
         with h5py.File(file_path, 'r') as f:
             for key in f.keys():

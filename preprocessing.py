@@ -56,12 +56,12 @@ def save_gen_data(save_path, gen_data, filtered_idx, log):
 
 if __name__ == "__main__":
     sampling_rate = 60
-    downsample_int = 200
+    downsample_int = 66
     min_scanpath_duration = 3000
     sample_size = 8
     min_fixation_duration = 30
     max_fixation_duration = 1200
-    save_path = 'data/Coco FreeView/dataset.hdf5'
+    save_path = f'data/Coco FreeView/dataset_{downsample_int}.hdf5'
     log = True
     gen_data, filtered_idx = preprocess(sampling_rate, downsample_int, min_scanpath_duration, sample_size,min_fixation_duration ,max_fixation_duration , log)
 
