@@ -234,6 +234,7 @@ class FreeViewInMemory(Dataset):
             file_path = os.path.join(data_path, f'dataset_{downsample_int}.hdf5')
         else:
             file_path = os.path.join(data_path, 'dataset.hdf5')
+            downsample_int = 200
 
         with h5py.File(file_path, 'r') as f:
             for key in f.keys():
