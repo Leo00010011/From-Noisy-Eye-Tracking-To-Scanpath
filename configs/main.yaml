@@ -37,7 +37,7 @@ training:
     epochs: 40
   Combined:
     name: "Combined"
-    denoise_weight: 0.05
+    denoise_weight: 0
     decisive_metric: ${training.decisive_metric}
     epochs: 120
 
