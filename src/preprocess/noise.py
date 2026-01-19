@@ -30,8 +30,8 @@ def add_gaussian_noise(gaze_list,ptoa, ang_mean = AVG_WEB_GAZER_ERROR_ANG):
 def gen_elliptical_params(a, r):
     '''
     Method that compute the needed x_std and y_std for a multivariate normal to have 
-        **a**: y_std/x_std
-        **r**: expected norm 
+        **r**: y_std/x_std
+        **a**: expected norm 
     '''
     # https://chatgpt.com/c/68e64e38-3bb4-832c-b5bd-7061c05a6e3c
     k_sqrd = 1 - r**2
@@ -197,7 +197,7 @@ def correlate_magnitudes(magnitudes, corr):
     output = np.empty_like(magnitudes)
     output[0] = magnitudes[0]
     for i in range(1, magnitudes.shape[0]):
-        output[i] = output[i - 1] * corr + magnitudes[i]
+        output[i] = output[i - 1] * corr + magnitudes[i]*np.sqrt(1 - corr**2)
     return output
 
 @njit
