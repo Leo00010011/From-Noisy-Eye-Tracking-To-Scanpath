@@ -34,12 +34,12 @@ training:
     name: "Fixation"
     denoise_weight: 0
     decisive_metric: ${training.decisive_metric}
-    epochs: 0
+    epochs: 40
   Combined:
     name: "Combined"
     denoise_weight: 0.05
     decisive_metric: ${training.decisive_metric}
-    epochs: 150
+    epochs: 110
 
 loss:
   complex_type: "combined"
@@ -52,5 +52,5 @@ scheduled_sampling:
   min_prob: 0
 denoise_dropout_scheduler:
   base_prob: 0.2
-  warmup_epochs: 0
+  warmup_epochs: 20
   active_epochs: 50
