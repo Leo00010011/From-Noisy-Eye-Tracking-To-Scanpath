@@ -24,8 +24,8 @@ transforms:
 #                   'NormalizeCoords', 'NormalizeTime', 'NormalizeFixationCoords', 'LogNormalizeDuration']
 # Add Gaussian Noise to Fixations
   transform_list: ['ExtractRandomPeriod', 'StandarizeTime' ,'SaveCleanX',
-                   # 'AddRandomCenterCorrelatedRadialNoise',
-                   # 'DiscretizationNoise',
+                   'AddRandomCenterCorrelatedRadialNoise',
+                   'DiscretizationNoise',
                    'NormalizeCoords', 'NormalizeTime'
                    , 'NormalizeFixationCoords', 'NormalizeDuration']
 # Quantile Normalization of durations
