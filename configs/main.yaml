@@ -46,7 +46,7 @@ loss:
   denoise_loss_type: "l1"
   fixation_loss_type: "separated_reg"
 scheduled_sampling:
-  warmup_epochs: 160
+  warmup_epochs: 20
   active_epochs: 40
   n_updates: -1
   min_prob: 0
