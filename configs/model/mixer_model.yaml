@@ -47,8 +47,8 @@ compilate: False
 head_type: "linear"
 activation:  "gelu"
 # pretrined_encoder_path: "outputs/2026-01-15/17-11-30/model.pth"  # Only decoder
-# pretrined_encoder_path: "outputs/2026-01-19/16-30-29/model.pth"  # encoder decoder
-pretrined_encoder_path: null
+pretrined_encoder_path: "outputs/2026-01-19/16-30-29/model.pth"  # encoder decoder
+# pretrined_encoder_path: null
 device: "cuda"
 image_encoder:
   enabled: True
