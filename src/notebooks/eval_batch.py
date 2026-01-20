@@ -88,10 +88,11 @@ def slim_input_output(input, output):
     }
     return slim_input, slim_output
 
-names = ['scheduled',
-         'denoise',
-         'all combined',
+names = ['phase + denoise + scheduled',
+         'phase + denoise',
+         'nothing',
          'clean + Scheduler'
+         'denoise + scheduled',
         ]
 
 
@@ -99,7 +100,8 @@ names = ['scheduled',
 ckpt_path = [os.path.join('outputs','2026-01-19','17-12-29'),
              os.path.join('outputs','2026-01-19','22-24-44'),
              os.path.join('outputs','2026-01-20','00-37-35'),
-             os.path.join('outputs','2026-01-20','15-32-33')
+             os.path.join('outputs','2026-01-20','15-32-33'),
+             os.path.join('outputs','2026-01-20','17-17-57')
              ]
 
 
