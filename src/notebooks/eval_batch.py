@@ -91,7 +91,7 @@ def slim_input_output(input, output):
 names = ['phase + denoise + scheduled',
          'phase + denoise',
          'nothing',
-         'clean + Scheduler'
+         'clean + Scheduler',
          'denoise + scheduled',
         ]
 
