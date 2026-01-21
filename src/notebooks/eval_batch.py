@@ -81,7 +81,10 @@ def slim_input_output(input, output):
         'tgt': input['tgt'],
         'tgt_mask': input['tgt_mask'],
         'fixation_len': input['fixation_len'],
+        
     }
+    if 'clean_x' in input:
+        slim_input['clean_x'] = input['clean_x']
     slim_output = {
         'reg': output['reg'],
         'cls': output['cls'],
