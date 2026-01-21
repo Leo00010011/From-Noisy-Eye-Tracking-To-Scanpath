@@ -88,8 +88,9 @@ def slim_input_output(input, output):
     slim_output = {
         'reg': output['reg'],
         'cls': output['cls'],
-        'denoise': output['denoise'],
     }
+    if 'denoise' in output:
+        slim_output['denoise'] = output['denoise']
     return slim_input, slim_output
 
 names = ['phase + denoise + scheduled',
