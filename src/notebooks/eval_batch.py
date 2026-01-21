@@ -143,6 +143,8 @@ for i, ((model, _, _, test_dataloader), model_ckpt_path, name) in enumerate(zip(
         for batch in tqdm(test_dataloader):
             input = move_data_to_device(batch, device)
             output = eval_autoregressive(model, input, only_last = True)
+            denoise = model.decode_denoise(input)
+            output.update(denoise)
             input, output = invert_transforms(input, output, test_dataloader, remove_outliers = True)
             reg_out, cls_out = output['reg'], output['cls']
             y, y_mask, fixation_len = input['tgt'], input['tgt_mask'], input['fixation_len']
