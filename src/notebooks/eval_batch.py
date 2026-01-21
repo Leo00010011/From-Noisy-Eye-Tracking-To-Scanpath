@@ -88,6 +88,7 @@ def slim_input_output(input, output):
     slim_output = {
         'reg': output['reg'],
         'cls': output['cls'],
+        'denoise': output['denoise'],
     }
     return slim_input, slim_output
 
