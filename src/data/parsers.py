@@ -33,16 +33,20 @@ class CocoFreeView:
         
         ntop_path = os.path.join(data_path, 'ntop.json')
         if os.path.exists(ntop_path):
+            print('READING NTOP COCOFREEVIEW')
             with open(ntop_path, 'r') as f:
                 ntop = json.load(f)
         else:
+            print('CREATING NTOP COCOFREEVIEW')
             ta_folder = Path(os.path.join(data_path, 'COCOSearch18-images-TA'))
             tp_folder = Path(os.path.join(data_path, 'COCOSearch18-images-TP'))
 
             stimulus_paths = list(ta_folder.rglob('*.jpg')) + list(tp_folder.rglob('*.jpg'))
 
             ntop = {str(path).split(os.path.sep)[-1]: str(path) for path in stimulus_paths }
-            
+            with open(ntop_path, 'w') as f:
+                json.dump(ntop, f)
+
         for scan_path in data:
             path = ntop[scan_path['name']]
             scan_path['img_path'] = path
