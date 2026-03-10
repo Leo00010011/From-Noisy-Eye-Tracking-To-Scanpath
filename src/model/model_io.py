@@ -6,7 +6,7 @@ import torch.optim as optim
 from typing import Optional, Any, Dict
 from omegaconf import OmegaConf
 from src.model.path_model import PathModel
-from src.training.pipeline_builder import PipelineBuilder
+
 
 def save_checkpoint(
     model: nn.Module,
@@ -120,12 +120,13 @@ def load_model_from_path(path):
 def load_pipeline(path, pipe=None):
     model_config = OmegaConf.load(os.path.join(path, '.hydra', 'config.yaml'))
     if pipe is None:
+        from src.training.pipeline_builder import PipelineBuilder
         return PipelineBuilder(model_config)
     else:
         pipe.config = model_config
         return pipe
 
-def load_test_data(pipe: PipelineBuilder, path: str):
+def load_test_data(pipe, path: str):
     path = os.path.join(path, 'split.pth')
     index_dict = None
     if os.path.exists(path):
