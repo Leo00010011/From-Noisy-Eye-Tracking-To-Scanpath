@@ -24,6 +24,7 @@ class MetricsStorage:
         self.loss_info = {}
         self.num_batches = 0
         self.filepath = filepath
+        print('Decisive Metric: ', decisive_metric)
         self.decisive_metric = decisive_metric
         self.best_metric_value = np.inf
     

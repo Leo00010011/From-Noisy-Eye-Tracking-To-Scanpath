@@ -1,0 +1,4 @@
+# @package _global_
+training:
+  decisive_metric: "denoise_error_val"
+  Phases: ["Denoise"]
