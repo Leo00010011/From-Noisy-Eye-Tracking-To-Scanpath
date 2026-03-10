@@ -9,24 +9,25 @@ def train(builder:PipelineBuilder):
         needs_validate = builder.config.training.validate
         val_interval = builder.config.training.val_interval
         builder.load_dataset()
-        train_idx, val_idx, test_idx = builder.make_splits()
+        device = builder.device
+        model, splits = builder.build_model()
+        if splits is not None:
+            print("Loading splits from pretrained model")
+            train_dataloader, val_dataloader, _ = splits
+        else:
+            train_idx, val_idx, test_idx = builder.make_splits()
         save_splits(train_idx, val_idx, test_idx, builder.config.training.splits_file)
         if builder.config.training.log:
             print(f"Split saved to {builder.config.training.splits_file}")
-
-        train_dataloader, val_dataloader, _ = builder.build_dataloader(train_idx, val_idx, test_idx)
+            train_dataloader, val_dataloader, _ = builder.build_dataloader(train_idx, val_idx, test_idx)
         builder.clear_dataframe()
 
         if builder.config.training.log:
             builder.training_summary(len(train_dataloader.dataset))
 
-        device = builder.device
-        model = builder.build_model()
         if builder.config.training.log:
             print(model.param_summary())
-        if builder.config.model.pretrined_encoder_path is not None:
-            print(f"Loading encoder from {builder.config.model.pretrined_encoder_path}")
-            model.load_encoder(builder.config.model.pretrined_encoder_path)
+        
         if builder.config.model.compilate:
             model = torch.compile(model, dynamic=True) 
         to_update_in_epoch = []

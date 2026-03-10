@@ -1,4 +1,5 @@
 import torch
+from pathlib import Path
 from src.data.transforms import AddCurriculumNoise
 from src.training.training_utils import DenoiseDropoutScheduler
 from src.training.weights_scheduler import WeightsScheduler
@@ -14,6 +15,7 @@ from src.data.transforms import (ExtractRandomPeriod, Normalize, StandarizeTime,
 from src.model.path_model import PathModel
 from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
+from src.model.model_io import load_test_data
 from src.data.datasets import FreeViewImgDataset, CoupledDataloader, DeduplicatedMemoryDataset
 
 STR_TO_LOSS_FUNC = {
@@ -327,7 +329,8 @@ class PipelineBuilder:
         if self.config.training.get('pretrained_model', None) is not None:
             from src.model.model_io import load_model_from_path
             model = load_model_from_path(self.config.training.pretrained_model)
-            return model
+            splits = load_test_data(self, self.config.training.pretrained_model)
+            return model, splits
         activation = None
         if self.config.model.activation == "relu":
             activation = torch.nn.ReLU()
@@ -335,7 +338,7 @@ class PipelineBuilder:
             activation = torch.nn.GELU()
 
         model_name = self.config.model.get('name', 'PathModel')
-
+        splits = None
         if model_name == 'MixerModel':
             image_encoder = None
             image_dim = None
@@ -412,7 +415,13 @@ class PipelineBuilder:
                               use_kv_cache = self.config.model.get('use_kv_cache', False),
                               geometric_sigma = self.config.model.get('geometric_sigma', 0),
                               adapter_hidden_dims = self.config.model.image_encoder.get('adapter_hidden_dims', self.config.model.get('mlp_head_hidden_dim', None)))
-            
+        
+            if self.config.model.pretrained_encoder_path is not None:
+                print(f"Loading encoder from {self.config.model.pretrained_encoder_path}")
+                model.load_encoder(self.config.model.pretrained_encoder_path)
+                # the path is of the form folder/model.pth, but the load test data method only receive the folder/
+                folder_path = str(Path(self.config.model.pretrained_encoder_path).parent)
+                splits = load_test_data(self, folder_path)
         elif model_name == 'PathModel':
             model = PathModel(input_dim = self.config.model.input_dim,
                               output_dim = self.config.model.output_dim,
@@ -435,7 +444,7 @@ class PipelineBuilder:
                               device = self.device)
         else:
             raise ValueError(f"Model name {model_name} not supported.")
-        return model
+        return model, splits
     
     def build_optimizer(self, model: PathModel):
         param_dicts = model.get_parameter_groups(self.config.training.learning_rate)
