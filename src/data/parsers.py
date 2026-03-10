@@ -49,14 +49,17 @@ class CocoFreeView:
 
         for scan_path in data:
             path = ntop[scan_path['name']]
-            path = ntop[scan_path['name']].replace('\\', '/')
+            if os.path.sep == '/':
+                path = ntop[scan_path['name']].replace('\\', '/')
             scan_path['img_path'] = path
             scan_path['class'] = path.split(os.path.sep)[-2]
         self.df = pd.DataFrame.from_dict(data)
         row = self.df.iloc[0]
-        
-        img = cv2.imread(row['img_path'])
-        self.ori_res = img.shape[:2]
+        if os.path.exists(row['img_path']):
+            img = cv2.imread(row['img_path'])
+            self.ori_res = img.shape[:2]
+        else:
+            self.ori_res = (1050, 1680)
         self.dest_res = (320,512)
         # conversion factor from pixel to angles
         self.ptoa = 1/16
