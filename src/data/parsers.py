@@ -50,6 +50,7 @@ class CocoFreeView:
         for scan_path in data:
             path = ntop[scan_path['name']]
             scan_path['img_path'] = path
+            print(path)
             scan_path['class'] = path.split(os.path.sep)[-2]
         self.df = pd.DataFrame.from_dict(data)
         row = self.df.iloc[0]
