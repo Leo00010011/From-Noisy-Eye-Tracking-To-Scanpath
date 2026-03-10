@@ -120,6 +120,7 @@ def load_model_from_path(path):
 def load_pipeline(path, pipe=None):
     model_config = OmegaConf.load(os.path.join(path, '.hydra', 'config.yaml'))
     if pipe is None:
+        # TODO Improve this, avoiding circular imports
         from src.training.pipeline_builder import PipelineBuilder
         return PipelineBuilder(model_config)
     else:
