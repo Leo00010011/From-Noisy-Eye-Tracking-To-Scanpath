@@ -6,6 +6,8 @@
 #SBATCH --mem=16G
 #SBATCH --time=04:00:00
 #SBATCH --gres=gpu:1
+#SBATCH --mail-type=END
+#SBATCH --mail-user=leonardo.ulloa@rai.usc.gal
 
 
 echo "Starting debug at: $(date)"
