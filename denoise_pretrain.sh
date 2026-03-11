@@ -11,16 +11,25 @@
 
 
 echo "Starting debug at: $(date)"
+
 echo "Running on node: $SLURM_NODELIST"
 
+echo "Moving to home"
+cd /mnt/beegfs/home/leonardo.ulloa
+
+echo "Mounting image "
 sudo mount_image.py my_env.ext4 --rw
 
+echo "Conda INIT"
 conda init
 
+echo "Activating Conda env"
 conda activate scanpath
 
+echo "Moving to project"
 cd projects/From-Noisy-Eye-Tracking-To-Scanpath/
 
+echo "STARTING TRAINING"
 python train.py +head_type=multi_mlp
 
 echo "Finished debug at: $(date)"
