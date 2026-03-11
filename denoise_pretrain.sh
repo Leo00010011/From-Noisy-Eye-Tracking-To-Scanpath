@@ -13,8 +13,12 @@ echo "Running on node: $SLURM_NODELIST"
 
 sudo mount_image.py my_env.ext4 --rw
 
+conda init
+
 conda activate scanpath
 
-python projects/From-Noisy-Eye-Tracking-To-Scanpath/train.py +head_type=multi_mlp
+cd projects/From-Noisy-Eye-Tracking-To-Scanpath/
+
+python train.py +head_type=multi_mlp
 
 echo "Finished debug at: $(date)"
