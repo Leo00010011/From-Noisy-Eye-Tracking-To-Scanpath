@@ -227,8 +227,9 @@ class FreeViewInMemory(Dataset):
         self.transforms = transforms
         self.data_store = {}
         
+        
         if data_path is None:
-            data_path = os.path.join('data','Coco FreeView')
+           data_path = os.path.join('data','Coco FreeView')
         self.data_path = data_path
         if downsample_int is not None:
             file_path = os.path.join(data_path, f'dataset_{downsample_int}.hdf5')
