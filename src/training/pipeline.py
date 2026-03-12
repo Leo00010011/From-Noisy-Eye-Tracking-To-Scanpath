@@ -13,7 +13,7 @@ def train(builder:PipelineBuilder):
         model, splits = builder.build_model()
         if splits is not None:
             print("Loading splits from pretrained model")
-            train_dataloader, val_dataloader, _ = splits
+            train_idx, val_idx, test_idx = splits
         else:
             train_idx, val_idx, test_idx = builder.make_splits()
         save_splits(train_idx, val_idx, test_idx, builder.config.training.splits_file)

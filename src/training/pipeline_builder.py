@@ -336,7 +336,7 @@ class PipelineBuilder:
         if self.config.training.get('pretrained_model', None) is not None:
             from src.model.model_io import load_model_from_path
             model = load_model_from_path(self.config.training.pretrained_model)
-            splits = load_test_data(self, self.config.training.pretrained_model)
+            splits = load_test_data(self, self.config.training.pretrained_model, return_dataloaders= False)
             return model, splits
         activation = None
         if self.config.model.activation == "relu":
@@ -428,7 +428,7 @@ class PipelineBuilder:
                 model.load_encoder(self.config.model.pretrained_encoder_path)
                 # the path is of the form folder/model.pth, but the load test data method only receive the folder/
                 folder_path = str(Path(self.config.model.pretrained_encoder_path).parent)
-                splits = load_test_data(self, folder_path)
+                splits = load_test_data(self, folder_path, return_dataloaders= False)
         elif model_name == 'PathModel':
             model = PathModel(input_dim = self.config.model.input_dim,
                               output_dim = self.config.model.output_dim,

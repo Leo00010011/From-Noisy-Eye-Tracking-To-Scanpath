@@ -127,7 +127,7 @@ def load_pipeline(path, pipe=None):
         pipe.config = model_config
         return pipe
 
-def load_test_data(pipe, path: str):
+def load_test_data(pipe, path: str, return_dataloaders = True):
     path = os.path.join(path, 'split.pth')
     index_dict = None
     if os.path.exists(path):
@@ -135,15 +135,10 @@ def load_test_data(pipe, path: str):
         index_dict = torch.load(path)
     else:
         raise Exception("Split not found !!!")
-        # print(f"Making new splits")
-        # train_idx, val_idx, test_idx = pipe.make_splits()
-        # index_dict = {
-        #     'train': train_idx,
-        #     'val': val_idx,
-        #     'test': test_idx
-        # }
-    train, val, test = pipe.build_dataloader(index_dict['train'], index_dict['val'], index_dict['test'])
-    return train, val, test
+    if return_dataloaders:
+        return pipe.build_dataloader(index_dict['train'], index_dict['val'], index_dict['test'])
+    else:
+        return index_dict['train'], index_dict['val'], index_dict['test']
 
 def load_model(pipe, path):
     weight_path = os.path.join(path, 'model.pth')
