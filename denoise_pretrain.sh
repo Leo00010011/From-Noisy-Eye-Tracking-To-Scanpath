@@ -20,6 +20,15 @@ cd /mnt/beegfs/home/leonardo.ulloa
 echo "Mounting image "
 sudo mount_image.py my_env.ext4 --rw
 
+SOURCE_DATA="data/Coco FreeView"
+DEST_DATA="$LOCAL_SCRATCH/data/Coco FreeView"
+
+# Create the directory if it doesn't exist
+mkdir -p "$DEST_DATA"
+
+echo "Transferring data to local scratch..."
+rsync -aq "$SOURCE_DATA/" "$DEST_DATA/"
+
 echo "Conda INIT"
 conda init
 
