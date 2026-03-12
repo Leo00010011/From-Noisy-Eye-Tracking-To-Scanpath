@@ -1,4 +1,5 @@
 import torch
+import os
 from pathlib import Path
 from src.data.transforms import AddCurriculumNoise
 from src.training.training_utils import DenoiseDropoutScheduler
@@ -167,6 +168,11 @@ class PipelineBuilder:
                           build_add_random_center_correlated_radial_noise(self.config.data),
                           build_discretization_noise(self.config.data),
                           StandarizeTime()]
+        
+        local_scratch = os.environ.get('LOCAL_SCRATCH')
+        if local_scratch and os.path.exists(os.path.join(local_scratch, 'data','Coco FreeView')):
+            data_path = os.path.join(local_scratch, 'data','Coco FreeView')
+
         if self.PathDataset is None:
             
             # Check if 'load' attribute exists in self.config.data; if not, use it directly from data
@@ -177,7 +183,7 @@ class PipelineBuilder:
                 log_value = self.config.data.log
             else:
                 raise AttributeError("Neither 'load.log' nor 'log' is present in self.config.data")
-            self.PathDataset = FreeViewInMemory(transforms=transforms, log=log_value, downsample_int=self.load_config.get('downsample_int', None))
+            self.PathDataset = FreeViewInMemory(data_path= data_path, transforms=transforms, log=log_value, downsample_int=self.load_config.get('downsample_int', None))
         else:
             self.PathDataset.transforms = transforms
         # Check 'use_img_dataset' in 'load', if not, look in data directly
@@ -185,7 +191,7 @@ class PipelineBuilder:
         
         if hasattr(self.load_config, 'use_img_dataset') and self.load_config.use_img_dataset:
             if self.data is None:
-                self.data = CocoFreeView()
+                self.data = CocoFreeView(data_path= data_path)
                 self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
             
             transform = PipelineBuilder.make_transform(resize_size= self.load_config.img_size)
