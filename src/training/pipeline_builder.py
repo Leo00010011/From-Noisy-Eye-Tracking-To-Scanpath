@@ -171,6 +171,7 @@ class PipelineBuilder:
         
         local_scratch = os.environ.get('LOCAL_SCRATCH')
         if local_scratch and os.path.exists(os.path.join(local_scratch, 'data','Coco FreeView')):
+            print("FOUNDED COPY IN SCRATCH SPACE, USING THAT AS DATA PATH")
             data_path = os.path.join(local_scratch, 'data','Coco FreeView')
 
         if self.PathDataset is None:
