@@ -21,7 +21,7 @@ echo "Mounting image "
 sudo mount_image.py my_env.ext4 --rw
 
 # Use single quotes for the definition to be safe
-SOURCE_DATA='data/Coco FreeView'
+SOURCE_DATA='projects/From-Noisy-Eye-Tracking-To-Scanpath/data/Coco FreeView'
 DEST_DATA="$LOCAL_SCRATCH/data/Coco FreeView"
 
 # Create the directory
