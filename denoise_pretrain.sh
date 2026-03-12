@@ -20,13 +20,16 @@ cd /mnt/beegfs/home/leonardo.ulloa
 echo "Mounting image "
 sudo mount_image.py my_env.ext4 --rw
 
-SOURCE_DATA="data/Coco FreeView"
+# Use single quotes for the definition to be safe
+SOURCE_DATA='data/Coco FreeView'
 DEST_DATA="$LOCAL_SCRATCH/data/Coco FreeView"
 
-# Create the directory if it doesn't exist
+# Create the directory
 mkdir -p "$DEST_DATA"
 
 echo "Transferring data to local scratch..."
+
+# Ensure we quote the variables in the command
 rsync -aq "$SOURCE_DATA/" "$DEST_DATA/"
 
 echo "Conda INIT"
