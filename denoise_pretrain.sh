@@ -21,7 +21,7 @@ echo "Mounting image "
 sudo mount_image.py my_env.ext4 --rw
 
 echo "Conda INIT"
-conda init
+source /mnt/beegfs/home/leonardo.ulloa/miniconda3/etc/profile.d/conda.sh
 
 echo "Activating Conda env"
 conda activate scanpath
