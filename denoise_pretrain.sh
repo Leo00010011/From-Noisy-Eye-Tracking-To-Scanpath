@@ -6,7 +6,7 @@
 #SBATCH --mem=16G
 #SBATCH --time=08:00:00
 #SBATCH --gres=gpu:1
-#SBATCH --mail-type=END
+#SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=leonardo.ulloa@rai.usc.gal
 
 
