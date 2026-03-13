@@ -9,3 +9,4 @@ outputs/*
 hydralance/
 *.pt
 *.pth
+*.log
