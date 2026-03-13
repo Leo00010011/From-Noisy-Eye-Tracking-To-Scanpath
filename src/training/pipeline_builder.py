@@ -1,6 +1,8 @@
 import torch
 import os
 from pathlib import Path
+import math
+import json
 from src.data.transforms import AddCurriculumNoise
 from src.training.training_utils import DenoiseDropoutScheduler
 from src.training.weights_scheduler import WeightsScheduler
@@ -18,6 +20,7 @@ from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
 from src.model.model_io import load_test_data
 from src.data.datasets import FreeViewImgDataset, CoupledDataloader, DeduplicatedMemoryDataset
+from omegaconf import OmegaConf
 
 STR_TO_LOSS_FUNC = {
     'bce_with_logits': torch.nn.functional.binary_cross_entropy_with_logits,
@@ -423,11 +426,12 @@ class PipelineBuilder:
                               geometric_sigma = self.config.model.get('geometric_sigma', 0),
                               adapter_hidden_dims = self.config.model.image_encoder.get('adapter_hidden_dims', self.config.model.get('mlp_head_hidden_dim', None)))
         
-            if self.config.model.pretrained_encoder_path is not None:
-                print(f"Loading encoder from {self.config.model.pretrained_encoder_path}")
-                model.load_encoder(self.config.model.pretrained_encoder_path)
+            pretrained_encoder_path = self.resolve_pretrained_encoder_path()
+            if pretrained_encoder_path is not None:
+                print(f"Loading encoder from {pretrained_encoder_path}")
+                model.load_encoder(pretrained_encoder_path)
                 # the path is of the form folder/model.pth, but the load test data method only receive the folder/
-                folder_path = str(Path(self.config.model.pretrained_encoder_path).parent)
+                folder_path = str(Path(pretrained_encoder_path).parent)
                 splits = load_test_data(self, folder_path, return_dataloaders= False)
         elif model_name == 'PathModel':
             model = PathModel(input_dim = self.config.model.input_dim,
@@ -452,6 +456,49 @@ class PipelineBuilder:
         else:
             raise ValueError(f"Model name {model_name} not supported.")
         return model, splits
+
+    def resolve_pretrained_encoder_path(self):
+        pretrained_encoder_path = self.config.model.get('pretrained_encoder_path', None)
+        if pretrained_encoder_path != 'auto_best_denoise':
+            return pretrained_encoder_path
+
+        best_path = None
+        best_metric = math.inf
+        outputs_dir = Path('outputs')
+        if not outputs_dir.exists():
+            raise FileNotFoundError("Cannot resolve 'auto_best_denoise' because the outputs directory does not exist.")
+
+        for metrics_path in outputs_dir.rglob('metrics.json'):
+            config_path = metrics_path.parent / '.hydra' / 'config.yaml'
+            model_path = metrics_path.parent / 'model.pth'
+            if not config_path.exists() or not model_path.exists():
+                continue
+
+            try:
+                run_config = OmegaConf.load(config_path)
+                phases = list(run_config.training.get('Phases', []))
+                if phases != ['Denoise']:
+                    continue
+
+                with metrics_path.open('r', encoding='utf-8') as file:
+                    metrics = json.load(file)
+                denoise_errors = metrics.get('denoise_error_val', [])
+                if not denoise_errors:
+                    continue
+
+                current_best = min(denoise_errors)
+                if current_best < best_metric:
+                    best_metric = current_best
+                    best_path = model_path
+            except Exception:
+                continue
+
+        if best_path is None:
+            raise FileNotFoundError(
+                "Could not resolve 'auto_best_denoise'. Run a denoise pretraining first or set model.pretrained_encoder_path manually."
+            )
+
+        return str(best_path)
     
     def build_optimizer(self, model: PathModel):
         param_dicts = model.get_parameter_groups(self.config.training.learning_rate)

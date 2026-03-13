@@ -1,0 +1,9 @@
+# @package _global_
+training:
+  decisive_metric: "reg_error_val"
+  pretrained_model: null
+  use_scheduled_sampling: true
+  Phases: ["Fixation", "Combined"]
+
+model:
+  pretrained_encoder_path: "auto_best_denoise"

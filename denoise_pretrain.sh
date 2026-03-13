@@ -42,6 +42,6 @@ echo "Moving to project"
 cd projects/From-Noisy-Eye-Tracking-To-Scanpath/
 
 echo "STARTING TRAINING"
-python train.py +head_type=multi_mlp
+python train.py exp=denoise_pretraining
 
 echo "Finished debug at: $(date)"
