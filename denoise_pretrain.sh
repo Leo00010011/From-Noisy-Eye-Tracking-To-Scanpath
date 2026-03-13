@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=denoise_pretrain
-#SBATCH --output=denoise_out_%j.log
-#SBATCH --error=denoise_err_%j.log
+#SBATCH --output=logs/denoise_out_%j.log
+#SBATCH --error=logs/denoise_err_%j.log
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=16G
 #SBATCH --time=08:00:00
