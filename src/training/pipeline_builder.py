@@ -612,7 +612,8 @@ class PipelineBuilder:
                                      steps_per_epoch = steps_per_epoch,
                                      warmup_epochs = self.config.scheduled_sampling.warmup_epochs,
                                      n_updates = self.config.scheduled_sampling.get('n_updates', -1),
-                                     min_prob = self.config.scheduled_sampling.get('min_prob', 0),
+                                     min_prob = self.config.scheduled_sampling.get('max_prob', 0),
+                                     max_prob= self.config.scheduled_sampling.get('min_prob', 0.8),
                                      use_kv_cache = self.config.model.get('use_kv_cache', False))
         else:
             return None

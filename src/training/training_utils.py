@@ -278,6 +278,7 @@ class ScheduledSampling:
                 device,
                 min_prob = 0,
                 dtype = torch.float32,
+                max_prob = .8,
                 steps_per_epoch = 128,
                 use_kv_cache = False,
                 n_updates = -1):
@@ -286,6 +287,7 @@ class ScheduledSampling:
         self.use_model_prob = 0.0
         self.current_batch = 0
         self.warmup_epochs = warmup_epochs
+        self.max_prob = max_prob
         self.steps_per_epoch = steps_per_epoch
         self.model = None
         self.use_kv_cache = use_kv_cache
@@ -311,9 +313,9 @@ class ScheduledSampling:
             # normalize to 0-50
             eval_epoch = (eval_epoch / self.active_epochs)*50
             prob = inverted_sigmoid(eval_epoch, 10)*(1 - self.min_prob) + self.min_prob
-            self.use_model_prob = min(prob,.8)
+            self.use_model_prob = min(prob,self.max_prob)
         else:
-            self.use_model_prob = .8
+            self.use_model_prob = self.max_prob
 
     def get_current_ratio(self):
         if self.model.training:
