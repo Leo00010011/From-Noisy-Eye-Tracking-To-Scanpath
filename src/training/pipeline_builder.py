@@ -20,6 +20,7 @@ from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
 from src.model.model_io import load_test_data
 from src.data.datasets import FreeViewImgDataset, CoupledDataloader, DeduplicatedMemoryDataset
+from src.training.inference_recorder import InferenceRecorder
 from omegaconf import OmegaConf
 
 STR_TO_LOSS_FUNC = {
@@ -625,6 +626,15 @@ class PipelineBuilder:
                                        steps_per_epoch = steps_per_epoch)
         else:
             return None
+
+    def build_inference_recorder(self, model: torch.nn.Module):
+        recorder_config = self.config.training.get('inference_recorder', None)
+        if recorder_config is None or not recorder_config.enabled:
+            return None
+        recorder = InferenceRecorder(output_dir=recorder_config.output_dir)
+        if hasattr(model, 'set_inference_recorder'):
+            model.set_inference_recorder(recorder)
+        return recorder
 
     def training_summary(self, n_samples):
         print(""" Traning Summary:

@@ -20,6 +20,9 @@ training:
   use_scheduled_sampling: True
   weight_decay: 0.01
   log: True
+  inference_recorder:
+    enabled: False
+    split: train
   weights_scheduler:
     enabled: False
     init_b: 0.8

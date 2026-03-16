@@ -157,6 +157,11 @@ class PathModel(nn.Module):
     def set_phase(self, phase):
         return
 
+    def set_inference_recorder(self, recorder):
+        self.inference_recorder = recorder
+        if recorder is not None:
+            recorder.attach(self)
+
     def encode(self, src, src_mask, **kwargs):
          # src, tgt shape (B,L,F)
         if self.input_encoder == 'linear':

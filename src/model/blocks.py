@@ -5,6 +5,13 @@ from torch import Tensor
 from typing import Tuple
 import math
 
+from src.training.inference_recorder import record_module_value
+
+
+def _module_recording_enabled(module: nn.Module) -> bool:
+    recorder = getattr(module, "_inference_recorder", None)
+    return recorder is not None and recorder.is_active()
+
 
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dims, out_dim, hidden_dropout_p = None, output_dropout_p = None,include_dropout = True, device='cpu', dtype=torch.float32):
@@ -144,6 +151,17 @@ class MultiHeadedAttention(nn.Module):
         # rope
         if q_rope is not None and k_rope is not None:
             query, key = apply_rope(query, key, q_rope, k_rope if k_rope is not None else q_rope)
+        if _module_recording_enabled(self) and not self.is_self_attention:
+            attn_scores = torch.matmul(query, key.transpose(-2, -1)) * self.scale
+            if attn_mask is not None:
+                attn_bias = torch.zeros(size = (L_b, 1, L_q, L_k), device = query.device, dtype = query.dtype)
+                attn_bias = attn_bias.masked_fill(attn_mask.unsqueeze(1).unsqueeze(2).logical_not(), float("-inf"))
+                attn_scores = attn_scores + attn_bias
+            if self.is_causal:
+                causal_mask = torch.ones((L_q, L_k), dtype = torch.bool, device = query.device).tril()
+                attn_scores = attn_scores.masked_fill(causal_mask.logical_not(), float("-inf"))
+            attention_weights = torch.softmax(attn_scores, dim=-1)
+            record_module_value(self, "attention_weights", attention_weights)
         # scaled dot product
         if attn_mask is None:
             causal = self.is_causal and not self.use_kv_cache
@@ -732,7 +750,11 @@ class DeformableAttention(nn.Module):
         # Ref Points: (Batch, Num_Queries, 1, 1, 2) -> Broadcasat to Heads & Points
         sampling_locations = reference_points[:, :, None, None, :] \
                              + sampling_offsets / offset_normalizer[None, None, None, None, :]
-        
+        if _module_recording_enabled(self):
+            record_module_value(self, "sampling_offsets", sampling_offsets)
+            record_module_value(self, "attention_weights", attention_weights)
+            record_module_value(self, "sampling_locations", sampling_locations)
+
         # 4. Grid Sample
         # We need to reshape inputs to use grid_sample efficiently
         # New Batch Size = Batch * Heads

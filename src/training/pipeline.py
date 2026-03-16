@@ -11,6 +11,7 @@ def train(builder:PipelineBuilder):
         builder.load_dataset()
         device = builder.device
         model, splits = builder.build_model()
+        inference_recorder = builder.build_inference_recorder(model)
         if splits is not None:
             print("Loading splits from pretrained model")
             train_idx, val_idx, test_idx = splits
@@ -28,8 +29,10 @@ def train(builder:PipelineBuilder):
         if builder.config.training.log:
             print(model.param_summary())
         
-        if builder.config.model.compilate:
+        if builder.config.model.compilate and inference_recorder is None:
             model = torch.compile(model, dynamic=True) 
+        elif builder.config.model.compilate and inference_recorder is not None:
+            print("Inference recorder enabled: skipping torch.compile to preserve module-level captures.")
         to_update_in_epoch = []
         to_update_in_batch = []
         curriculum_noise = None
@@ -59,6 +62,16 @@ def train(builder:PipelineBuilder):
         denoise_dropout_scheduler = builder.build_denoise_dropout_scheduler(model, len(train_dataloader))
         if denoise_dropout_scheduler is not None:
             to_update_in_batch.append(denoise_dropout_scheduler)
+        global_epoch = 0
+        global_step = 0
+        record_train_split = (
+            inference_recorder is not None
+            and builder.config.training.inference_recorder.get('split', 'train') in ('train', 'both')
+        )
+        record_val_split = (
+            inference_recorder is not None
+            and builder.config.training.inference_recorder.get('split', 'train') in ('val', 'both')
+        )
         for phase, denoise_weight, decisive_metric, epochs in phases:
             print(f"Training {phase} for {epochs} epochs, Denoise Weight: {denoise_weight}")
             model.set_phase(phase)
@@ -70,15 +83,27 @@ def train(builder:PipelineBuilder):
                 metrics_storage.init_epoch()
                 if first_time and builder.config.training.log:
                     print('starting data loading')
-                for batch in tqdm(train_dataloader):#
+                for batch_index, batch in enumerate(tqdm(train_dataloader)):#
                     # LOAD DATA TO DEVICE
                     input = move_data_to_device(batch, device)
+                    if record_train_split:
+                        inference_recorder.start_batch(
+                            epoch=global_epoch + 1,
+                            phase=phase,
+                            split='train',
+                            batch_index=batch_index,
+                            global_step=global_step,
+                            metadata={'model_name': model.name, 'phase_epoch': epoch + 1},
+                        )
                     optimizer.zero_grad()  # Zero the gradients
-                    if first_time and builder.config.training.log and builder.config.model.compilate:
+                    if first_time and builder.config.training.log and builder.config.model.compilate and inference_recorder is None:
                         print('model compilation')
                         first_time = False
                     # FORWARD PASS AND LOSS COMPUTATION
                     output = model(**input)  # Forward pass
+                    if record_train_split:
+                        inference_recorder.record_batch(input, output)
+                        inference_recorder.save_batch()
                     loss, info = loss_fn(input, output) # Compute loss
                     # BACKWARD PASS AND OPTIMIZATION
                     loss.backward()
@@ -88,6 +113,7 @@ def train(builder:PipelineBuilder):
                             update.step()
                     metrics_storage.update_batch_loss(info)
                     metrics_storage.compute_normalized_regression_metrics(input, output, train_dataloader)
+                    global_step += 1
                 loss_info = metrics_storage.finalize_epoch()
                 loss_str = ", ".join([f"{key}: {value:.4f}" for key, value in loss_info.items()])
                 print(f"Epoch {epoch+1}/{epochs}, {loss_str}, LR: {optimizer.param_groups[0]['lr']:.6f} ",
@@ -100,7 +126,17 @@ def train(builder:PipelineBuilder):
                 if needs_validate and ((epoch + 1) % val_interval == 0):
                     if curriculum_noise is not None:
                         curriculum_noise.enabled = False
-                    validate(model,loss_fn, val_dataloader, epoch, device, metrics_storage.metrics, log = builder.config.training.log)
+                    validate(
+                        model,
+                        loss_fn,
+                        val_dataloader,
+                        global_epoch,
+                        device,
+                        metrics_storage.metrics,
+                        log = builder.config.training.log,
+                        inference_recorder = inference_recorder if record_val_split else None,
+                        recorder_phase = phase,
+                    )
                     if curriculum_noise is not None:
                         curriculum_noise.enabled = True
                     metrics_storage.save_metrics()
@@ -114,5 +150,6 @@ def train(builder:PipelineBuilder):
                             log=builder.config.training.log,
                             save_full_state= builder.config.training.save_full_state
                         )
+                global_epoch += 1
             
         print("Training finished!")

@@ -14,6 +14,8 @@ def add_metric_and_checkpoint_paths(config: DictConfig):
         config.training.metric_file = metric_path
         config.training.checkpoint_file = checkpoint_path
         config.training.splits_file = splits_path
+        if hasattr(config.training, "inference_recorder"):
+            config.training.inference_recorder.output_dir = os.path.join(hydra_path, "inference_records")
 
 @hydra.main(config_path="./configs", config_name="main", version_base=None)
 def main(config: DictConfig):

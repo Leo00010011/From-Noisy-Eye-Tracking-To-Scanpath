@@ -610,6 +610,11 @@ class MixerModel(nn.Module):
                 mod.requires_grad_(True)
             for mod in self.fixation_modules:
                 mod.requires_grad_(True)
+
+    def set_inference_recorder(self, recorder):
+        self.inference_recorder = recorder
+        if recorder is not None:
+            recorder.attach(self)
     
     def input_encoding(self, src):
         if self.input_encoder == 'fourier' or self.input_encoder == 'fourier_sum' or self.input_encoder == 'nerf_fourier':

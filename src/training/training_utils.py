@@ -84,7 +84,7 @@ class MetricsStorage:
             json.dump(self.metrics, f)
 
 
-def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True):
+def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True, inference_recorder = None, recorder_phase = None):
     model.eval()
     with torch.no_grad():
         denoise_coord_error_acum = 0
@@ -98,10 +98,20 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True)
         duration_error_acum = 0
         loss_info = {}
         cnt = 0
-        for batch in val_dataloader:
+        for batch_index, batch in enumerate(val_dataloader):
             input = move_data_to_device(batch, device)
-
+            if inference_recorder is not None:
+                inference_recorder.start_batch(
+                    epoch=epoch + 1,
+                    phase=recorder_phase if recorder_phase is not None else getattr(model, 'phase', 'Validation'),
+                    split='val',
+                    batch_index=batch_index,
+                    metadata={'model_name': model.name},
+                )
             output = model(**input)
+            if inference_recorder is not None:
+                inference_recorder.record_batch(input, output)
+                inference_recorder.save_batch()
             _ , info = loss_fn(input, output)
             for key, value in info.items():
                 if key not in loss_info:
