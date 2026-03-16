@@ -93,18 +93,19 @@ def train(builder:PipelineBuilder):
                 for batch_index, batch in enumerate(tqdm(train_dataloader)):#
                     # LOAD DATA TO DEVICE
                     input = move_data_to_device(batch, device)
-                    if record_train_split and record_index == batch_index:
-                        inference_recorder.enabled = True
-                        inference_recorder.start_batch(
-                            epoch=global_epoch + 1,
-                            phase=phase,
-                            split='train',
-                            batch_index=batch_index,
-                            global_step=global_step,
-                            metadata={'model_name': model.name, 'phase_epoch': epoch + 1},
-                        )
-                    else:
-                        inference_recorder.enabled = False
+                    if record_train_split:
+                        if record_index == batch_index:
+                            inference_recorder.enabled = True
+                            inference_recorder.start_batch(
+                                epoch=global_epoch + 1,
+                                phase=phase,
+                                split='train',
+                                batch_index=batch_index,
+                                global_step=global_step,
+                                metadata={'model_name': model.name, 'phase_epoch': epoch + 1},
+                            )
+                        else:
+                            inference_recorder.enabled = False
                     optimizer.zero_grad()  # Zero the gradients
                     if first_time and builder.config.training.log and builder.config.model.compilate and inference_recorder is None:
                         print('model compilation')

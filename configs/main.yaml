@@ -21,7 +21,7 @@ training:
   weight_decay: 0.01
   log: True
   inference_recorder:
-    enabled: False
+    enabled: True
     rec_interval: 20
     split: both
   weights_scheduler:
