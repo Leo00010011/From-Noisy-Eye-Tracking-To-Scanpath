@@ -11,7 +11,7 @@ def train(builder:PipelineBuilder):
         builder.load_dataset()
         device = builder.device
         model, splits = builder.build_model()
-        rec_interval = builder.config.training.rec_interval
+        rec_interval = builder.config.training.inference_recorder.rec_interval
         inference_recorder = builder.build_inference_recorder(model)
         if splits is not None:
             print("Loading splits from pretrained model")
