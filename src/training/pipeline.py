@@ -86,7 +86,7 @@ def train(builder:PipelineBuilder):
                 if first_time and builder.config.training.log:
                     print('starting data loading')
 
-                if epoch > 0 and epoch%rec_interval == 0:
+                if epoch > 0 and ((epoch + 1) % rec_interval == 0):
                     record_index = len(train_dataloader)-1
                 else:
                     record_index = -1
