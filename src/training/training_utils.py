@@ -277,10 +277,10 @@ class ScheduledSampling:
                 warmup_epochs,
                 device,
                 min_prob = 0,
-                dtype = torch.float32,
                 max_prob = .8,
                 steps_per_epoch = 128,
                 use_kv_cache = False,
+                dtype = torch.float32,
                 n_updates = -1):
         self.device = device
         self.active_epochs = active_epochs
