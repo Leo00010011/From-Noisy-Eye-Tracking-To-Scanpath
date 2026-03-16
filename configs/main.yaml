@@ -10,7 +10,7 @@ defaults:
 training:
   num_epochs: 100
   validate: True
-  val_interval: 10
+  val_interval: 5
   learning_rate: 0.0001
   decisive_metric: "reg_error_val"
   use_denoise_dropout_scheduler: False
@@ -22,7 +22,7 @@ training:
   log: True
   inference_recorder:
     enabled: True
-    rec_interval: 20
+    rec_interval: 5
     split: both
   weights_scheduler:
     enabled: False
