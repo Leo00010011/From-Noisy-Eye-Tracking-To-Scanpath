@@ -11,6 +11,7 @@ def train(builder:PipelineBuilder):
         builder.load_dataset()
         device = builder.device
         model, splits = builder.build_model()
+        rec_interval = builder.config.training.rec_interval
         inference_recorder = builder.build_inference_recorder(model)
         if splits is not None:
             print("Loading splits from pretrained model")
@@ -72,6 +73,7 @@ def train(builder:PipelineBuilder):
             inference_recorder is not None
             and builder.config.training.inference_recorder.get('split', 'train') in ('val', 'both')
         )
+
         for phase, denoise_weight, decisive_metric, epochs in phases:
             print(f"Training {phase} for {epochs} epochs, Denoise Weight: {denoise_weight}")
             model.set_phase(phase)
@@ -83,10 +85,16 @@ def train(builder:PipelineBuilder):
                 metrics_storage.init_epoch()
                 if first_time and builder.config.training.log:
                     print('starting data loading')
+
+                if epoch > 0 and epoch%rec_interval == 0:
+                    record_index = len(train_dataloader)-1
+                else:
+                    record_index = -1
                 for batch_index, batch in enumerate(tqdm(train_dataloader)):#
                     # LOAD DATA TO DEVICE
                     input = move_data_to_device(batch, device)
-                    if record_train_split:
+                    if record_train_split and record_index == batch_index:
+                        inference_recorder.enabled = True
                         inference_recorder.start_batch(
                             epoch=global_epoch + 1,
                             phase=phase,
@@ -95,6 +103,8 @@ def train(builder:PipelineBuilder):
                             global_step=global_step,
                             metadata={'model_name': model.name, 'phase_epoch': epoch + 1},
                         )
+                    else:
+                        inference_recorder.enabled = False
                     optimizer.zero_grad()  # Zero the gradients
                     if first_time and builder.config.training.log and builder.config.model.compilate and inference_recorder is None:
                         print('model compilation')
@@ -134,7 +144,7 @@ def train(builder:PipelineBuilder):
                         device,
                         metrics_storage.metrics,
                         log = builder.config.training.log,
-                        inference_recorder = inference_recorder if record_val_split else None,
+                        inference_recorder = inference_recorder if record_val_split and record_index > 0 else None,
                         recorder_phase = phase,
                     )
                     if curriculum_noise is not None:

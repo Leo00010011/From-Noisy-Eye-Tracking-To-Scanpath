@@ -98,9 +98,13 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
         duration_error_acum = 0
         loss_info = {}
         cnt = 0
+        if inference_recorder:
+            record_index = len(val_dataloader)-1
+
         for batch_index, batch in enumerate(val_dataloader):
             input = move_data_to_device(batch, device)
-            if inference_recorder is not None:
+            if inference_recorder is not None and record_index == batch_index:
+                inference_recorder.enabled = True
                 inference_recorder.start_batch(
                     epoch=epoch + 1,
                     phase=recorder_phase if recorder_phase is not None else getattr(model, 'phase', 'Validation'),
@@ -108,6 +112,9 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
                     batch_index=batch_index,
                     metadata={'model_name': model.name},
                 )
+            else:
+                inference_recorder.enabled = False
+                
             output = model(**input)
             if inference_recorder is not None:
                 inference_recorder.record_batch(input, output)

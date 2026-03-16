@@ -631,7 +631,7 @@ class PipelineBuilder:
         recorder_config = self.config.training.get('inference_recorder', None)
         if recorder_config is None or not recorder_config.enabled:
             return None
-        recorder = InferenceRecorder(output_dir=recorder_config.output_dir)
+        recorder = InferenceRecorder(output_dir=recorder_config.output_dir, enabled= False)
         if hasattr(model, 'set_inference_recorder'):
             model.set_inference_recorder(recorder)
         return recorder
