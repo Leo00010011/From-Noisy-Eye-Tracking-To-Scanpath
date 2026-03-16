@@ -266,7 +266,8 @@ class FreeViewInMemory(Dataset):
             input = transform(input)
         output = {
             'x': input['x'],
-            'y': input['y']
+            'y': input['y'],
+            'sample_idx': index,
         }
         if 'clean_x' in input:
             output['clean_x'] = input['clean_x']
@@ -342,6 +343,10 @@ def seq2seq_padded_collate_fn(batch):
     output['tgt'] = padded_targets
     output['tgt_mask'] = target_mask
     output['fixation_len'] = fixation_len
+    if 'sample_idx' in batch[0]:
+        output['sample_idx'] = torch.as_tensor([item['sample_idx'] for item in batch], dtype=torch.long)
+    if 'image_idx' in batch[0]:
+        output['image_idx'] = torch.as_tensor([item['image_idx'] for item in batch], dtype=torch.long)
     return output
 
 
@@ -505,7 +510,7 @@ class DeduplicatedMemoryDataset(Dataset):
         unique_idx = self.indices[idx]
         img = self.image_bank[unique_idx]
         img = self.runtime_transform(img)
-        return img, idx
+        return img, idx, int(unique_idx)
 
     def __len__(self):
         return len(self.indices)
@@ -537,10 +542,11 @@ class CoupledDataloader:
                                      drop_last=drop_last_batch)
 
     def __iter__(self):
-        for img_batch, idx_batch in self.dataloader:
+        for img_batch, idx_batch, image_idx_batch in self.dataloader:
             et_data_batch = [self.path_dataset[i] for i in idx_batch]
             et_data_batch = seq2seq_padded_collate_fn(et_data_batch)
             et_data_batch['image_src'] = img_batch
+            et_data_batch['image_idx'] = image_idx_batch
             yield et_data_batch
 
     def __len__(self):
