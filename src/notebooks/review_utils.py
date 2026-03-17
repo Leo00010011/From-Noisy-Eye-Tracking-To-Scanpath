@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import json
 
+from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -13,6 +15,8 @@ import torch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 OUTPUTS_DIR = PROJECT_ROOT / "outputs"
+COCO_IMAGE_BANK_RELATIVE_PATH = Path("data") / "Coco FreeView" / "all_images_256.pth"
+PAD_TOKEN_VALUE = 0.5
 
 
 def _tensor_to_numpy(value: Any) -> np.ndarray | None:
@@ -22,8 +26,10 @@ def _tensor_to_numpy(value: Any) -> np.ndarray | None:
         return value.detach().cpu().numpy()
     if isinstance(value, np.ndarray):
         return value
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, (tuple)):
         return np.asarray(value)
+    if isinstance(value, (list)):
+        return np.asarray(value[-1])
     return None
 
 
@@ -34,6 +40,81 @@ def _shape_of(value: Any) -> tuple[int, ...] | None:
     if isinstance(value, dict):
         return None
     return None
+
+
+def _resolve_path(path: str | Path | None) -> Path | None:
+    if path is None:
+        return None
+    resolved = Path(path)
+    if resolved.is_absolute():
+        return resolved
+    return (PROJECT_ROOT / resolved).resolve()
+
+
+def _iter_payload_root_candidates(payload_path: Path) -> list[Path]:
+    candidates: list[Path] = []
+    for parent in [payload_path.parent, *payload_path.parents]:
+        if parent not in candidates:
+            candidates.append(parent)
+    return candidates
+
+
+def resolve_image_bank_path(
+    payload_path: str | Path | None = None,
+    image_bank_path: str | Path | None = None,
+) -> Path:
+    explicit_path = _resolve_path(image_bank_path)
+    if explicit_path is not None and explicit_path.exists():
+        return explicit_path
+
+    project_candidate = PROJECT_ROOT / COCO_IMAGE_BANK_RELATIVE_PATH
+    if project_candidate.exists():
+        return project_candidate
+
+    resolved_payload_path = _resolve_path(payload_path)
+    if resolved_payload_path is not None:
+        for candidate_root in _iter_payload_root_candidates(resolved_payload_path):
+            candidate = candidate_root / COCO_IMAGE_BANK_RELATIVE_PATH
+            if candidate.exists():
+                return candidate
+
+    raise FileNotFoundError(
+        "Unable to locate the image bank. Provide `image_bank_path` explicitly or place "
+        f"`{COCO_IMAGE_BANK_RELATIVE_PATH}` under the active project root."
+    )
+
+
+@lru_cache(maxsize=2)
+def _load_image_bank_cached(image_bank_path: str) -> torch.Tensor:
+    return torch.load(image_bank_path, map_location="cpu", weights_only=False)
+
+
+def load_image_bank(
+    payload_path: str | Path | None = None,
+    image_bank_path: str | Path | None = None,
+) -> torch.Tensor:
+    resolved_path = resolve_image_bank_path(payload_path=payload_path, image_bank_path=image_bank_path)
+    return _load_image_bank_cached(str(resolved_path))
+
+
+def get_payload_image(
+    payload: dict[str, Any],
+    sample_index: int = 0,
+    payload_path: str | Path | None = None,
+    image_bank_path: str | Path | None = None,
+) -> np.ndarray:
+    image_indices = payload.get("data", {}).get("image_idx")
+    if image_indices is None:
+        raise KeyError("Payload does not contain `image_idx` in the data section.")
+
+    image_index_array = _tensor_to_numpy(image_indices)
+    if image_index_array is None:
+        raise ValueError("`image_idx` could not be converted to numpy.")
+
+    image_index = int(image_index_array[sample_index])
+    image_bank = load_image_bank(payload_path=payload_path, image_bank_path=image_bank_path)
+    image_tensor = image_bank[image_index]
+    return image_tensor.permute(1, 2, 0).detach().cpu().numpy()
 
 
 def list_metric_files(base_dir: str | Path = OUTPUTS_DIR) -> pd.DataFrame:
@@ -313,6 +394,377 @@ def plot_sampling_locations(payload: dict[str, Any], sample_index: int = 0, quer
     plt.ylabel("normalized y")
     plt.grid(alpha=0.2)
     plt.tight_layout()
+
+
+def _infer_valid_fixation_count(fixations: np.ndarray, pad_value: float = PAD_TOKEN_VALUE) -> int:
+    if fixations.ndim != 2 or fixations.shape[1] < 3:
+        return fixations.shape[0]
+    pad_rows = np.isclose(fixations, pad_value, atol=1e-6).all(axis=1)
+    pad_indices = np.flatnonzero(pad_rows)
+    if pad_indices.size == 0:
+        return fixations.shape[0]
+    return int(pad_indices[0])
+
+
+def get_decoder_reference_points(payload: dict[str, Any], sample_index: int = 0) -> np.ndarray:
+    fixations = _tensor_to_numpy(payload.get("data", {}).get("fixation_ground_truth"))
+    if fixations is None:
+        raise KeyError("Payload does not contain `fixation_ground_truth` in the data section.")
+    fixation_points = np.asarray(fixations[sample_index, :, :2], dtype=np.float32)
+    start_point = np.array([[0.5, 0.5]], dtype=np.float32)
+    return np.concatenate([start_point, fixation_points], axis=0)
+
+
+def get_decoder_layer_activations(
+    payload: dict[str, Any],
+    decoder_layer: int,
+) -> tuple[str, np.ndarray, np.ndarray]:
+    module_name = f"decoder.{decoder_layer}.second_cross_attn"
+    activations = payload.get("activations", {}).get(module_name)
+    if activations is None:
+        available = sorted(name for name in payload.get("activations", {}) if name.startswith("decoder."))
+        raise KeyError(f"Module `{module_name}` not found. Available decoder modules: {available}")
+    print("SAMPLING LOCATIONS")
+    print(type(activations.get("sampling_locations")))
+    print(len(activations.get("sampling_locations")))
+    for i in range(len(activations.get("sampling_locations"))):
+        print(activations.get("sampling_locations")[i].shape)
+    sampling_locations = _tensor_to_numpy(activations.get("sampling_locations"))
+    attention_weights = _tensor_to_numpy(activations.get("attention_weights"))
+    if sampling_locations is None or attention_weights is None:
+        raise KeyError(f"Module `{module_name}` is missing `sampling_locations` or `attention_weights`.")
+    return module_name, np.asarray(sampling_locations), np.asarray(attention_weights)
+
+
+def get_decoder_ground_truth_vector(
+    payload: dict[str, Any],
+    sample_index: int,
+    query_index: int,
+) -> dict[str, Any] | None:
+    fixations = _tensor_to_numpy(payload.get("data", {}).get("fixation_ground_truth"))
+    if fixations is None:
+        raise KeyError("Payload does not contain `fixation_ground_truth` in the data section.")
+
+    sample_fixations = np.asarray(fixations[sample_index], dtype=np.float32)
+    valid_fixation_count = _infer_valid_fixation_count(sample_fixations)
+    if valid_fixation_count <= 0 or query_index >= valid_fixation_count:
+        return None
+
+    if query_index == 0:
+        origin = np.array([0.5, 0.5], dtype=np.float32)
+        target = sample_fixations[0, :2]
+    else:
+        origin = sample_fixations[query_index - 1, :2]
+        target = sample_fixations[query_index, :2]
+
+    return {
+        "origin": origin,
+        "target": target,
+        "delta": target - origin,
+        "valid_fixation_count": valid_fixation_count,
+    }
+
+
+def extract_decoder_deformable_attention(
+    payload: dict[str, Any],
+    sample_index: int = 0,
+    decoder_layer: int = 0,
+    query_index: int = 0,
+    aggregate_heads: bool = True,
+    head_index: int | None = None,
+) -> dict[str, Any]:
+    module_name, sampling_locations, attention_weights = get_decoder_layer_activations(payload, decoder_layer=decoder_layer)
+    if sample_index < 0 or sample_index >= sampling_locations.shape[0]:
+        raise IndexError(f"sample_index={sample_index} is out of bounds for batch size {sampling_locations.shape[0]}.")
+    if query_index < 0 or query_index >= sampling_locations.shape[1]:
+        raise IndexError(f"query_index={query_index} is out of bounds for decoder length {sampling_locations.shape[1]}.")
+
+    sample_locations = np.asarray(sampling_locations[sample_index, query_index], dtype=np.float32)
+    sample_weights = np.asarray(attention_weights[sample_index, query_index], dtype=np.float32)
+    reference_points = get_decoder_reference_points(payload, sample_index=sample_index)
+    if query_index >= reference_points.shape[0]:
+        raise IndexError(
+            f"query_index={query_index} is out of bounds for reconstructed reference points "
+            f"with shape {reference_points.shape}."
+        )
+
+    origin = np.asarray(reference_points[query_index], dtype=np.float32)
+
+    vectors: np.ndarray
+    vector_weights: np.ndarray
+    vector_labels: list[str]
+    selected_head_index = head_index
+
+    if aggregate_heads:
+        summed_weights = sample_weights.sum(axis=0, keepdims=True)
+        normalized_weights = np.divide(
+            sample_weights,
+            np.where(summed_weights == 0, 1.0, summed_weights),
+        )
+        vectors = (sample_locations * normalized_weights[..., None]).sum(axis=0)
+        vector_weights = sample_weights.mean(axis=0)
+        vector_labels = [f"point_{point_idx}" for point_idx in range(vectors.shape[0])]
+        selected_head_index = None
+    else:
+        if head_index is None:
+            vectors = sample_locations.reshape(-1, 2)
+            vector_weights = sample_weights.reshape(-1)
+            vector_labels = [
+                f"head_{head_idx}_point_{point_idx}"
+                for head_idx in range(sample_locations.shape[0])
+                for point_idx in range(sample_locations.shape[1])
+            ]
+        else:
+            if head_index < 0 or head_index >= sample_locations.shape[0]:
+                raise IndexError(
+                    f"head_index={head_index} is out of bounds for number of heads {sample_locations.shape[0]}."
+                )
+            vectors = sample_locations[head_index]
+            vector_weights = sample_weights[head_index]
+            vector_labels = [f"head_{head_index}_point_{point_idx}" for point_idx in range(vectors.shape[0])]
+
+    valid_fixation_count = _infer_valid_fixation_count(
+        np.asarray(_tensor_to_numpy(payload.get("data", {}).get("fixation_ground_truth"))[sample_index], dtype=np.float32)
+    )
+    true_vector = get_decoder_ground_truth_vector(payload, sample_index=sample_index, query_index=query_index)
+
+    return {
+        "module_name": module_name,
+        "origin": origin,
+        "sampling_locations": sample_locations,
+        "attention_weights": sample_weights,
+        "vector_targets": np.asarray(vectors, dtype=np.float32),
+        "vector_deltas": np.asarray(vectors, dtype=np.float32) - origin[None, :],
+        "vector_weights": np.asarray(vector_weights, dtype=np.float32),
+        "vector_labels": vector_labels,
+        "true_vector": true_vector,
+        "valid_fixation_count": valid_fixation_count,
+        "is_terminal_or_padded": query_index >= valid_fixation_count,
+        "selected_head_index": selected_head_index,
+        "query_count": int(sampling_locations.shape[1]),
+        "num_heads": int(sampling_locations.shape[2]),
+        "num_points": int(sampling_locations.shape[3]),
+    }
+
+
+def decoder_attention_summary_frame(
+    payload: dict[str, Any],
+    sample_index: int = 0,
+    decoder_layer: int = 0,
+    query_index: int = 0,
+    aggregate_heads: bool = True,
+    head_index: int | None = None,
+) -> pd.DataFrame:
+    attention_info = extract_decoder_deformable_attention(
+        payload,
+        sample_index=sample_index,
+        decoder_layer=decoder_layer,
+        query_index=query_index,
+        aggregate_heads=aggregate_heads,
+        head_index=head_index,
+    )
+    rows: list[dict[str, Any]] = []
+    for label, target, delta, weight in zip(
+        attention_info["vector_labels"],
+        attention_info["vector_targets"],
+        attention_info["vector_deltas"],
+        attention_info["vector_weights"],
+    ):
+        rows.append(
+            {
+                "label": label,
+                "target_x": float(target[0]),
+                "target_y": float(target[1]),
+                "delta_x": float(delta[0]),
+                "delta_y": float(delta[1]),
+                "attention_weight": float(weight),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _compute_decoder_plot_limits(
+    origin: np.ndarray,
+    vector_targets: np.ndarray,
+    true_vector: dict[str, Any] | None,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    xs = [0.0, 1.0, float(origin[0]), *vector_targets[:, 0].tolist()]
+    ys = [0.0, 1.0, float(origin[1]), *vector_targets[:, 1].tolist()]
+    if true_vector is not None:
+        xs.append(float(true_vector["target"][0]))
+        ys.append(float(true_vector["target"][1]))
+
+    x_min, x_max = min(xs), max(xs)
+    y_min, y_max = min(ys), max(ys)
+    margin = 0.05
+    if x_min < 0.0 or x_max > 1.0:
+        x_limits = (x_min - margin, x_max + margin)
+    else:
+        x_limits = (0.0, 1.0)
+    if y_min < 0.0 or y_max > 1.0:
+        y_limits = (y_max + margin, y_min - margin)
+    else:
+        y_limits = (1.0, 0.0)
+    return x_limits, y_limits
+
+
+def plot_decoder_deformable_attention_overlay(
+    payload: dict[str, Any],
+    sample_index: int = 0,
+    decoder_layer: int = 0,
+    query_index: int = 0,
+    aggregate_heads: bool = True,
+    head_index: int | None = None,
+    payload_path: str | Path | None = None,
+    image_bank_path: str | Path | None = None,
+    ax: plt.Axes | None = None,
+) -> dict[str, Any]:
+    attention_info = extract_decoder_deformable_attention(
+        payload,
+        sample_index=sample_index,
+        decoder_layer=decoder_layer,
+        query_index=query_index,
+        aggregate_heads=aggregate_heads,
+        head_index=head_index,
+    )
+    image = get_payload_image(
+        payload,
+        sample_index=sample_index,
+        payload_path=payload_path,
+        image_bank_path=image_bank_path,
+    )
+    image_indices = _tensor_to_numpy(payload.get("data", {}).get("image_idx"))
+    sample_indices = _tensor_to_numpy(payload.get("data", {}).get("sample_idx"))
+    image_index = int(image_indices[sample_index]) if image_indices is not None else None
+    sample_id = int(sample_indices[sample_index]) if sample_indices is not None else None
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 8))
+
+    ax.imshow(image, extent=(0, 1, 1, 0), interpolation="nearest")
+
+    vector_weights = attention_info["vector_weights"]
+    if vector_weights.size == 0:
+        raise ValueError("No decoder vectors are available to plot.")
+
+    min_weight = float(vector_weights.min())
+    max_weight = float(vector_weights.max())
+    if np.isclose(min_weight, max_weight):
+        max_weight = min_weight + 1e-6
+    color_norm = mcolors.Normalize(vmin=min_weight, vmax=max_weight)
+    cmap = plt.cm.viridis
+    vector_targets = attention_info["vector_targets"]
+    origin = attention_info["origin"]
+
+    for target, weight in zip(vector_targets, vector_weights):
+        ax.annotate(
+            "",
+            xy=(float(target[0]), float(target[1])),
+            xytext=(float(origin[0]), float(origin[1])),
+            arrowprops={
+                "arrowstyle": "->",
+                "color": cmap(color_norm(float(weight))),
+                "lw": 2,
+                "alpha": 0.95,
+                "shrinkA": 0,
+                "shrinkB": 0,
+            },
+            zorder=3,
+        )
+
+    out_of_bounds_mask = (
+        (vector_targets[:, 0] < 0.0)
+        | (vector_targets[:, 0] > 1.0)
+        | (vector_targets[:, 1] < 0.0)
+        | (vector_targets[:, 1] > 1.0)
+    )
+    if np.any(~out_of_bounds_mask):
+        in_bounds = vector_targets[~out_of_bounds_mask]
+        ax.scatter(
+            in_bounds[:, 0],
+            in_bounds[:, 1],
+            c=vector_weights[~out_of_bounds_mask],
+            cmap=cmap,
+            norm=color_norm,
+            s=55,
+            edgecolors="white",
+            linewidths=0.8,
+            zorder=4,
+        )
+    if np.any(out_of_bounds_mask):
+        out_bounds = vector_targets[out_of_bounds_mask]
+        ax.scatter(
+            out_bounds[:, 0],
+            out_bounds[:, 1],
+            marker="x",
+            color="#dc2626",
+            s=65,
+            linewidths=1.6,
+            zorder=5,
+            label="out-of-bounds sample",
+        )
+
+    ax.scatter(
+        [float(origin[0])],
+        [float(origin[1])],
+        marker="o",
+        s=100,
+        color="#f97316",
+        edgecolors="black",
+        linewidths=0.9,
+        zorder=6,
+        label="decoder origin",
+    )
+
+    true_vector = attention_info["true_vector"]
+    if true_vector is not None:
+        target = true_vector["target"]
+        ax.annotate(
+            "",
+            xy=(float(target[0]), float(target[1])),
+            xytext=(float(origin[0]), float(origin[1])),
+            arrowprops={
+                "arrowstyle": "-|>",
+                "color": "#ef4444",
+                "lw": 2.5,
+                "linestyle": "--",
+                "shrinkA": 0,
+                "shrinkB": 0,
+            },
+            zorder=7,
+        )
+        ax.scatter(
+            [float(target[0])],
+            [float(target[1])],
+            marker="D",
+            s=60,
+            color="#ef4444",
+            edgecolors="white",
+            linewidths=0.8,
+            zorder=8,
+            label="ground-truth next fixation",
+        )
+
+    x_limits, y_limits = _compute_decoder_plot_limits(origin, vector_targets, true_vector)
+    ax.set_xlim(*x_limits)
+    ax.set_ylim(*y_limits)
+    ax.set_xlabel("normalized x")
+    ax.set_ylabel("normalized y")
+    ax.grid(alpha=0.18)
+
+    head_label = "aggregated heads" if aggregate_heads else (
+        f"head {head_index}" if head_index is not None else "all heads"
+    )
+    status_label = "terminal/padded query" if attention_info["is_terminal_or_padded"] else "valid next-step query"
+    ax.set_title(
+        f"{attention_info['module_name']} | sample={sample_index} | query={query_index} | {head_label}\n"
+        f"image_idx={image_index} | sample_idx={sample_id} | {status_label}"
+    )
+    scalar_mappable = plt.cm.ScalarMappable(norm=color_norm, cmap=cmap)
+    scalar_mappable.set_array([])
+    plt.colorbar(scalar_mappable, ax=ax, fraction=0.046, pad=0.04, label="attention weight")
+    ax.legend(loc="upper right")
+    return attention_info
 
 
 def load_metrics(path: str | Path) -> dict[str, list[float]]:
