@@ -87,7 +87,7 @@ def train(builder:PipelineBuilder):
                     print('starting data loading')
 
                 if epoch > 0 and ((epoch + 1) % rec_interval == 0):
-                    record_index = len(train_dataloader)-1
+                    record_index = len(train_dataloader)-2
                 else:
                     record_index = -1
                 for batch_index, batch in enumerate(tqdm(train_dataloader)):#

@@ -99,7 +99,7 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
         loss_info = {}
         cnt = 0
         if inference_recorder:
-            record_index = len(val_dataloader)-1
+            record_index = len(val_dataloader)-2
 
         for batch_index, batch in enumerate(val_dataloader):
             input = move_data_to_device(batch, device)

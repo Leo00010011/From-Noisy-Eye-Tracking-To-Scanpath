@@ -284,6 +284,8 @@ def plot_scanpath_overview(payload: dict[str, Any], sample_index: int = 0) -> No
     axes[0].set_title("XY Trajectories")
     axes[0].set_xlabel("x")
     axes[0].set_ylabel("y")
+    axes[0].set_xlim(0, 1)
+    axes[0].set_ylim(0, 1)
     axes[0].invert_yaxis()
     axes[0].legend(loc="best")
     axes[0].grid(alpha=0.2)
@@ -424,16 +426,15 @@ def get_decoder_layer_activations(
     if activations is None:
         available = sorted(name for name in payload.get("activations", {}) if name.startswith("decoder."))
         raise KeyError(f"Module `{module_name}` not found. Available decoder modules: {available}")
-    print("SAMPLING LOCATIONS")
-    print(type(activations.get("sampling_locations")))
-    print(len(activations.get("sampling_locations")))
-    for i in range(len(activations.get("sampling_locations"))):
-        print(activations.get("sampling_locations")[i].shape)
     sampling_locations = _tensor_to_numpy(activations.get("sampling_locations"))
     attention_weights = _tensor_to_numpy(activations.get("attention_weights"))
+    sampling_offsets = _tensor_to_numpy(activations.get("sampling_offsets"))
     if sampling_locations is None or attention_weights is None:
         raise KeyError(f"Module `{module_name}` is missing `sampling_locations` or `attention_weights`.")
-    return module_name, np.asarray(sampling_locations), np.asarray(attention_weights)
+    return (module_name, 
+            np.asarray(sampling_locations),
+            np.asarray(attention_weights), 
+            np.asarray(sampling_offsets))
 
 
 def get_decoder_ground_truth_vector(
@@ -473,13 +474,14 @@ def extract_decoder_deformable_attention(
     aggregate_heads: bool = True,
     head_index: int | None = None,
 ) -> dict[str, Any]:
-    module_name, sampling_locations, attention_weights = get_decoder_layer_activations(payload, decoder_layer=decoder_layer)
+    module_name, sampling_locations, attention_weights, sampling_offsets = get_decoder_layer_activations(payload, decoder_layer=decoder_layer)
     if sample_index < 0 or sample_index >= sampling_locations.shape[0]:
         raise IndexError(f"sample_index={sample_index} is out of bounds for batch size {sampling_locations.shape[0]}.")
     if query_index < 0 or query_index >= sampling_locations.shape[1]:
         raise IndexError(f"query_index={query_index} is out of bounds for decoder length {sampling_locations.shape[1]}.")
 
     sample_locations = np.asarray(sampling_locations[sample_index, query_index], dtype=np.float32)
+    sample_offsets = np.asarray(sampling_offsets[sample_index, query_index], dtype=np.float32)
     sample_weights = np.asarray(attention_weights[sample_index, query_index], dtype=np.float32)
     reference_points = get_decoder_reference_points(payload, sample_index=sample_index)
     if query_index >= reference_points.shape[0]:
@@ -491,6 +493,7 @@ def extract_decoder_deformable_attention(
     origin = np.asarray(reference_points[query_index], dtype=np.float32)
 
     vectors: np.ndarray
+    offsets: np.ndarray
     vector_weights: np.ndarray
     vector_labels: list[str]
     selected_head_index = head_index
@@ -508,6 +511,7 @@ def extract_decoder_deformable_attention(
     else:
         if head_index is None:
             vectors = sample_locations.reshape(-1, 2)
+            offsets = sample_offsets.reshape(-1, 2)
             vector_weights = sample_weights.reshape(-1)
             vector_labels = [
                 f"head_{head_idx}_point_{point_idx}"
@@ -536,6 +540,7 @@ def extract_decoder_deformable_attention(
         "vector_targets": np.asarray(vectors, dtype=np.float32),
         "vector_deltas": np.asarray(vectors, dtype=np.float32) - origin[None, :],
         "vector_weights": np.asarray(vector_weights, dtype=np.float32),
+        "offsets": np.asarray(offsets, dtype=np.float32),
         "vector_labels": vector_labels,
         "true_vector": true_vector,
         "valid_fixation_count": valid_fixation_count,
