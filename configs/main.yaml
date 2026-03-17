@@ -55,8 +55,8 @@ scheduled_sampling:
   warmup_epochs: 20
   active_epochs: 50
   n_updates: -1
-  max_prob: 1
   min_prob: 0
+  max_prob: 1
 denoise_dropout_scheduler:
   base_prob: 0.2
   warmup_epochs: 160

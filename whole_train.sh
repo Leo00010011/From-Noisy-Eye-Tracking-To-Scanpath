@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=denoise_pretrain
+#SBATCH --job-name=whole_train
 #SBATCH --output=logs/denoise_out_%j.log
 #SBATCH --error=logs/denoise_err_%j.log
 #SBATCH --cpus-per-task=2
