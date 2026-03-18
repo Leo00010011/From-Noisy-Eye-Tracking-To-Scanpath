@@ -857,9 +857,18 @@ class DeformableDecoder(nn.Module):
     def forward(self, src, mem, tgt_mask = None, reference_points = None):
         x = src
         if self.norm_first:
-            x = x + self.__self_attention(self.norm1(x), attn_mask=tgt_mask)
-            x = x + self.__cross_attention(self.norm2(x), mem[:,1:,:], reference_points=reference_points)
-            x = x + self.__feed_forward(self.norm3(x))
+            temp = self.__self_attention(self.norm1(x), attn_mask=tgt_mask)
+            if _module_recording_enabled(self):
+                record_module_value(self, "self_attention_res", temp)
+            x = x + temp
+            temp = self.__cross_attention(self.norm2(x), mem[:,1:,:], reference_points=reference_points)
+            if _module_recording_enabled(self):
+                record_module_value(self, "cross_attention_res", temp)
+            x = x + temp
+            temp = self.__feed_forward(self.norm3(x))
+            if _module_recording_enabled(self):
+                record_module_value(self, "ffn_res", temp)
+            x = x + temp
         else:
             x = self.norm1(x + self.__self_attention(x, attn_mask=tgt_mask))
             x = self.norm2(x + self.__cross_attention(x, mem[:,1:,:], reference_points=reference_points))
