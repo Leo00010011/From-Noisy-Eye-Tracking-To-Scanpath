@@ -301,7 +301,7 @@ class PipelineBuilder:
                                                     drop_last_batch = False)
             val_dataloader = CoupledDataloader(self.PathDataset,
                                                     val_set,
-                                                    shuffle = False,
+                                                    shuffle = True,
                                                     batch_size=dataloader_config.batch_size,
                                                     num_workers = dataloader_config.num_workers,
                                                     persistent_workers = dataloader_config.persistent_workers,
@@ -310,7 +310,7 @@ class PipelineBuilder:
                                                     drop_last_batch = False)
             test_dataloader = CoupledDataloader(self.PathDataset,
                                                     test_set,
-                                                    shuffle = False,
+                                                    shuffle = True,
                                                     batch_size=dataloader_config.batch_size,
                                                     num_workers = dataloader_config.num_workers,
                                                     persistent_workers = dataloader_config.persistent_workers,
