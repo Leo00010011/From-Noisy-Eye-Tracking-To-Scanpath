@@ -754,6 +754,7 @@ class DeformableAttention(nn.Module):
             record_module_value(self, "sampling_offsets", sampling_offsets)
             record_module_value(self, "attention_weights", attention_weights)
             record_module_value(self, "sampling_locations", sampling_locations)
+            record_module_value(self, "reference_points", reference_points)
 
         # 4. Grid Sample
         # We need to reshape inputs to use grid_sample efficiently
