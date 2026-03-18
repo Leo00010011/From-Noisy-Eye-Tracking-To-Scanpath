@@ -973,10 +973,22 @@ class DeformableDoubleInputDecoder(nn.Module):
                       reference_points = None):
         x = src
         if self.norm_first:
-            x = x + self.__self_attention(self.self_attn_norm(x), attn_mask=tgt_mask, src_rope= None)
-            x = x + self.__cross_attention1(self.first_cross_attn_norm(x), mem1, attn_mask=mem1_mask, src_rope=None, mem1_rope=None)
-            x = x + self.__cross_attention2(self.second_cross_attn_norm(x), mem2[:,1:,:], reference_points=reference_points)
-            x = x + self.__feed_forward(self.linear_norm(x))
+            temp = self.__self_attention(self.self_attn_norm(x), attn_mask=tgt_mask, src_rope= None)
+            if _module_recording_enabled(self):
+                record_module_value(self, "self_attention_res", temp)
+            x = x + temp
+            temp = self.__cross_attention1(self.first_cross_attn_norm(x), mem1, attn_mask=mem1_mask, src_rope=None, mem1_rope=None)
+            if _module_recording_enabled(self):
+                record_module_value(self, "first_cross_res", temp)
+            x = x + temp
+            temp = self.__cross_attention2(self.second_cross_attn_norm(x), mem2[:,1:,:], reference_points=reference_points)
+            if _module_recording_enabled(self):
+                record_module_value(self, "second_cross_res", temp)
+            x = x + temp
+            temp = self.__feed_forward(self.linear_norm(x))
+            if _module_recording_enabled(self):
+                record_module_value(self, "ffn_res", temp)
+            x = x + temp
         else:
             x = self.self_attn_norm(x + self.__self_attention(x, attn_mask=tgt_mask, src_rope= None))
             x = self.first_cross_attn_norm(x + self.__cross_attention1(x, mem1, attn_mask=mem1_mask, src_rope= None, mem1_rope=None))
