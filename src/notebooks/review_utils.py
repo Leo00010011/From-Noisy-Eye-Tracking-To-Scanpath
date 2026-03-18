@@ -750,9 +750,13 @@ def plot_decoder_deformable_attention_overlay(
             label="ground-truth next fixation",
         )
 
-    x_limits, y_limits = _compute_decoder_plot_limits(origin, vector_targets, true_vector)
-    ax.set_xlim(*x_limits)
-    ax.set_ylim(*y_limits)
+    # x_limits, y_limits = _compute_decoder_plot_limits(origin, vector_targets, true_vector)
+    # ax.set_xlim(*x_limits)
+    ax.set_xlim(0,1)
+
+    # ax.set_ylim(*y_limits)
+    ax.set_ylim(1, 0)
+
     ax.set_xlabel("normalized x")
     ax.set_ylabel("normalized y")
     ax.grid(alpha=0.18)
