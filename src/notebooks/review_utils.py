@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import json
+import re
 
 from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
@@ -417,24 +418,236 @@ def get_decoder_reference_points(payload: dict[str, Any], sample_index: int = 0)
     return np.concatenate([start_point, fixation_points], axis=0)
 
 
+def list_decoder_second_cross_attention_layers(payload: dict[str, Any]) -> list[int]:
+    pattern = re.compile(r"^decoder\.(\d+)\.second_cross_attn$")
+    layer_indices: list[int] = []
+    for module_name in payload.get("activations", {}):
+        match = pattern.match(module_name)
+        if match is not None:
+            layer_indices.append(int(match.group(1)))
+    return sorted(set(layer_indices))
+
+
+def _build_decoder_query_reference_series(
+    payload: dict[str, Any],
+    sample_index: int,
+    query_count: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    fixations = _tensor_to_numpy(payload.get("data", {}).get("fixation_ground_truth"))
+    if fixations is None:
+        raise KeyError("Payload does not contain `fixation_ground_truth` in the data section.")
+
+    sample_fixations = np.asarray(fixations[sample_index], dtype=np.float32)
+    valid_fixation_count = _infer_valid_fixation_count(sample_fixations)
+
+    current_points = np.full((query_count, 2), np.nan, dtype=np.float32)
+    next_points = np.full((query_count, 2), np.nan, dtype=np.float32)
+    previous_points = np.full((query_count, 2), np.nan, dtype=np.float32)
+
+    for query_index in range(query_count):
+        if query_index == 0:
+            current_points[query_index] = np.array([0.5, 0.5], dtype=np.float32)
+        elif query_index - 1 < valid_fixation_count:
+            current_points[query_index] = sample_fixations[query_index - 1, :2]
+
+        if query_index < valid_fixation_count:
+            next_points[query_index] = sample_fixations[query_index, :2]
+
+        if query_index > 0:
+            previous_origin_index = query_index - 1
+            if previous_origin_index == 0:
+                previous_points[query_index] = np.array([0.5, 0.5], dtype=np.float32)
+            elif previous_origin_index - 1 < valid_fixation_count:
+                previous_points[query_index] = sample_fixations[previous_origin_index - 1, :2]
+
+    return current_points, next_points, previous_points, valid_fixation_count
+
+
+def _stack_decoder_capture_sequence(value: Any, name: str, module_name: str) -> np.ndarray | None:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return _tensor_to_numpy(value[-1]) 
+    else:
+        return _tensor_to_numpy(value) 
+
+
 def get_decoder_layer_activations(
     payload: dict[str, Any],
     decoder_layer: int,
-) -> tuple[str, np.ndarray, np.ndarray]:
+) -> tuple[str, np.ndarray, np.ndarray, np.ndarray | None]:
     module_name = f"decoder.{decoder_layer}.second_cross_attn"
     activations = payload.get("activations", {}).get(module_name)
     if activations is None:
         available = sorted(name for name in payload.get("activations", {}) if name.startswith("decoder."))
         raise KeyError(f"Module `{module_name}` not found. Available decoder modules: {available}")
-    sampling_locations = _tensor_to_numpy(activations.get("sampling_locations"))
-    attention_weights = _tensor_to_numpy(activations.get("attention_weights"))
-    sampling_offsets = _tensor_to_numpy(activations.get("sampling_offsets"))
+    sampling_locations = _stack_decoder_capture_sequence(
+        activations.get("sampling_locations"),
+        name="sampling_locations",
+        module_name=module_name,
+    )
+    attention_weights = _stack_decoder_capture_sequence(
+        activations.get("attention_weights"),
+        name="attention_weights",
+        module_name=module_name,
+    )
+    sampling_offsets = _stack_decoder_capture_sequence(
+        activations.get("sampling_offsets"),
+        name="sampling_offsets",
+        module_name=module_name,
+    )
     if sampling_locations is None or attention_weights is None:
         raise KeyError(f"Module `{module_name}` is missing `sampling_locations` or `attention_weights`.")
-    return (module_name, 
-            np.asarray(sampling_locations),
-            np.asarray(attention_weights), 
-            np.asarray(sampling_offsets))
+    return (
+        module_name,
+        np.asarray(sampling_locations),
+        np.asarray(attention_weights),
+        None if sampling_offsets is None else np.asarray(sampling_offsets),
+    )
+
+
+def compute_decoder_attention_query_profiles(
+    payload: dict[str, Any],
+    sample_index: int = 0,
+    decoder_layer: int = 0,
+) -> pd.DataFrame:
+    module_name, sampling_locations, attention_weights, _ = get_decoder_layer_activations(
+        payload,
+        decoder_layer=decoder_layer,
+    )
+    if sample_index < 0 or sample_index >= sampling_locations.shape[0]:
+        raise IndexError(f"sample_index={sample_index} is out of bounds for batch size {sampling_locations.shape[0]}.")
+
+    print("query count:", sampling_locations.shape)
+    sample_locations = np.asarray(sampling_locations[sample_index], dtype=np.float32)
+    sample_weights = np.asarray(attention_weights[sample_index], dtype=np.float32)
+    query_count = int(sample_locations.shape[0])
+    current_points, next_points, previous_points, valid_fixation_count = _build_decoder_query_reference_series(
+        payload,
+        sample_index=sample_index,
+        query_count=query_count,
+    )
+
+    in_bounds_mask = (
+        (sample_locations[..., 0] >= 0.0)
+        & (sample_locations[..., 0] <= 1.0)
+        & (sample_locations[..., 1] >= 0.0)
+        & (sample_locations[..., 1] <= 1.0)
+    )
+    in_bounds_attention_mass = sample_weights * in_bounds_mask.astype(np.float32)
+    print("attention shape", in_bounds_attention_mass.shape)
+    per_query_in_bounds_mass = in_bounds_attention_mass.sum(axis= -1).mean(axis = -1)
+
+    def _compute_weighted_mean_distance(reference_points: np.ndarray) -> np.ndarray:
+        mean_distances = np.full(query_count, np.nan, dtype=np.float32)
+        for query_index in range(query_count):
+            reference_point = reference_points[query_index]
+            if not np.isfinite(reference_point).all():
+                continue
+
+            deltas = sample_locations[query_index] - reference_point[None, None, :]
+            distances = np.linalg.norm(deltas, axis=-1)
+            weights = in_bounds_attention_mass[query_index]
+            weight_sums = weights.sum(axis=-1)
+            head_distances = np.divide(
+                (distances * weights).sum(axis=-1),
+                weight_sums,
+                out=np.full_like(weight_sums, np.nan, dtype=np.float32),
+                where=weight_sums > 0,
+            )
+            if np.isfinite(head_distances).any():
+                mean_distances[query_index] = np.nanmean(head_distances)
+        return mean_distances
+
+    frame = pd.DataFrame(
+        {
+            "module_name": module_name,
+            "decoder_layer": decoder_layer,
+            "query_index": np.arange(query_count, dtype=np.int32),
+            "in_bounds_attention_mass": per_query_in_bounds_mass.astype(np.float32),
+            "distance_to_current_point": _compute_weighted_mean_distance(current_points),
+            "distance_to_next_point": _compute_weighted_mean_distance(next_points),
+            "distance_to_previous_point": _compute_weighted_mean_distance(previous_points),
+            "valid_fixation_count": valid_fixation_count,
+            "is_valid_query": np.arange(query_count) < valid_fixation_count,
+        }
+    )
+    return frame
+
+
+def plot_decoder_attention_query_profiles(
+    payload: dict[str, Any],
+    sample_index: int = 0,
+    decoder_layers: list[int] | None = None,
+    figsize: tuple[float, float] | None = None,
+) -> pd.DataFrame:
+    available_layers = list_decoder_second_cross_attention_layers(payload)
+    if not available_layers:
+        raise ValueError("No `decoder.#.second_cross_attn` activations were found in the payload.")
+
+    selected_layers = available_layers if decoder_layers is None else sorted(set(decoder_layers))
+    missing_layers = [layer for layer in selected_layers if layer not in available_layers]
+    if missing_layers:
+        raise KeyError(
+            f"Requested decoder layers {missing_layers} are not available. "
+            f"Available layers: {available_layers}"
+        )
+
+    frames = [
+        compute_decoder_attention_query_profiles(
+            payload,
+            sample_index=sample_index,
+            decoder_layer=decoder_layer,
+        )
+        for decoder_layer in selected_layers
+    ]
+    metrics = pd.concat(frames, ignore_index=True)
+
+    if figsize is None:
+        figsize = (12, max(4.0, 3.4 * len(selected_layers)))
+    fig, axes = plt.subplots(len(selected_layers), 1, figsize=figsize, sharex=True)
+    axes_array = np.atleast_1d(axes)
+
+    series_specs = [
+        ("in_bounds_attention_mass", "In-bounds attention mass", "#2563eb"),
+        ("distance_to_current_point", "Distance to current point", "#ea580c"),
+        ("distance_to_next_point", "Distance to next point", "#16a34a"),
+        ("distance_to_previous_point", "Distance to previous point", "#7c3aed"),
+    ]
+
+    for axis, decoder_layer in zip(axes_array, selected_layers):
+        layer_frame = metrics[metrics["decoder_layer"] == decoder_layer].reset_index(drop=True)
+        query_indices = layer_frame["query_index"].to_numpy()
+        for column_name, label, color in series_specs:
+            axis.plot(
+                query_indices,
+                layer_frame[column_name].to_numpy(),
+                marker="o",
+                linewidth=1.8,
+                markersize=4,
+                label=label,
+                color=color,
+            )
+
+        valid_fixation_count = int(layer_frame["valid_fixation_count"].iloc[0]) if not layer_frame.empty else 0
+        if valid_fixation_count < len(layer_frame):
+            axis.axvline(
+                valid_fixation_count - 0.5,
+                color="#6b7280",
+                linestyle="--",
+                linewidth=1.0,
+                alpha=0.7,
+                label="valid-fixation boundary",
+            )
+
+        axis.set_ylabel("value")
+        axis.set_title(f"decoder.{decoder_layer}.second_cross_attn | sample={sample_index}")
+        axis.grid(alpha=0.2)
+        axis.legend(loc="best")
+
+    axes_array[-1].set_xlabel("query index")
+    fig.tight_layout()
+    return metrics
 
 
 def get_decoder_ground_truth_vector(
