@@ -518,7 +518,6 @@ def compute_decoder_attention_query_profiles(
     if sample_index < 0 or sample_index >= sampling_locations.shape[0]:
         raise IndexError(f"sample_index={sample_index} is out of bounds for batch size {sampling_locations.shape[0]}.")
 
-    print("query count:", sampling_locations.shape)
     sample_locations = np.asarray(sampling_locations[sample_index], dtype=np.float32)
     sample_weights = np.asarray(attention_weights[sample_index], dtype=np.float32)
     query_count = int(sample_locations.shape[0])
@@ -535,7 +534,6 @@ def compute_decoder_attention_query_profiles(
         & (sample_locations[..., 1] <= 1.0)
     )
     in_bounds_attention_mass = sample_weights * in_bounds_mask.astype(np.float32)
-    print("attention shape", in_bounds_attention_mass.shape)
     per_query_in_bounds_mass = in_bounds_attention_mass.sum(axis= -1).mean(axis = -1)
 
     def _compute_weighted_mean_distance(reference_points: np.ndarray) -> np.ndarray:
@@ -641,6 +639,7 @@ def plot_decoder_attention_query_profiles(
             )
 
         axis.set_ylabel("value")
+        axis.set_ylim(0, 1)
         axis.set_title(f"decoder.{decoder_layer}.second_cross_attn | sample={sample_index}")
         axis.grid(alpha=0.2)
         axis.legend(loc="best")
@@ -648,6 +647,133 @@ def plot_decoder_attention_query_profiles(
     axes_array[-1].set_xlabel("query index")
     fig.tight_layout()
     return metrics
+
+
+def compute_batch_decoder_attention_query_profiles(
+    payload: dict[str, Any],
+    decoder_layers: list[int] | None = None,
+) -> pd.DataFrame:
+    available_layers = list_decoder_second_cross_attention_layers(payload)
+    if not available_layers:
+        raise ValueError("No `decoder.#.second_cross_attn` activations were found in the payload.")
+
+    selected_layers = available_layers if decoder_layers is None else sorted(set(decoder_layers))
+    missing_layers = [layer for layer in selected_layers if layer not in available_layers]
+    if missing_layers:
+        raise KeyError(
+            f"Requested decoder layers {missing_layers} are not available. "
+            f"Available layers: {available_layers}"
+        )
+
+    fixations = _tensor_to_numpy(payload.get("data", {}).get("fixation_ground_truth"))
+    if fixations is None:
+        raise KeyError("Payload does not contain `fixation_ground_truth` in the data section.")
+    batch_size = int(np.asarray(fixations).shape[0])
+
+    frames: list[pd.DataFrame] = []
+    for decoder_layer in selected_layers:
+        for sample_index in range(batch_size):
+            sample_frame = compute_decoder_attention_query_profiles(
+                payload,
+                sample_index=sample_index,
+                decoder_layer=decoder_layer,
+            ).copy()
+            sample_frame["sample_index"] = sample_index
+            frames.append(sample_frame)
+
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
+def aggregate_batch_decoder_attention_query_profiles(
+    payload: dict[str, Any],
+    decoder_layers: list[int] | None = None,
+) -> pd.DataFrame:
+    batch_profiles = compute_batch_decoder_attention_query_profiles(
+        payload,
+        decoder_layers=decoder_layers,
+    )
+    if batch_profiles.empty:
+        return batch_profiles
+
+    metric_columns = [
+        "in_bounds_attention_mass",
+        "distance_to_current_point",
+        "distance_to_next_point",
+        "distance_to_previous_point",
+    ]
+    aggregated = (
+        batch_profiles.groupby(["decoder_layer", "query_index"], as_index=False)
+        .agg(
+            module_name=("module_name", "first"),
+            sample_count=("sample_index", "nunique"),
+            valid_query_count=("is_valid_query", "sum"),
+            **{
+                f"{column}_mean": (column, "mean")
+                for column in metric_columns
+            },
+            **{
+                f"{column}_std": (column, "std")
+                for column in metric_columns
+            },
+        )
+    )
+    return aggregated
+
+
+def plot_batch_decoder_attention_query_profiles(
+    payload: dict[str, Any],
+    decoder_layers: list[int] | None = None,
+    figsize: tuple[float, float] | None = None,
+) -> pd.DataFrame:
+    aggregated = aggregate_batch_decoder_attention_query_profiles(
+        payload,
+        decoder_layers=decoder_layers,
+    )
+    if aggregated.empty:
+        raise ValueError("No batch decoder query profiles are available to plot.")
+
+    selected_layers = sorted(aggregated["decoder_layer"].unique().tolist())
+    if figsize is None:
+        figsize = (12, max(4.0, 3.4 * len(selected_layers)))
+    fig, axes = plt.subplots(len(selected_layers), 1, figsize=figsize, sharex=True)
+    axes_array = np.atleast_1d(axes)
+
+    series_specs = [
+        ("in_bounds_attention_mass_mean", "Mean in-bounds attention mass", "#2563eb"),
+        ("distance_to_current_point_mean", "Mean distance to current point", "#ea580c"),
+        ("distance_to_next_point_mean", "Mean distance to next point", "#16a34a"),
+        ("distance_to_previous_point_mean", "Mean distance to previous point", "#7c3aed"),
+    ]
+
+    for axis, decoder_layer in zip(axes_array, selected_layers):
+        layer_frame = aggregated[aggregated["decoder_layer"] == decoder_layer].sort_values("query_index")
+        query_indices = layer_frame["query_index"].to_numpy()
+
+        for column_name, label, color in series_specs:
+            axis.plot(
+                query_indices,
+                layer_frame[column_name].to_numpy(),
+                marker="o",
+                linewidth=1.8,
+                markersize=4,
+                label=label,
+                color=color,
+            )
+
+        axis.set_ylabel("mean value")
+        axis.set_title(
+            f"decoder.{decoder_layer}.second_cross_attn | batch-averaged over "
+            f"{int(layer_frame['sample_count'].max())} samples"
+        )
+        axis.grid(alpha=0.2)
+        axis.set_ylim(0, 1)
+        axis.legend(loc="best")
+
+    axes_array[-1].set_xlabel("query index")
+    fig.tight_layout()
+    return aggregated
 
 
 def get_decoder_ground_truth_vector(
