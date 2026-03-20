@@ -116,12 +116,16 @@ class InferenceRecorder:
             data_payload["fixation_ground_truth"] = _to_serializable(batch["tgt"])
         if "in_tgt" in batch:
             data_payload["decoder_input_fixations"] = _to_serializable(batch["in_tgt"])
+        if "clean_x" in batch:
+            data_payload["clean_eye_tracking"] = _to_serializable(batch["clean_x"])
+        if "tgt_mask" in batch:
+            data_payload["target_padding_mask"] = _to_serializable(batch["tgt_mask"])
+        if "src_mask" in batch:
+            data_payload["src_padding_mask"] = _to_serializable(batch["src_mask"])
 
         output_payload: dict[str, Any] = {}
         if "denoise" in output:
             output_payload["denoise_output"] = _to_serializable(output["denoise"])
-        if "clean_x" in output:
-            output_payload["clean_eye_tracking"] = _to_serializable(output["clean_x"])
         if "coord" in output:
             output_payload["scanpath_coordinates"] = _to_serializable(output["coord"])
         if "dur" in output:
