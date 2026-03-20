@@ -57,7 +57,7 @@ def extract_random_period(start_index, period_duration, noisy_samples, fixations
     end_fixation -= 1
     x = noisy_samples[:, down_offset:down_offset + size]
     y = fixations[:, start_fixation: end_fixation + 1]
-    return x, y, start_fixation, end_fixation
+    return x, y, start_fixation, end_fixation, down_offset
 
     
 
@@ -273,6 +273,8 @@ class FreeViewInMemory(Dataset):
             output['clean_x'] = input['clean_x']
         if 'in_tgt' in input:
             output['in_tgt'] = input['in_tgt']
+        if 'down_offset' in input:
+            output['down_offset'] = input['down_offset']
         if 'heatmaps' in input:
             output['heatmaps'] = input['heatmaps']
         return output
@@ -347,6 +349,12 @@ def seq2seq_padded_collate_fn(batch):
         output['sample_idx'] = torch.as_tensor([item['sample_idx'] for item in batch], dtype=torch.long)
     if 'image_idx' in batch[0]:
         output['image_idx'] = torch.as_tensor([item['image_idx'] for item in batch], dtype=torch.long)
+    if 'down_offset' in batch[0]:
+        output['down_offset'] = torch.as_tensor([item['down_offset'] for item in batch], dtype=torch.long)
+  
+    
+    
+    
     return output
 
 

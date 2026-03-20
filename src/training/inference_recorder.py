@@ -126,7 +126,6 @@ class InferenceRecorder:
         output_payload: dict[str, Any] = {}
         if "denoise" in output:
             output_payload["denoise_output"] = _to_serializable(output["denoise"])
-        
         if "coord" in output:
             output_payload["scanpath_coordinates"] = _to_serializable(output["coord"])
         if "dur" in output:

@@ -16,7 +16,7 @@ class ExtractRandomPeriod:
         self.key = key
 
     def __call__(self,input):
-        x, y, _, _ = extract_random_period(
+        x, y, _, _, down_offset = extract_random_period(
             self.start_index, 
             self.period_duration, 
             input['x'], 
@@ -28,6 +28,7 @@ class ExtractRandomPeriod:
         )
         input['x'] = x
         input['y'] = y
+        input['down_offset'] = down_offset
         return input
         
     def __repr__(self):
