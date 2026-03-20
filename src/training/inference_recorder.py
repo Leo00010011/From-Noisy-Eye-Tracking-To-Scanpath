@@ -110,6 +110,8 @@ class InferenceRecorder:
             data_payload["sample_idx"] = _to_serializable(batch["sample_idx"])
         if "image_idx" in batch:
             data_payload["image_idx"] = _to_serializable(batch["image_idx"])
+        if "down_offset" in batch:
+            data_payload["random_down_offset"] = _to_serializable(batch["down_offset"])
         if "src" in batch:
             data_payload["eye_tracking_input"] = _to_serializable(batch["src"])
         if "tgt" in batch:
