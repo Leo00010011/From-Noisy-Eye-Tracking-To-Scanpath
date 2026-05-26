@@ -14,7 +14,7 @@ import numpy as np
 from src.data.datasets import FreeViewInMemory, seq2seq_padded_collate_fn
 from src.data.parsers import CocoFreeView
 from src.data.transforms import (ExtractRandomPeriod, Normalize, StandarizeTime, LogNormalizeDuration,
-                                 AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise, SaveCleanX, QuantileNormalizeDuration, AddGaussianNoiseToFixations, AddHeatmaps)
+                                 AddRandomCenterCorrelatedRadialNoise, DiscretizationNoise, SaveCleanX, QuantileNormalizeDuration, AddGaussianNoiseToFixations, AddHeatmaps, AddIsotropicGaussianNoise)
 from src.model.path_model import PathModel
 from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
@@ -51,6 +51,12 @@ def build_add_random_center_correlated_radial_noise(config):
             center_corr=config.get('center_corr',0.9),
             center_delta_norm=config.get('center_delta_norm',800),
             center_delta_r=config.get('center_delta_r',0.2)
+        )
+
+def build_add_isotropic_gaussian_noise(config):
+    return AddIsotropicGaussianNoise(
+        mean = config.get('mean', 76),
+        std = config.get('std', 29)
         )
 
 def build_discretization_noise(config):
@@ -165,6 +171,8 @@ class PipelineBuilder:
                 elif transform_str == 'AddCurriculumNoise':
                     self.curriculum_noise = build_add_curriculum_noise(transform_config)
                     transforms.append(self.curriculum_noise)
+                elif transform_str == 'AddIsotropicGaussianNoise':
+                    transforms.append(build_add_isotropic_gaussian_noise(transform_config))
                 else:
                     raise ValueError(f"Transform {transform_str} not supported.")
         else:

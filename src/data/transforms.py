@@ -2,7 +2,7 @@ import torch
 import joblib
 import math
 from src.data.datasets import extract_random_period, PAD_TOKEN_ID
-from src.preprocess.noise import add_random_center_correlated_radial_noise, discretization_noise
+from src.preprocess.noise import add_random_center_correlated_radial_noise, discretization_noise, add_isotropic_gaussian_noise
 import numpy as np
 
 class ExtractRandomPeriod:
@@ -272,6 +272,82 @@ class AddRandomCenterCorrelatedRadialNoise:
         center_corr={self.center_corr}, 
         center_delta_norm={self.center_delta_norm}, 
         center_delta_r={self.center_delta_r}'''
+    
+class AddRandomCenterCorrelatedRadialNoise:
+    def __init__(self, initial_center, ptoa,
+                 radial_corr, 
+                 radial_avg_norm,
+                 radial_std ,
+                 center_noise_std, 
+                 center_corr,
+                 center_delta_norm,
+                 center_delta_r,
+                 return_center_path=False,
+                 key = 'x'):
+        self.initial_center = initial_center
+        self.ptoa = ptoa
+        self.radial_corr = radial_corr
+        self.radial_avg_norm = radial_avg_norm
+        self.radial_std = radial_std
+        self.center_noise_std = center_noise_std
+        self.center_corr = center_corr
+        self.center_delta_norm = center_delta_norm
+        self.center_delta_r = center_delta_r
+        self.modify_y = False
+        self.return_center_path = return_center_path
+        self.key = key
+
+    def __call__(self, input):
+        x, center_path = add_random_center_correlated_radial_noise(
+            input['x'], 
+            self.initial_center, 
+            self.ptoa, 
+            self.radial_corr,
+            self.radial_avg_norm, 
+            self.radial_std, 
+            self.center_noise_std, 
+            self.center_corr, 
+            self.center_delta_norm, 
+            self.center_delta_r
+        )
+        input['x'] = x
+        
+        if self.return_center_path:
+            input['center_path'] = center_path
+        return input
+    
+    def __repr__(self):
+        return f'AddRandomCenterCorrelatedRadialNoise'
+    def __str__(self):
+        return f'''+ AddRandomCenterCorrelatedRadialNoise
+        initial_center={self.initial_center}, 
+        ptoa={self.ptoa}, 
+        radial_corr={self.radial_corr}, 
+        radial_avg_norm={self.radial_avg_norm}, 
+        radial_std={self.radial_std}, 
+        center_noise_std={self.center_noise_std}, 
+        center_corr={self.center_corr}, 
+        center_delta_norm={self.center_delta_norm}, 
+        center_delta_r={self.center_delta_r}'''
+    
+class AddIsotropicGaussianNoise:
+    def __init__(self, mean, std):
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, input):
+        x = add_isotropic_gaussian_noise(input['x'],self.mean, self.std)
+        input['x'] = x
+        return input
+    
+    def __repr__(self):
+        return 'AddIsotropicGaussianNoise'
+
+    def __str__(self):
+        return f'''+ AddIsotropicGaussianNoise
+    mean = {self.mean}
+    std = {self.std}
+'''
 
 class DiscretizationNoise:
     def __init__(self, image_shape, key = 'x'):

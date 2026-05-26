@@ -17,7 +17,6 @@ def add_gaussian_noise(gaze_list,ptoa, ang_mean = AVG_WEB_GAZER_ERROR_ANG):
     noisy_gaze = []
     # from relationship of the mean of the Rayleigh distribution and the std of the Normal
     std = (ang_mean/ptoa)/1.253
-    noise = np.random.normal(0, std,(2,gaze.shape[1]))
     for gaze in gaze_list:
         new_gaze = gaze.copy()
         noise = np.random.normal(0, std,(2,gaze.shape[1]))
@@ -26,6 +25,26 @@ def add_gaussian_noise(gaze_list,ptoa, ang_mean = AVG_WEB_GAZER_ERROR_ANG):
             new_gaze
         )
     return noisy_gaze
+
+
+def sample_2d_noise(mu_r, sigma_r, n_samples=1):
+    r     = np.random.normal(mu_r, sigma_r, n_samples)   # amplitude
+    theta = np.random.uniform(0, 2 * np.pi, n_samples)   # direction
+    x = r * np.cos(theta)
+    y = r * np.sin(theta)
+
+    return np.stack([x, y], axis=-1) 
+
+
+def add_isotropic_gaussian_noise(gaze_list, mean, std):
+    noisy_gaze = []
+    for gaze in gaze_list:
+        new_gaze = gaze.copy()
+        noise = sample_2d_noise(mean, std, gaze.shape[1])
+        new_gaze[:2] += noise
+        noisy_gaze.append(
+            new_gaze
+        )
 
 def gen_elliptical_params(a, r):
     '''

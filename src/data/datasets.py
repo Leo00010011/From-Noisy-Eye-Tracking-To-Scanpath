@@ -12,10 +12,12 @@ from tqdm import tqdm
 
 PAD_TOKEN_ID = 0.5
 
-def extract_random_period(start_index, period_duration, noisy_samples, fixations, fixation_mask, sampling_rate, downsample_period, random_offset = True):
+
+def extract_random_period(start_index, period_duration, noisy_samples, fixations, fixation_mask, sampling_rate, downsample_period, random_offset=True):
     size = math.ceil(period_duration/downsample_period)
     if random_offset:
-        down_offset = np.random.randint(start_index, noisy_samples.shape[1] - size + 1, 1, dtype = int)[0]
+        down_offset = np.random.randint(
+            start_index, noisy_samples.shape[1] - size + 1, 1, dtype=int)[0]
     else:
         down_offset = start_index
     # get the values in the original sampling rate
@@ -38,7 +40,7 @@ def extract_random_period(start_index, period_duration, noisy_samples, fixations
             current_idx += 1
         if current_idx == (ori_idx + ori_size):
             # if there is not a fixation return an empty array
-            return noisy_samples[:, down_offset:down_offset + size],np.array([]), -1,-1
+            return noisy_samples[:, down_offset:down_offset + size], np.array([]), -1, -1
         else:
             start_fixation = fixation_mask[current_idx]
     # search the last fixation
@@ -59,27 +61,27 @@ def extract_random_period(start_index, period_duration, noisy_samples, fixations
     y = fixations[:, start_fixation: end_fixation + 1]
     return x, y, start_fixation, end_fixation, down_offset
 
-    
 
 class FreeViewBatch(Dataset):
     '''
     The noisy and downsampled simulated eye-tracking and the section of the scanpath that fits entirely in that part
     '''
+
     def __init__(self,
-                 data_path = None,
+                 data_path=None,
                  sample_duration=-1,
                  sampling_rate=60,
                  downsample_int=200,
                  batch_size=128,
-                 min_scanpath_duration = 3000,
-                 max_fixation_duration = 1200,
-                 log = False,
-                 debug = False):
+                 min_scanpath_duration=3000,
+                 max_fixation_duration=1200,
+                 log=False,
+                 debug=False):
         super().__init__()
         if data_path is None:
             data_path = os.path.join('data', 'Coco FreeView')
         self.sampling_rate = sampling_rate
-        self.sample_duration = sample_duration # 90% larger than 20 at downsample 200
+        self.sample_duration = sample_duration  # 90% larger than 20 at downsample 200
         self.downsample = downsample_int
         self.min_scanpath_duration = min_scanpath_duration
         self.max_fixation_duration = max_fixation_duration
@@ -87,79 +89,79 @@ class FreeViewBatch(Dataset):
         self.batch_size = batch_size
         self.debug = debug
         self.ori_path = os.path.join(data_path, 'dataset.hdf5')
-        self.ori_data = None        
+        self.ori_data = None
         if not os.path.exists(self.ori_path):
             print('Execute preprocess')
         self.shuffled_path = self.ori_path.replace('.hdf5', '_shuffled.hdf5')
         self.shuffled_data = None
         self.json_dataset = None
-        
-
 
     def __len__(self):
-        with h5py.File(self.ori_path,'r') as ori_data:
+        with h5py.File(self.ori_path, 'r') as ori_data:
             return math.ceil(ori_data['down_gaze'].shape[0]/self.batch_size)
-    
-    def sample_count(self):
-        with h5py.File(self.ori_path,'r') as ori_data:
-            return ori_data['down_gaze'].shape[0]
 
+    def sample_count(self):
+        with h5py.File(self.ori_path, 'r') as ori_data:
+            return ori_data['down_gaze'].shape[0]
 
     def get_single_item(self, index):
         # reading is inefficient because is reading from memory one by one
         if self.ori_data is None:
-            self.ori_data = h5py.File(self.ori_path,'r')
-        x = self.ori_data['down_gaze'][index].reshape((3,-1))
-        y = self.ori_data['fixations'][index].reshape((3,-1))
+            self.ori_data = h5py.File(self.ori_path, 'r')
+        x = self.ori_data['down_gaze'][index].reshape((3, -1))
+        y = self.ori_data['fixations'][index].reshape((3, -1))
         if self.sample_duration != -1:
             fixation_mask = self.ori_data['fixation_mask'][index]
             x, y, start_fixation, end_fixation = extract_random_period(self.sample_duration,
-                                                x,
-                                                y,
-                                                fixation_mask,
-                                                self.sampling_rate,
-                                                self.downsample)
+                                                                       x,
+                                                                       y,
+                                                                       fixation_mask,
+                                                                       self.sampling_rate,
+                                                                       self.downsample)
             # if start_fixation != -1:
             #     gaze = self.ori_data['gaze'][index].reshape((3,-1))
             #     test_segment_is_inside(x,start_fixation, end_fixation,gaze, fixation_mask)
 
         x, _ = add_random_center_correlated_radial_noise(x, [320//2, 512//2], 1/16,
-                                                                  radial_corr=.2,
-                                                                  radial_avg_norm=4.13,
-                                                                  radial_std=3.5,
-                                                                  center_noise_std=100,
-                                                                  center_corr=.3,
-                                                                  center_delta_norm=300,
-                                                                  center_delta_r=.3)
+                                                         radial_corr=.2,
+                                                         radial_avg_norm=4.13,
+                                                         radial_std=3.5,
+                                                         center_noise_std=100,
+                                                         center_corr=.3,
+                                                         center_delta_norm=300,
+                                                         center_delta_r=.3)
         return x, y
-    
+
     def __getitem__(self, index):
-        # reading is 3x faster with batch size 128 
+        # reading is 3x faster with batch size 128
         # but can´t use the workers of the torch.dataloader (epoch in 4.9)
         if self.shuffled_data is None:
-            self.shuffled_data = h5py.File(self.shuffled_path,'r')
+            self.shuffled_data = h5py.File(self.shuffled_path, 'r')
         batch_size = self.batch_size
-        down_gaze = self.shuffled_data['down_gaze'][index*batch_size:(index + 1)*batch_size]
-        fixations = self.shuffled_data['fixations'][index*batch_size:(index + 1)*batch_size]
+        down_gaze = self.shuffled_data['down_gaze'][index *
+                                                    batch_size:(index + 1)*batch_size]
+        fixations = self.shuffled_data['fixations'][index *
+                                                    batch_size:(index + 1)*batch_size]
         vals = None
         if self.sample_duration != -1:
-            fixation_mask = self.shuffled_data['fixation_mask'][index*batch_size:(index + 1)*batch_size]
+            fixation_mask = self.shuffled_data['fixation_mask'][index *
+                                                                batch_size:(index + 1)*batch_size]
             # gaze = self.data['gaze'][index]
             # vals = (down_gaze,fixations,fixation_mask, gaze)
-            vals = (down_gaze,fixations,fixation_mask)
+            vals = (down_gaze, fixations, fixation_mask)
         else:
-            vals = (down_gaze,fixations)
+            vals = (down_gaze, fixations)
         x_batch = []
         y_batch = []
         for value in zip(*vals):
-            x = value[0].reshape((3,-1))        
-            y = value[1].reshape((3,-1))
+            x = value[0].reshape((3, -1))
+            y = value[1].reshape((3, -1))
             if self.sample_duration != -1:
                 fixation_mask = value[2]
                 x, y, start_fixation, end_fixation = extract_random_period(self.sample_duration,
-                                                    x,
-                                                    y,
-                                                    fixation_mask)
+                                                                           x,
+                                                                           y,
+                                                                           fixation_mask)
                 # if start_fixation != -1:
                 #     gaze = value[3].reshape((3,-1))
                 #     test_segment_is_inside(x,start_fixation, end_fixation,gaze, fixation_mask)
@@ -167,22 +169,22 @@ class FreeViewBatch(Dataset):
             x_batch.append(x)
             y_batch.append(y)
         x_batch, _ = add_random_center_correlated_radial_noise(x_batch, [320//2, 512//2], 1/16,
-                                                                radial_corr=.2,
-                                                                radial_avg_norm=4.13,
-                                                                radial_std=3.5,
-                                                                center_noise_std=100,
-                                                                center_corr=.3,
-                                                                center_delta_norm=300,
-                                                                center_delta_r=.3)
+                                                               radial_corr=.2,
+                                                               radial_avg_norm=4.13,
+                                                               radial_std=3.5,
+                                                               center_noise_std=100,
+                                                               center_corr=.3,
+                                                               center_delta_norm=300,
+                                                               center_delta_r=.3)
         # self.close_and_remove_data()
         self.shuffled_data.close()
         self.shuffled_data = None
-        
+
         return x_batch, y_batch
-    
+
     def shuffle_dataset(self):
-        
-        with h5py.File(self.ori_path,'r') as ori_data:
+
+        with h5py.File(self.ori_path, 'r') as ori_data:
             dataset_names = ['down_gaze', 'fixations', 'fixation_mask', 'gaze']
             if self.log:
                 print('reading original data')
@@ -214,32 +216,30 @@ class FreeViewBatch(Dataset):
             self.shuffled_data = None
 
 
-
-
 class FreeViewInMemory(Dataset):
     def __init__(self,
-                 data_path = None,
-                 transforms = [],
-                 downsample_int = None,
-                 log = False):
+                 data_path=None,
+                 transforms=[],
+                 downsample_int=None,
+                 log=False):
         self.data_path = data_path
         self.log = log
         self.transforms = transforms
         self.data_store = {}
-        
-        
+
         if data_path is None:
-           data_path = os.path.join('data','Coco FreeView')
+            data_path = os.path.join('data', 'Coco FreeView')
         self.data_path = data_path
         if downsample_int is not None:
-            file_path = os.path.join(data_path, f'dataset_{downsample_int}.hdf5')
+            file_path = os.path.join(
+                data_path, f'dataset_{downsample_int}.hdf5')
         else:
             file_path = os.path.join(data_path, 'dataset.hdf5')
             downsample_int = 200
 
         with h5py.File(file_path, 'r') as f:
             for key in f.keys():
-                self.data_store[key] = f[key][:] # [:] reads all data
+                self.data_store[key] = f[key][:]  # [:] reads all data
         if self.log:
             print('Data loaded in memory')
             if not transforms:
@@ -278,9 +278,9 @@ class FreeViewInMemory(Dataset):
         if 'heatmaps' in input:
             output['heatmaps'] = input['heatmaps']
         return output
-    
 
-def build_attn_mask(input_lengths, allow_start = False, return_none = True):
+
+def build_attn_mask(input_lengths, allow_start=False, return_none=True):
     max_length = int(max(input_lengths))
     batch_size = len(input_lengths)
     if all([length == max_length for length in input_lengths]) and return_none:
@@ -293,51 +293,56 @@ def build_attn_mask(input_lengths, allow_start = False, return_none = True):
         attn_mask[i, :length] = True
     return attn_mask
 
+
 def seq2seq_padded_collate_fn(batch):
-    fixation_len = torch.asarray([item['y'].shape[1] for item in batch], dtype=int)
+    fixation_len = torch.asarray([item['y'].shape[1]
+                                 for item in batch], dtype=int)
     input_mask = build_attn_mask([item['x'].shape[1] for item in batch])
-    target_mask = build_attn_mask(fixation_len, allow_start = True, return_none = False)
+    target_mask = build_attn_mask(
+        fixation_len, allow_start=True, return_none=False)
 
     input_sequences = [torch.from_numpy(item['x'].T).float() for item in batch]
-    target_sequences = [torch.from_numpy(item['y'].T).float() for item in batch]
+    target_sequences = [torch.from_numpy(
+        item['y'].T).float() for item in batch]
     output = {}
     if 'clean_x' in batch[0]:
-        clean_x_sequences = [torch.from_numpy(item['clean_x'].T).float() for item in batch]
+        clean_x_sequences = [torch.from_numpy(
+            item['clean_x'].T).float() for item in batch]
         padded_clean_x = torch.nn.utils.rnn.pad_sequence(
-            clean_x_sequences, 
-            batch_first=True, 
+            clean_x_sequences,
+            batch_first=True,
             padding_value=PAD_TOKEN_ID
         )
         output['clean_x'] = padded_clean_x
-    
+
     if 'in_tgt' in batch[0]:
-        in_tgt_sequences = [torch.from_numpy(item['in_tgt'].T).float() for item in batch]
+        in_tgt_sequences = [torch.from_numpy(
+            item['in_tgt'].T).float() for item in batch]
         padded_in_tgt = torch.nn.utils.rnn.pad_sequence(
-            in_tgt_sequences, 
-            batch_first=True, 
+            in_tgt_sequences,
+            batch_first=True,
             padding_value=PAD_TOKEN_ID
-        )   
+        )
         output['in_tgt'] = padded_in_tgt
-        
+
     if 'heatmaps' in batch[0]:
         heatmaps_sequences = [item['heatmaps'] for item in batch]
         padded_heatmaps = torch.nn.utils.rnn.pad_sequence(
-            heatmaps_sequences, 
-            batch_first=True, 
+            heatmaps_sequences,
+            batch_first=True,
             padding_value=PAD_TOKEN_ID
-        )   
+        )
         output['heatmaps'] = padded_heatmaps
 
-    
     padded_inputs = torch.nn.utils.rnn.pad_sequence(
-        input_sequences, 
-        batch_first=True, 
+        input_sequences,
+        batch_first=True,
         padding_value=PAD_TOKEN_ID
     )
-    
+
     padded_targets = torch.nn.utils.rnn.pad_sequence(
-        target_sequences, 
-        batch_first=True, 
+        target_sequences,
+        batch_first=True,
         padding_value=PAD_TOKEN_ID
     )
     output['src'] = padded_inputs
@@ -346,60 +351,65 @@ def seq2seq_padded_collate_fn(batch):
     output['tgt_mask'] = target_mask
     output['fixation_len'] = fixation_len
     if 'sample_idx' in batch[0]:
-        output['sample_idx'] = torch.as_tensor([item['sample_idx'] for item in batch], dtype=torch.long)
+        output['sample_idx'] = torch.as_tensor(
+            [item['sample_idx'] for item in batch], dtype=torch.long)
     if 'image_idx' in batch[0]:
-        output['image_idx'] = torch.as_tensor([item['image_idx'] for item in batch], dtype=torch.long)
+        output['image_idx'] = torch.as_tensor(
+            [item['image_idx'] for item in batch], dtype=torch.long)
     if 'down_offset' in batch[0]:
-        output['down_offset'] = torch.as_tensor([item['down_offset'] for item in batch], dtype=torch.long)
-  
-    
-    
-    
+        output['down_offset'] = torch.as_tensor(
+            [item['down_offset'] for item in batch], dtype=torch.long)
+
     return output
 
 
 def seq2seq_jagged_collate_fn(batch):
     input_sequences = [torch.from_numpy(item['x'].T).float() for item in batch]
-    target_sequences = [torch.from_numpy(item['y'].T).float() for item in batch]
-    
-    inputs = torch.nested.nested_tensor(input_sequences,layout=torch.jagged)
-    targets = torch.nested.nested_tensor(target_sequences,layout=torch.jagged)
-    
+    target_sequences = [torch.from_numpy(
+        item['y'].T).float() for item in batch]
+
+    inputs = torch.nested.nested_tensor(input_sequences, layout=torch.jagged)
+    targets = torch.nested.nested_tensor(target_sequences, layout=torch.jagged)
+
     return inputs, targets
 
-def search(mask, fixation, side = 'right'):
+
+def search(mask, fixation, side='right'):
     start = 0
     stop = mask.shape[0]
     step = 1
     if side == 'left':
-        start = mask.shape[0] - 1 
+        start = mask.shape[0] - 1
         stop = -1
         step = -1
 
-    for i in range(start,stop, step):
+    for i in range(start, stop, step):
         if mask[i] == fixation:
             return i
     return -1
 
-def test_segment_is_inside(index, x, si,ei,gaze, fixation_mask):
-    sidx = search(fixation_mask, si + 1, side = 'right')
-    eidx = search(fixation_mask, ei + 1, side = 'left')
+
+def test_segment_is_inside(index, x, si, ei, gaze, fixation_mask):
+    sidx = search(fixation_mask, si + 1, side='right')
+    eidx = search(fixation_mask, ei + 1, side='left')
     if sidx == -1:
         print(f'{index}❌ Start Fixation not found: si:{si + 1} \n {fixation_mask}')
         return
     if eidx == -1:
         print(f'{index}❌ End Fixation not found: si:{ei + 1} \n {fixation_mask}')
         return
-    if x[2,0] <= gaze[2,sidx] and (x[2,-1] + 200) >= gaze[2,eidx]:
-        print(f'{index}✅Pass: DS [{x[2,0]},{x[2,-1]}] Ori [{gaze[2,sidx]},{gaze[2,eidx]}]')
-        # return 
+    if x[2, 0] <= gaze[2, sidx] and (x[2, -1] + 200) >= gaze[2, eidx]:
+        print(
+            f'{index}✅Pass: DS [{x[2, 0]},{x[2, -1]}] Ori [{gaze[2, sidx]},{gaze[2, eidx]}]')
+        # return
     else:
-        print(f'{index}❌Outside: DS [{x[2,0]},{x[2,-1]}] Ori [{gaze[2,sidx]},{gaze[2,eidx]}]')
+        print(
+            f'{index}❌Outside: DS [{x[2, 0]},{x[2, -1]}] Ori [{gaze[2, sidx]},{gaze[2, eidx]}]')
 
 
 def location_test(index, si, ei, gaze, fixation_mask, fixations):
-    sidx = search(fixation_mask, si + 1, side = 'right')
-    eidx = search(fixation_mask, ei + 1, side = 'left')
+    sidx = search(fixation_mask, si + 1, side='right')
+    eidx = search(fixation_mask, ei + 1, side='left')
     if sidx == -1:
         print(f'{index}❌ Start Fixation not found: si:{si + 1} \n {fixation_mask}')
         return
@@ -411,10 +421,10 @@ def location_test(index, si, ei, gaze, fixation_mask, fixations):
         if fixation_mask[i] == 0:
             continue
         f_index = fixation_mask[i] - 1
-        fx = fixations[0,f_index]
-        fy = fixations[1,f_index]
-        gx = gaze[0,i]
-        gy = gaze[1,i]
+        fx = fixations[0, f_index]
+        fy = fixations[1, f_index]
+        gx = gaze[0, i]
+        gy = gaze[1, i]
         dist = math.sqrt((fx - gx)**2 + (fy - gy)**2)
         max_dist = max(max_dist, dist)
         if dist > 100:
@@ -423,24 +433,25 @@ def location_test(index, si, ei, gaze, fixation_mask, fixations):
     # print(f'✅ All fixation points are within acceptable distance from gaze points between indices {sidx} and {eidx}.')
     print(f'✅ Max distance between fixation and gaze points: {max_dist}')
 
+
 class FreeViewImgDataset(Dataset):
-    def __init__(self, data:CocoFreeView, transform = None):
+    def __init__(self, data: CocoFreeView, transform=None):
         self.img_path = [data.get_img_path(idx) for idx in range(len(data))]
         self.transform = transform
-    
-    def __getitem__(self, idx):       
+
+    def __getitem__(self, idx):
         path = self.img_path[idx]
         image = Image.open(path).convert("RGB")
         if self.transform:
             image = self.transform(image)
         return image, idx
-    
+
     def __len__(self):
         return len(self.img_path)
 
 
 class DeduplicatedMemoryDataset(Dataset):
-    def __init__(self, data:CocoFreeView, resize_size=256, transform=None):
+    def __init__(self, data: CocoFreeView, resize_size=256, transform=None):
         """
         Args:
             data: Source data object with .get_img_path(i)
@@ -456,7 +467,8 @@ class DeduplicatedMemoryDataset(Dataset):
         ])
 
         self.runtime_transform = transform
-        self.all_image_path = os.path.join(self.data_path, f'all_images_{resize_size}.pth')
+        self.all_image_path = os.path.join(
+            self.data_path, f'all_images_{resize_size}.pth')
         unique_paths, indices = self.build_index()
         self.unique_paths = unique_paths
         self.indices = indices
@@ -475,36 +487,37 @@ class DeduplicatedMemoryDataset(Dataset):
         total_len = len(data)
         path_to_id = {}      # Maps file_path -> unique_id
         unique_paths = []    # List of unique paths to load later
-        indices = []  
+        indices = []
         # We iterate once to build the map
         for i in range(total_len):
             path = data.get_img_path(i)
-            
+
             if path not in path_to_id:
                 # Found a new unique image
                 unique_id = len(unique_paths)
                 path_to_id[path] = unique_id
                 unique_paths.append(path)
-            
+
             # Record which unique image this sample points to
             indices.append(path_to_id[path])
 
         # Store indices as a Tensor (int64) for shared memory efficiency
         self.indices = torch.tensor(indices, dtype=torch.long)
-        
+
         num_unique = len(unique_paths)
-        print(f"Found {total_len} samples, but only {num_unique} unique images.")
+        print(
+            f"Found {total_len} samples, but only {num_unique} unique images.")
         return unique_paths, indices
 
     def build_image_bank(self):
         resize_size = self.resize_size
         unique_paths = self.unique_paths
         num_unique = len(unique_paths)
-        
+
         # --- 3. ALLOCATE & LOAD UNIQUE IMAGES ---
         print(f"Allocating RAM for {num_unique} unique images...")
         image_bank = torch.empty(
-            (num_unique, 3, resize_size, resize_size), 
+            (num_unique, 3, resize_size, resize_size),
             dtype=torch.uint8
         )
 
@@ -528,6 +541,7 @@ class CoupledDataloader:
     """
     A data loader that allows to get eye-tracking data coupled with images. Useful to be able to use workers despite that freeviewinmemory is not thread-safe.
     """
+
     def __init__(self,
                  path_dataset: FreeViewInMemory,
                  dataset: FreeViewImgDataset,
