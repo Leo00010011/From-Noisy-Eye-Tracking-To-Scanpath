@@ -231,7 +231,7 @@ def downsampling_index(gaze, down_time_step = 200):
     idx = []
     prev_idx = 0
     for t in np.arange(0,gaze[2,-1],down_time_step):
-        new_idx = np.searchsorted(gaze[2],t,"right")
+        new_idx = np.searchsorted(gaze[2],t,"left")
         count.append(new_idx - prev_idx)
         idx.append(new_idx)
         prev_idx = new_idx
