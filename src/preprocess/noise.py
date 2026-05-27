@@ -36,15 +36,11 @@ def sample_2d_noise(mu_r, sigma_r, n_samples=1):
     return np.stack([x, y], axis=-1) 
 
 
-def add_isotropic_gaussian_noise(gaze_list, mean, std):
-    noisy_gaze = []
-    for gaze in gaze_list:
-        new_gaze = gaze.copy()
-        noise = sample_2d_noise(mean, std, gaze.shape[1])
-        new_gaze[:2] += noise
-        noisy_gaze.append(
-            new_gaze
-        )
+def add_isotropic_gaussian_noise(gaze, mean, std):
+    new_gaze = gaze.copy()
+    noise = sample_2d_noise(mean, std, gaze.shape[1])
+    new_gaze[:2] += noise
+    return new_gaze
 
 def gen_elliptical_params(a, r):
     '''
