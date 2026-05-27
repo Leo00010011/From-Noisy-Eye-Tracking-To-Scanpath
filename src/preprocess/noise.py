@@ -33,7 +33,7 @@ def sample_2d_noise(mu_r, sigma_r, n_samples=1):
     x = r * np.cos(theta)
     y = r * np.sin(theta)
 
-    return np.stack([x, y], axis=-1) 
+    return np.stack([x, y], axis=0) 
 
 
 def add_isotropic_gaussian_noise(gaze, mean, std):

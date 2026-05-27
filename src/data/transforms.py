@@ -335,7 +335,7 @@ class AddIsotropicGaussianNoise:
         self.mean = mean
         self.std = std
 
-    def __call__(self, input):
+    def __call__(self, input):# -> Any:
         x = add_isotropic_gaussian_noise(input['x'],self.mean, self.std)
         input['x'] = x
         return input
