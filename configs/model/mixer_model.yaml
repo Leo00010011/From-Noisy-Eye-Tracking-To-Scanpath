@@ -10,7 +10,7 @@ model_dim: 512
 total_dim: 512
 n_heads: 8
 ff_dim: 2048
-max_pos_enc: 15 
+max_pos_enc: 90 
 max_pos_dec: 26
 src_word_dropout_prob: 0
 dur_head_dropout: 0.1
