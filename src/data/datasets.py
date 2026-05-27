@@ -17,7 +17,7 @@ def extract_random_period(start_index, period_duration, noisy_samples, fixations
     size = math.ceil(period_duration/downsample_period)
     if random_offset:
         down_offset = np.random.randint(
-            start_index, noisy_samples.shape[1] - size + 1, 1, dtype=int)[0]
+            start_index, noisy_samples.shape[1] - size, 1, dtype=int)[0]
     else:
         down_offset = start_index
     # get the values in the original sampling rate
