@@ -12,7 +12,7 @@ import sys
 import gc
 
 if not os.path.exists('data'):
-    new_directory_path = "..\\..\\"
+    new_directory_path = os.path.join("..", "..")
     os.chdir(new_directory_path)
 print("Current working directory:", os.getcwd())
 sys.path.append(os.getcwd())
