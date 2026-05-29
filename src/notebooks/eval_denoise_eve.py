@@ -11,11 +11,10 @@ import numpy as np
 import sys
 import gc
 
-if not os.path.exists('data'):
-    new_directory_path = os.path.join("..", "..")
-    os.chdir(new_directory_path)
-print("Current working directory:", os.getcwd())
-sys.path.append(os.getcwd())
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.chdir(PROJECT_ROOT)
+sys.path.insert(0, PROJECT_ROOT)
+print("Project root:", PROJECT_ROOT)
 
 from omegaconf import OmegaConf
 from src.eval.eval_metrics import eval_denoise
