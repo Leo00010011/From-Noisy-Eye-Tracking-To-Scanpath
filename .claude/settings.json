@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/ulloa/Miooooo/Master/thesis/projectes/eve_shared/EveDataset/src/**)"
+    ]
+  }
+}
