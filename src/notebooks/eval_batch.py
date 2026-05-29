@@ -102,12 +102,7 @@ names = ['phase + denoise + scheduled',
 
 
 
-ckpt_path = [os.path.join('outputs','2026-01-19','17-12-29'),
-             os.path.join('outputs','2026-01-19','22-24-44'),
-             os.path.join('outputs','2026-01-20','00-37-35'),
-             os.path.join('outputs','2026-01-20','15-32-33'),
-             os.path.join('outputs','2026-01-20','17-17-57')
-             ]
+ckpt_path = [os.path.join('outputs','2026-05-27','18-55-04')]
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'

@@ -117,12 +117,11 @@ class PipelineBuilder:
                 print("CUDA not available, using CPU.")
             self.device = torch.device('cpu')
             
-    def load_dataset(self):
+    def _build_transforms(self) -> list:
         transforms = []
-        # check if self.config.data.transforms exits
+        has_save_clean_x = bool(getattr(self.config.data, 'has_precomputed_clean_x', False))
+        has_in_tgt = False
         if hasattr(self.config.data, 'transforms'):
-            has_save_clean_x = False
-            has_in_tgt = False
             for transform_str in self.config.data.transforms.transform_list:
                 transform_config = self.config.data.transforms.get(transform_str)
                 if transform_str == 'ExtractRandomPeriod':
@@ -134,40 +133,42 @@ class PipelineBuilder:
                 elif transform_str == 'NormalizeCoords':
                     transforms.append(build_normalize_coords(transform_config))
                     if has_save_clean_x:
-                        transforms.append(build_normalize_coords(transform_config, key = 'clean_x'))
+                        transforms.append(build_normalize_coords(transform_config, key='clean_x'))
                 elif transform_str == 'NormalizeFixationCoords':
-                    transforms.append(build_normalize_coords(transform_config, key = 'y'))
+                    transforms.append(build_normalize_coords(transform_config, key='y'))
                     if has_in_tgt:
-                        transforms.append(build_normalize_coords(transform_config, key = 'in_tgt'))
+                        transforms.append(build_normalize_coords(transform_config, key='in_tgt'))
                 elif transform_str == 'NormalizeTime':
                     transforms.append(build_normalize_time(transform_config))
                     if has_save_clean_x:
-                        transforms.append(build_normalize_time(transform_config, key = 'clean_x'))
+                        transforms.append(build_normalize_time(transform_config, key='clean_x'))
                 elif transform_str == 'StandarizeTime':
                     transforms.append(StandarizeTime())
                 elif transform_str == 'LogNormalizeDuration':
                     transforms.append(build_log_normalize_duration(transform_config))
                     if has_in_tgt:
-                        transforms.append(build_log_normalize_duration(transform_config, key = 'in_tgt'))
+                        transforms.append(build_log_normalize_duration(transform_config, key='in_tgt'))
                 elif transform_str == 'NormalizeDuration':
-                    transforms.append(build_normalize_time(transform_config, key = 'y'))
+                    transforms.append(build_normalize_time(transform_config, key='y'))
                     if has_in_tgt:
-                        transforms.append(build_normalize_time(transform_config, key = 'in_tgt'))
+                        transforms.append(build_normalize_time(transform_config, key='in_tgt'))
                 elif transform_str == 'SaveCleanX':
                     transforms.append(SaveCleanX())
                     has_save_clean_x = True
                 elif transform_str == 'QuantileNormalizeDuration':
                     transforms.append(build_quantile_normalize_duration(transform_config))
                     if has_in_tgt:
-                        transforms.append(build_quantile_normalize_duration(transform_config, key = 'in_tgt'))
+                        transforms.append(build_quantile_normalize_duration(transform_config, key='in_tgt'))
                 elif transform_str == 'AddGaussianNoiseToFixations':
                     transforms.append(AddGaussianNoiseToFixations(transform_config.get('std', 0)))
                     has_in_tgt = True
                 elif transform_str == 'GenerateHeatmaps':
-                    transforms.append(AddHeatmaps(image_size = (transform_config.get('image_H', 32), transform_config.get('image_W', 32)),                                                
-                                                  sigma = transform_config.get('sigma', 1.5),
-                                                  device = self.device,
-                                                  dtype = torch.float32))
+                    transforms.append(AddHeatmaps(
+                        image_size=(transform_config.get('image_H', 32), transform_config.get('image_W', 32)),
+                        sigma=transform_config.get('sigma', 1.5),
+                        device=self.device,
+                        dtype=torch.float32,
+                    ))
                 elif transform_str == 'AddCurriculumNoise':
                     self.curriculum_noise = build_add_curriculum_noise(transform_config)
                     transforms.append(self.curriculum_noise)
@@ -176,19 +177,76 @@ class PipelineBuilder:
                 else:
                     raise ValueError(f"Transform {transform_str} not supported.")
         else:
-            transforms = [build_extract_random_period(self.config.data),
-                          build_add_random_center_correlated_radial_noise(self.config.data),
-                          build_discretization_noise(self.config.data),
-                          StandarizeTime()]
-        
+            transforms = [
+                build_extract_random_period(self.config.data),
+                build_add_random_center_correlated_radial_noise(self.config.data),
+                build_discretization_noise(self.config.data),
+                StandarizeTime(),
+            ]
+        return transforms
+
+    def _load_eve_dataset(self):
+        from src.evedataset import EveBundle, EveScanpathDataset, EveImgDataset
+
+        bundle_dir = self.config.data.bundle_dir
+        if bundle_dir == 'MUST_OVERRIDE':
+            raise ValueError("data.bundle_dir must be set before loading the EVE dataset.")
+        bundle = EveBundle.load(bundle_dir)
+
+        run_key_filter = self.config.data.run_key_filter
+        if hasattr(run_key_filter, 'items'):
+            from omegaconf import OmegaConf
+            run_key_filter = OmegaConf.to_container(run_key_filter, resolve=True)
+
+        transforms = self._build_transforms()
+        log_value = self.load_config.get('log', False)
+        resize_size = self.load_config.img_size
+        img_transform = PipelineBuilder.make_transform(resize_size=resize_size)
+
+        self.train_dataset = EveScanpathDataset(
+            bundle, split='train', run_key_filter=run_key_filter,
+            transforms=transforms, log=log_value,
+        )
+        self.val_dataset = EveScanpathDataset(
+            bundle, split='val', run_key_filter=run_key_filter,
+            transforms=transforms, log=log_value,
+        )
+        self.test_dataset = EveScanpathDataset(
+            bundle, split='test', run_key_filter=run_key_filter,
+            transforms=transforms, log=log_value,
+        )
+        self.PathDataset = self.train_dataset
+
+        if hasattr(self.load_config, 'use_img_dataset') and self.load_config.use_img_dataset:
+            self.train_img_dataset = EveImgDataset(
+                bundle, split='train', run_key_filter=run_key_filter,
+                resize_size=resize_size, transform=img_transform,
+            )
+            self.val_img_dataset = EveImgDataset(
+                bundle, split='val', run_key_filter=run_key_filter,
+                resize_size=resize_size, transform=img_transform,
+            )
+            self.test_img_dataset = EveImgDataset(
+                bundle, split='test', run_key_filter=run_key_filter,
+                resize_size=resize_size, transform=img_transform,
+            )
+            self.img_dataset = self.train_img_dataset
+
+    def load_dataset(self):
+        dataset_type = getattr(self.config.data, 'dataset_type', 'coco')
+        if dataset_type == 'eve':
+            self._load_eve_dataset()
+            return
+
+        transforms = self._build_transforms()
+
+        data_path = os.path.join('data', 'Coco FreeView')
         local_scratch = os.environ.get('LOCAL_SCRATCH')
-        if local_scratch and os.path.exists(os.path.join(local_scratch, 'data','Coco FreeView')):
+        if local_scratch and os.path.exists(os.path.join(local_scratch, 'data', 'Coco FreeView')):
             print("FOUNDED COPY IN SCRATCH SPACE, USING THAT AS DATA PATH")
-            data_path = os.path.join(local_scratch, 'data','Coco FreeView')
+            data_path = os.path.join(local_scratch, 'data', 'Coco FreeView')
 
         if self.PathDataset is None:
-            
-            # Check if 'load' attribute exists in self.config.data; if not, use it directly from data
             log = getattr(self.config.data, 'load', None)
             if log is not None and hasattr(self.config.data.load, 'log'):
                 log_value = self.config.data.load.log
@@ -196,20 +254,23 @@ class PipelineBuilder:
                 log_value = self.config.data.log
             else:
                 raise AttributeError("Neither 'load.log' nor 'log' is present in self.config.data")
-            self.PathDataset = FreeViewInMemory(data_path= data_path, transforms=transforms, log=log_value, downsample_int=self.load_config.get('downsample_int', None))
+            self.PathDataset = FreeViewInMemory(
+                data_path=data_path, transforms=transforms, log=log_value,
+                downsample_int=self.load_config.get('downsample_int', None),
+            )
         else:
             self.PathDataset.transforms = transforms
-        # Check 'use_img_dataset' in 'load', if not, look in data directly
-        
-        
+
         if hasattr(self.load_config, 'use_img_dataset') and self.load_config.use_img_dataset:
             if self.data is None:
-                self.data = CocoFreeView(data_path= data_path)
+                self.data = CocoFreeView(data_path=data_path)
                 self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
-            
-            transform = PipelineBuilder.make_transform(resize_size= self.load_config.img_size)
+
+            transform = PipelineBuilder.make_transform(resize_size=self.load_config.img_size)
             if self.img_dataset is None:
-                self.img_dataset = DeduplicatedMemoryDataset(self.data, resize_size= self.load_config.img_size, transform=transform)
+                self.img_dataset = DeduplicatedMemoryDataset(
+                    self.data, resize_size=self.load_config.img_size, transform=transform,
+                )
             else:
                 self.img_dataset.resize_size = self.load_config.img_size
                 self.img_dataset.runtime_transform = transform
@@ -244,6 +305,12 @@ class PipelineBuilder:
 
 
     def make_splits(self):
+        if getattr(self.config.data, 'dataset_type', 'coco') == 'eve':
+            train_idx = torch.arange(len(self.train_dataset))
+            val_idx   = torch.arange(len(self.val_dataset))
+            test_idx  = torch.arange(len(self.test_dataset))
+            return train_idx, val_idx, test_idx
+
         if hasattr(self.config.data, 'split_strategy') and self.config.data.split_strategy.name == 'disjoint':
             subjects = self.data.get_all_subjects()
             train_subjects , val_subjects , test_subjects  = PipelineBuilder.split_data(subjects, 
@@ -294,6 +361,38 @@ class PipelineBuilder:
             dataloader_config = self.config.data.load
         else:
             dataloader_config = self.config.data
+
+        if getattr(self.config.data, 'dataset_type', 'coco') == 'eve':
+            from torch.utils.data import Subset as _Subset
+            train_set = _Subset(self.train_img_dataset, train_idx)
+            val_set   = _Subset(self.val_img_dataset,   val_idx)
+            test_set  = _Subset(self.test_img_dataset,  test_idx)
+            train_dl = CoupledDataloader(
+                self.train_dataset, train_set,
+                shuffle=True, batch_size=dataloader_config.batch_size,
+                num_workers=dataloader_config.num_workers,
+                persistent_workers=dataloader_config.persistent_workers,
+                prefetch_factor=dataloader_config.prefetch_factor,
+                pin_memory=dataloader_config.pin_memory, drop_last_batch=False,
+            )
+            val_dl = CoupledDataloader(
+                self.val_dataset, val_set,
+                shuffle=False, batch_size=dataloader_config.batch_size,
+                num_workers=dataloader_config.num_workers,
+                persistent_workers=dataloader_config.persistent_workers,
+                prefetch_factor=dataloader_config.prefetch_factor,
+                pin_memory=dataloader_config.pin_memory, drop_last_batch=False,
+            )
+            test_dl = CoupledDataloader(
+                self.test_dataset, test_set,
+                shuffle=False, batch_size=dataloader_config.batch_size,
+                num_workers=dataloader_config.num_workers,
+                persistent_workers=dataloader_config.persistent_workers,
+                prefetch_factor=dataloader_config.prefetch_factor,
+                pin_memory=dataloader_config.pin_memory, drop_last_batch=False,
+            )
+            return train_dl, val_dl, test_dl
+
         if hasattr(dataloader_config, 'use_img_dataset') and dataloader_config.use_img_dataset:
             train_set = Subset(self.img_dataset, train_idx)
             val_set = Subset(self.img_dataset, val_idx)

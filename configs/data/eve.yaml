@@ -1,0 +1,67 @@
+# EVE dataset configuration.
+# Notable differences from configs/data/default.yaml:
+#   - No split_strategy (pre-defined splits in bundle.samples_df["split"])
+#   - No noise transforms (x is real WebGazer signal, not simulated noise)
+#   - No ExtractRandomPeriod (valid WebGazer sequences are already short and variable-length)
+#   - has_precomputed_clean_x = true (Tobii gaze supplied by EveScanpathDataset)
+#   - image_W/image_H = 1920/1080 (EVE screen resolution)
+
+dataset_type: "eve"
+
+# Path to the directory containing bundle.h5 and stimuli/.
+# Must be overridden at run time — do not commit a machine-specific path here.
+bundle_dir: "MUST_OVERRIDE"
+
+# WebGazer variant selection passed to EveScanpathDataset and EveImgDataset.
+# dict form: filter rows by equality on these columns, then take lowest mean_error_px.
+run_key_filter:
+  max_distance: 50
+
+# Signal to PipelineBuilder that clean_x is precomputed by the dataset.
+# This causes NormalizeCoords and NormalizeTime to also normalise clean_x.
+has_precomputed_clean_x: true
+
+load:
+  batch_size: 64
+  use_img_dataset: true
+  num_workers: 4
+  persistent_workers: true
+  prefetch_factor: 2
+  pin_memory: true
+  img_size: 256
+  log: true
+
+transforms:
+  transform_list:
+    - StandarizeTime
+    - NormalizeCoords
+    - NormalizeTime
+    - NormalizeFixationCoords
+    - NormalizeDuration
+
+  StandarizeTime: {}
+
+  NormalizeCoords:
+    key: "x"
+    mode: "coords"
+    image_H: 1080
+    image_W: 1920
+
+  # period_duration = 90 * (1000/30) = 3000 ms — maximum possible valid-frame window.
+  # Using 3000 instead of 2600 prevents normalised timestamps from exceeding 1.0 for
+  # recordings with a full 90-frame valid window.
+  NormalizeTime:
+    key: "x"
+    mode: "time"
+    period_duration: 3000
+
+  NormalizeFixationCoords:
+    key: "y"
+    mode: "coords"
+    image_H: 1080
+    image_W: 1920
+
+  NormalizeDuration:
+    key: "y"
+    mode: "time"
+    period_duration: 1200
