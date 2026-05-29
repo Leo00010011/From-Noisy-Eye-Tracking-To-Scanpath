@@ -6,4 +6,5 @@ training:
   Phases: ["Fixation", "Combined"]
 
 model:
-  pretrained_encoder_path: "auto_best_denoise"
+#  pretrained_encoder_path: "auto_best_denoise"
+  pretrained_encoder_path: "/mnt/beegfs/home/leonardo.ulloa/projects/From-Noisy-Eye-Tracking-To-Scanpath/outputs/2026-05-27/18-55-04/model.pth"
