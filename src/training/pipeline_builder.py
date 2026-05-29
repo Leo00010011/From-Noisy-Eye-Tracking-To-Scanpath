@@ -186,7 +186,7 @@ class PipelineBuilder:
         return transforms
 
     def _load_eve_dataset(self):
-        from evedataset import EveBundle, EveScanpathDataset, EveImgDataset
+        from src.evedataset import EveBundle, EveScanpathDataset, EveImgDataset
 
         bundle_dir = self.config.data.bundle_dir
         if bundle_dir == 'MUST_OVERRIDE':
