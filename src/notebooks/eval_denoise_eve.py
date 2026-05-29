@@ -53,7 +53,7 @@ def load_eve_model_and_data(ckpt_path: str, bundle_dir: str):
     pipe = PipelineBuilder(cfg)
     pipe.load_dataset()
     train_idx, val_idx, test_idx = pipe.make_splits()
-    _, val_dl, test_dl = pipe.build_dataloader(train_idx, val_idx, test_idx)
+    train_dl, val_dl, _ = pipe.build_dataloader(train_idx, val_idx, test_idx)
 
     # Build model architecture from config, then load weights.
     model, _ = pipe.build_model()
@@ -65,7 +65,7 @@ def load_eve_model_and_data(ckpt_path: str, bundle_dir: str):
     if unexpected:
         print(f'  Unexpected keys ({len(unexpected)}): {unexpected[:5]}{"..." if len(unexpected) > 5 else ""}')
 
-    return model, val_dl, test_dl
+    return model, train_dl, val_dl
 
 
 # ── Eval loop ─────────────────────────────────────────────────────────────────
@@ -76,7 +76,7 @@ results = []
 for ckpt_path, name in zip(ckpt_paths, names):
     print(f'\n>>> Model: {name}  ({ckpt_path})')
 
-    model, val_dl, test_dl = load_eve_model_and_data(ckpt_path, BUNDLE_DIR)
+    model, train_dl, val_dl = load_eve_model_and_data(ckpt_path, BUNDLE_DIR)
     model.set_phase('Denoise')
     model.to(device)
     model.eval()
@@ -86,25 +86,26 @@ for ckpt_path, name in zip(ckpt_paths, names):
     count = 0
 
     with torch.no_grad():
-        for batch in tqdm(test_dl, desc='Eval'):
-            inp = move_data_to_device(batch, device)
+        for dl in (train_dl, val_dl):
+            for batch in tqdm(dl, desc='Eval'):
+                inp = move_data_to_device(batch, device)
 
-            # encode → denoise head
-            output = model(**inp)   # phase=Denoise → encode + decode_denoise
+                # encode → denoise head
+                output = model(**inp)   # phase=Denoise → encode + decode_denoise
 
-            # normalised error (matches the training denoise_error_val metric)
-            denoise_norm_acum += eval_denoise(output['denoise'], inp['clean_x'])
+                # normalised error (matches the training denoise_error_val metric)
+                denoise_norm_acum += eval_denoise(output['denoise'], inp['clean_x'])
 
-            # pixel-space error — invert NormalizeCoords on both sides
-            inp_px, out_px = invert_transforms(
-                {k: v for k, v in inp.items()},
-                {k: v for k, v in output.items()},
-                test_dl,
-            )
-            diff_px = out_px['denoise'] - inp_px['clean_x'][:, :, :2]
-            denoise_px_acum += torch.sqrt((diff_px ** 2).sum(-1)).mean().item()
+                # pixel-space error — invert NormalizeCoords on both sides
+                inp_px, out_px = invert_transforms(
+                    {k: v for k, v in inp.items()},
+                    {k: v for k, v in output.items()},
+                    dl,
+                )
+                diff_px = out_px['denoise'] - inp_px['clean_x'][:, :, :2]
+                denoise_px_acum += torch.sqrt((diff_px ** 2).sum(-1)).mean().item()
 
-            count += 1
+                count += 1
 
     print(f'  Denoise error (normalised):  {denoise_norm_acum / count:.4f}')
     print(f'  Denoise error (pixels):      {denoise_px_acum   / count:.1f} px')
