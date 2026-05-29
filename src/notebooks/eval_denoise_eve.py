@@ -26,14 +26,14 @@ from src.training.training_utils import move_data_to_device
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-BUNDLE_DIR = r"C:\Users\ulloa\Miooooo\Master\thesis\projectes\eve_shared\EveDataset\src\bundle"   # path to the EVE bundle directory
+BUNDLE_DIR = "/mnt/beegfs/home/leonardo.ulloa/projects/bundle"   # path to the EVE bundle directory
 
 ckpt_paths = [
     os.path.join('outputs','2026-05-27','18-55-04'),
 ]
 
 names = [
-    # 'my model name',
+    'first denoiser',
 ]
 
 # ── Helper ────────────────────────────────────────────────────────────────────
