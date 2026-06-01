@@ -8,6 +8,7 @@ import os
 import torch
 from tqdm import tqdm
 import numpy as np
+import json
 import sys
 import gc
 
@@ -128,3 +129,6 @@ print(f'{"Model":<40}  {"norm":>8}  {"px":>8}')
 print('-' * 62)
 for r in results:
     print(f'{r["name"]:<40}  {r["denoise_error_norm"]:>8.4f}  {r["denoise_error_px"]:>8.1f}')
+
+with open("output.json", "w") as f:
+    json.dump(results,f)
