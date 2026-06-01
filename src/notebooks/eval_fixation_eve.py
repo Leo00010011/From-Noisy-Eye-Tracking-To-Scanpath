@@ -1,7 +1,7 @@
 # %% [markdown]
 # # EVE Fixation Prediction Evaluation
 # Evaluates the fixation prediction head of a trained MixerModel on real EVE WebGazer data.
-# Outputs: Euclidean coord error, duration MAE, DTW distance (px), and EOS accuracy.
+# Outputs: Euclidean coord error, duration MAE, normalised DTW distance (px/step), and EOS accuracy.
 
 # %%
 import os
@@ -40,21 +40,29 @@ names = [
 # ── DTW ───────────────────────────────────────────────────────────────────────
 
 def dtw_distance(seq1: np.ndarray, seq2: np.ndarray) -> float:
-    """DTW distance between two 2D fixation sequences of shape [T, 2].
+    """Normalised DTW distance between two 2D fixation sequences of shape [T, 2].
 
-    Uses Euclidean distance at each step. Returns the raw (un-normalised) DTW
-    cost, which is in the same units as the input coordinates (pixels).
+    Returns mean cost per warping step (total DTW cost / path length), so the
+    result is in the same units and scale as per-fixation Euclidean distance.
     """
     n, m = len(seq1), len(seq2)
     if n == 0 or m == 0:
         return 0.0
-    dtw = np.full((n + 1, m + 1), np.inf)
-    dtw[0, 0] = 0.0
+    dtw_cost = np.full((n + 1, m + 1), np.inf)
+    path_len = np.zeros((n + 1, m + 1), dtype=np.int32)
+    dtw_cost[0, 0] = 0.0
     for i in range(1, n + 1):
         for j in range(1, m + 1):
             cost = np.linalg.norm(seq1[i - 1] - seq2[j - 1])
-            dtw[i, j] = cost + min(dtw[i - 1, j], dtw[i, j - 1], dtw[i - 1, j - 1])
-    return float(dtw[n, m])
+            candidates = (
+                (dtw_cost[i - 1, j],     path_len[i - 1, j]),
+                (dtw_cost[i, j - 1],     path_len[i, j - 1]),
+                (dtw_cost[i - 1, j - 1], path_len[i - 1, j - 1]),
+            )
+            best_cost, best_len = min(candidates, key=lambda x: x[0])
+            dtw_cost[i, j] = cost + best_cost
+            path_len[i, j] = best_len + 1
+    return float(dtw_cost[n, m] / path_len[n, m])
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
