@@ -29,11 +29,11 @@ from src.training.training_utils import move_data_to_device
 BUNDLE_DIR = "/mnt/beegfs/home/leonardo.ulloa/projects/bundle"
 
 ckpt_paths = [
-    os.path.join('outputs', '2026-05-27', '18-55-04'),
+    os.path.join('outputs', '2026-05-29', '15-33-21'),
 ]
 
 names = [
-    'first denoiser',
+    'first recover',
 ]
 
 
