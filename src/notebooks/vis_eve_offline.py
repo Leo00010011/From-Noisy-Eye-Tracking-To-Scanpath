@@ -93,7 +93,7 @@ np.random.seed(SEED)
 os.makedirs(OUT_DIR, exist_ok=True)
 
 for pred_path in pred_paths:
-    data    = torch.load(pred_path, map_location='cpu')
+    data    = torch.load(pred_path, map_location='cpu', weights_only=False)
     name    = data['name']
     samples = data['samples']
 

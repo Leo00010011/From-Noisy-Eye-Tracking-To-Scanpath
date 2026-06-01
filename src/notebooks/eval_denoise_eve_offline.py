@@ -38,7 +38,7 @@ results = []
 for pred_path, name in zip(pred_paths, names):
     print(f'\n>>> Model: {name}  ({pred_path})')
 
-    data = torch.load(pred_path, map_location='cpu')
+    data = torch.load(pred_path, map_location='cpu', weights_only=False)
     samples = data['samples']
 
     denoise_samples = [s for s in samples if 'denoise_px' in s and 'clean_x_px' in s]
