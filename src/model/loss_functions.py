@@ -94,8 +94,12 @@ class EndSoftMax(torch.nn.Module):
         return self.cls_func(logits, fixation_len)
 
 def MLPLogNormalDistribution(log_normal_mu, log_normal_sigma2, gt):
-    logpdf = torch.log(1 / (gt + epsilon) * 1 / (torch.sqrt(2 * math.pi * log_normal_sigma2))) \
-             + (- (torch.log(gt + epsilon) - log_normal_mu) ** 2 / (2 * log_normal_sigma2))
+    # sigma2 is a raw MLP output — clamp to strictly positive before sqrt/division
+    sigma2 = F.softplus(log_normal_sigma2) + epsilon
+    gt_safe = gt.clamp(min=epsilon)
+    logpdf = (- torch.log(gt_safe)
+              - 0.5 * torch.log(2 * math.pi * sigma2)
+              - (torch.log(gt_safe) - log_normal_mu) ** 2 / (2 * sigma2))
     return -logpdf
 
 class SeparatedRegLossFunction(torch.nn.Module):
@@ -150,6 +154,15 @@ class SeparatedRegLossFunction(torch.nn.Module):
         attn_mask = input['tgt_mask'] # (B, L)
         fixation_len = input['fixation_len']
         device = coord_out.device
+
+        if not hasattr(self, '_debug_printed'):
+            self._debug_printed = True
+            print("[DEBUG] tgt nan:", y.isnan().any().item(), "| tgt inf:", y.isinf().any().item())
+            print("[DEBUG] coord_out nan:", coord_out.isnan().any().item(), "| coord_out inf:", coord_out.isinf().any().item())
+            print("[DEBUG] dur_out nan:", dur_out.isnan().any().item(), "| dur_out inf:", dur_out.isinf().any().item())
+            print("[DEBUG] cls_out nan:", cls_out.isnan().any().item(), "| cls_out inf:", cls_out.isinf().any().item())
+            print("[DEBUG] tgt min/max:", y.min().item(), y.max().item())
+            print("[DEBUG] dur_out min/max:", dur_out.min().item(), dur_out.max().item())
 
         if attn_mask is None:
             print("No attention mask provided")
