@@ -93,7 +93,9 @@ class EndSoftMax(torch.nn.Module):
         logits = logits.masked_fill(~attn_mask, -1e9)
         return self.cls_func(logits, fixation_len)
 
-def MLPLogNormalDistribution(log_normal_mu, log_normal_sigma2, gt, mask):
+def MLPLogNormalDistribution(input, gt):
+    log_normal_mu = input[:,:,0] 
+    log_normal_sigma2 = input[:,:,1] 
     logpdf = torch.log(1 / (gt + epsilon) * 1 / (torch.sqrt(2 * math.pi * log_normal_sigma2))) \
              + (- (torch.log(gt + epsilon) - log_normal_mu) ** 2 / (2 * log_normal_sigma2))
     loss = logpdf.sum(dim = 1)/logpdf.size(1)
@@ -140,7 +142,11 @@ class SeparatedRegLossFunction(torch.nn.Module):
         # >>>>>> Regression loss
         attn_mask = attn_mask.unsqueeze(-1)
         attn_mask = attn_mask[:,1:,:]
-        dur_loss = self.dur_func(dur_out[:,:-1,:][attn_mask], y[:,:,2:][attn_mask])
+        dur_attn_mask = attn_mask
+        if dur_out.size(2) == 2:
+            dur_attn_mask = attn_mask.expand(-1,-1,2)
+        
+        dur_loss = self.dur_func(dur_out[:,:-1,:][dur_attn_mask], y[:,:,2:][attn_mask])
         attn_mask = attn_mask.expand(-1,-1,2)
         coord_weights = None
         if self.weights is not None:
