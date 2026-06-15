@@ -93,17 +93,14 @@ class EndSoftMax(torch.nn.Module):
         logits = logits.masked_fill(~attn_mask, -1e9)
         return self.cls_func(logits, fixation_len)
 
-def MLPLogNormalDistribution(input, gt):
-    log_normal_mu = input[:,:,0] 
-    log_normal_sigma2 = input[:,:,1] 
+def MLPLogNormalDistribution(log_normal_mu, log_normal_sigma2, gt, mask):
     logpdf = torch.log(1 / (gt + epsilon) * 1 / (torch.sqrt(2 * math.pi * log_normal_sigma2))) \
              + (- (torch.log(gt + epsilon) - log_normal_mu) ** 2 / (2 * log_normal_sigma2))
-    loss = logpdf.sum(dim = 1)/logpdf.size(1)
-    return -loss
+    return -logpdf
 
 class SeparatedRegLossFunction(torch.nn.Module):
     def __init__(self, cls_weight = 0.5, dur_weight = 0.5,
-                 cls_func = torch.nn.functional.binary_cross_entropy_with_logits, 
+                 cls_func = torch.nn.functional.binary_cross_entropy_with_logits,
                  coord_func = torch.nn.functional.mse_loss,
                  dur_func = torch.nn.functional.mse_loss):
         super().__init__()
@@ -113,53 +110,82 @@ class SeparatedRegLossFunction(torch.nn.Module):
         self.coord_func = coord_func
         self.dur_func = dur_func
         self.weights = None
-        
+        # Whether dur_func expects (mu, sigma2, gt, mask) instead of (pred, gt)
+        self._dur_is_lognormal = (dur_func is MLPLogNormalDistribution)
+
     def set_denoise_weight(self, denoise_weight: float):
         return
-    
+
     def set_weights(self, weights: torch.Tensor):
         self.weights = weights
-    
+
     def summary(self):
-        print(f"SeparatedRegLossFunction: cls_weight={self.cls_weight}, dur_weight={self.dur_weight}, cls_func={self.cls_func.__name__}, coord_func={self.coord_func.__name__}, dur_func={self.dur_func.__name__}")
+        dur_name = self.dur_func.__name__ if hasattr(self.dur_func, '__name__') else type(self.dur_func).__name__
+        coord_name = self.coord_func.__name__ if hasattr(self.coord_func, '__name__') else type(self.coord_func).__name__
+        print(f"SeparatedRegLossFunction: cls_weight={self.cls_weight}, dur_weight={self.dur_weight}, "
+              f"cls_func={self.cls_func.__name__}, coord_func={coord_name}, dur_func={dur_name}")
+
+    def _dur_loss(self, dur_out, y_dur, seq_mask):
+        """
+        dur_out : (B, L, 1) for pointwise losses, (B, L, 2) for distribution losses
+        y_dur   : (B, L, 1)  — ground-truth duration, already shifted/trimmed
+        seq_mask: (B, L)     — bool, True where valid
+        """
+        if self._dur_is_lognormal:
+            # dur_out[:,  :, 0] = mu, dur_out[:, :, 1] = sigma^2
+            mu     = dur_out[:, :, 0:1][seq_mask.unsqueeze(-1)].view(-1)
+            sigma2 = dur_out[:, :, 1:2][seq_mask.unsqueeze(-1)].view(-1)
+            gt     = y_dur[seq_mask.unsqueeze(-1)].view(-1)
+            # MLPLogNormalDistribution returns a per-sample loss vector; take the mean
+            return MLPLogNormalDistribution(mu, sigma2, gt).mean()
+        else:
+            flat_mask = seq_mask.unsqueeze(-1).expand_as(dur_out[:, :, :1])
+            return self.dur_func(dur_out[:, :, :1][flat_mask], y_dur[flat_mask])
 
     def forward(self, input, output):
-        coord_out = output['coord']
-        dur_out = output['dur']
-        cls_out = output['cls']
-        y = input['tgt']
-        attn_mask = input['tgt_mask']
+        coord_out = output['coord']   # (B, L, 2)
+        dur_out   = output['dur']     # (B, L, 1) or (B, L, 2)
+        cls_out   = output['cls']
+        y         = input['tgt']      # (B, L, 3)  — [x, y, dur]
+        attn_mask = input['tgt_mask'] # (B, L)
         fixation_len = input['fixation_len']
         device = coord_out.device
-        # case where all the fixations have the same size 
+
         if attn_mask is None:
             print("No attention mask provided")
-            attn_mask = torch.ones(cls_out.size()[:-1], dtype = torch.bool, device = device)
+            attn_mask = torch.ones(cls_out.size()[:-1], dtype=torch.bool, device=device)
             input['tgt_mask'] = attn_mask
+
         # >>>>>> Classification loss
-        cls_loss = self.cls_func(input,output)
-        
-        # >>>>>> Regression loss
-        attn_mask = attn_mask.unsqueeze(-1)
-        attn_mask = attn_mask[:,1:,:]
-        dur_attn_mask = attn_mask
-        if dur_out.size(2) == 2:
-            dur_attn_mask = attn_mask.expand(-1,-1,2)
-        
-        dur_loss = self.dur_func(dur_out[:,:-1,:][dur_attn_mask], y[:,:,2:][attn_mask])
-        attn_mask = attn_mask.expand(-1,-1,2)
+        cls_loss = self.cls_func(input, output)
+
+        # Shift: predictions at t predict targets at t+1, so drop the last pred and first target.
+        # seq_mask: (B, L-1), valid positions after the shift
+        seq_mask  = attn_mask[:, 1:]          # (B, L-1)
+        coord_pred = coord_out[:, :-1, :]     # (B, L-1, 2)
+        dur_pred   = dur_out[:, :-1, :]       # (B, L-1, 1 or 2)
+        y_coord    = y[:, :, :2]              # (B, L-1, 2)
+        y_dur      = y[:, :, 2:]              # (B, L-1, 1)
+
+        # >>>>>> Duration loss
+        dur_loss = self._dur_loss(dur_pred, y_dur, seq_mask)
+
+        # >>>>>> Coordinate loss
+        coord_mask = seq_mask.unsqueeze(-1).expand_as(coord_pred)   # (B, L-1, 2)
         coord_weights = None
         if self.weights is not None:
-            coord_weights = self.weights[:attn_mask.size(1)]
-            coord_weights = coord_weights.unsqueeze(-1).unsqueeze(0).expand(attn_mask.size())
-            coord_weights = coord_weights[attn_mask]
-        coord_loss = self.coord_func(coord_out[:,:-1,:][attn_mask], y[:,:,:2][attn_mask], weight=coord_weights)
+            w = self.weights[:seq_mask.size(1)]
+            coord_weights = w.unsqueeze(-1).unsqueeze(0).expand_as(coord_pred)
+            coord_weights = coord_weights[coord_mask]
+        coord_loss = self.coord_func(coord_pred[coord_mask], y_coord[coord_mask], weight=coord_weights)
+
         info = {
-            'cls_loss': float(cls_loss.item()),
+            'cls_loss':   float(cls_loss.item()),
             'coord_loss': float(coord_loss.item()),
-            'dur_loss': float(dur_loss.item()),
+            'dur_loss':   float(dur_loss.item()),
         }
-        loss = self.cls_weight * cls_loss + (1 - self.cls_weight) * (((1-self.dur_weight) * coord_loss + self.dur_weight * dur_loss))
+        reg_loss = (1 - self.dur_weight) * coord_loss + self.dur_weight * dur_loss
+        loss = self.cls_weight * cls_loss + (1 - self.cls_weight) * reg_loss
         return loss, info
 
 class DenoiseRegLoss(torch.nn.Module):
