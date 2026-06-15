@@ -93,7 +93,7 @@ class EndSoftMax(torch.nn.Module):
         logits = logits.masked_fill(~attn_mask, -1e9)
         return self.cls_func(logits, fixation_len)
 
-def MLPLogNormalDistribution(log_normal_mu, log_normal_sigma2, gt, mask):
+def MLPLogNormalDistribution(log_normal_mu, log_normal_sigma2, gt):
     logpdf = torch.log(1 / (gt + epsilon) * 1 / (torch.sqrt(2 * math.pi * log_normal_sigma2))) \
              + (- (torch.log(gt + epsilon) - log_normal_mu) ** 2 / (2 * log_normal_sigma2))
     return -logpdf
