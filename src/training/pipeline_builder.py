@@ -7,7 +7,8 @@ from src.data.transforms import AddCurriculumNoise
 from src.training.training_utils import DenoiseDropoutScheduler
 from src.training.weights_scheduler import WeightsScheduler
 from src.training.training_utils import ScheduledSampling, WarmupStableDecayScheduler
-from src.model.loss_functions import EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction, DenoiseRegLoss, PenaltyReducedFocalLoss,EndBinaryCrossEntropy, EndSoftMax
+from src.model.loss_functions import (EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction,
+                                       DenoiseRegLoss, PenaltyReducedFocalLoss,EndBinaryCrossEntropy, EndSoftMax, MLPLogNormalDistribution)
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
 import numpy as np
@@ -28,7 +29,8 @@ STR_TO_LOSS_FUNC = {
     'end_bce_with_logits': EndBinaryCrossEntropy(),
     'end_softmax': EndSoftMax(),
     'mse': torch.nn.functional.mse_loss,
-    'l1': torch.nn.functional.l1_loss
+    'l1': torch.nn.functional.l1_loss,
+    "log_norm": MLPLogNormalDistribution
 }
 
 def build_extract_random_period(config):
@@ -532,6 +534,7 @@ class PipelineBuilder:
                               add_denoise_head = self.config.model.get('add_denoise_head', True),
                               use_kv_cache = self.config.model.get('use_kv_cache', False),
                               geometric_sigma = self.config.model.get('geometric_sigma', 0),
+                              pred_dur_pdf= self.config.model.get('pred_dur_pdf', False),
                               adapter_hidden_dims = self.config.model.image_encoder.get('adapter_hidden_dims', self.config.model.get('mlp_head_hidden_dim', None)))
         
             pretrained_encoder_path = self.resolve_pretrained_encoder_path()

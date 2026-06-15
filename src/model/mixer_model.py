@@ -63,6 +63,7 @@ class MixerModel(nn.Module):
                        denoise_head_output_dropout = 0,
                        decoder_dropout = 0,
                        n_adapter = 0,
+                       pred_dur_pdf = 0,
                        n_eye_decoder = 0,
                        use_kv_cache = False,
                        add_denoise_head = True,
@@ -376,7 +377,7 @@ class MixerModel(nn.Module):
                                            **factory_mode)
             self.dur_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
-                                           1,
+                                           2 if pred_dur_pdf else 1,
                                            output_dropout_p = dur_head_dropout,
                                            **factory_mode)
             
@@ -403,7 +404,7 @@ class MixerModel(nn.Module):
                                            **factory_mode)
             self.dur_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
-                                           1,
+                                           2 if pred_dur_pdf else 1,
                                            hidden_dropout_p = dur_head_dropout,
                                            **factory_mode)
             
@@ -426,7 +427,7 @@ class MixerModel(nn.Module):
             self.argmax_regressor = ArgMaxRegressor(H = self.patch_resolution[0], W = self.patch_resolution[1], **factory_mode)
             self.dur_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
-                                           1,
+                                           2 if pred_dur_pdf else 1,
                                            **factory_mode)
             
             self.end_head = MLP(model_dim,
@@ -445,7 +446,7 @@ class MixerModel(nn.Module):
                                                                            **factory_mode)
             self.dur_head = MLP(model_dim,
                                            mlp_head_hidden_dim,
-                                           1,
+                                           2 if pred_dur_pdf else 1,
                                            **factory_mode)
             
             self.end_head = MLP(model_dim,

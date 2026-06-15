@@ -1,6 +1,9 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
+import math
+
+epsilon = 1e-7
 
 def create_weights(fixation_len, attn_mask, device):
     weights = torch.ones(attn_mask.size(), dtype = torch.float32, device = device)
@@ -89,7 +92,12 @@ class EndSoftMax(torch.nn.Module):
         logits = cls_out.squeeze(-1) 
         logits = logits.masked_fill(~attn_mask, -1e9)
         return self.cls_func(logits, fixation_len)
-         
+
+def MLPLogNormalDistribution(log_normal_mu, log_normal_sigma2, gt, mask):
+    logpdf = torch.log(1 / (gt + epsilon) * 1 / (torch.sqrt(2 * math.pi * log_normal_sigma2))) \
+             + (- (torch.log(gt + epsilon) - log_normal_mu) ** 2 / (2 * log_normal_sigma2))
+    loss = logpdf.sum(dim = 1)/logpdf.size(1)
+    return -loss
 
 class SeparatedRegLossFunction(torch.nn.Module):
     def __init__(self, cls_weight = 0.5, dur_weight = 0.5,
