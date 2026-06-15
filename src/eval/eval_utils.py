@@ -328,7 +328,9 @@ def concat_reg(output):
     if 'reg' in output:
         return output['reg'].detach()
     else:
-        return torch.concat([output['coord'].detach(), output['dur'].detach()], dim=2)
+        # dur may be (B,L,2) for distribution heads — only the first channel (mu / point estimate)
+        dur = output['dur'].detach()[:, :, :1]
+        return torch.concat([output['coord'].detach(), dur], dim=2)
 
 
 def eval_scheduled_sampling(model, inputs, only_last = False):
