@@ -1,9 +1,0 @@
-# @package _global_
-training:
-  decisive_metric: "denoise_error_val"
-  pretrained_model: null
-  use_scheduled_sampling: false
-  Phases: ["Denoise"]
-
-model:
-  pretrained_encoder_path: null
