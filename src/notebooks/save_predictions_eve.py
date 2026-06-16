@@ -51,11 +51,13 @@ BUNDLE_DIR = "/mnt/beegfs/home/leonardo.ulloa/projects/bundle"
 OUT_DIR = "predictions"
 
 ckpt_paths = [
-    os.path.join('outputs', '2026-05-29', '15-33-21'),
+    # os.path.join('outputs', '2026-05-29', '15-33-21'),
+    os.path.join('outputs','2026-06-15','19-18-05'),
 ]
 
 names = [
-    'first recover',
+    # 'first recover',
+    'duration dist',
 ]
 
 
