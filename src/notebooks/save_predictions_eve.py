@@ -133,6 +133,9 @@ for ckpt_path, name in zip(ckpt_paths, names):
                 # invert transforms: normalised → pixel space for fixations and denoise
                 inp_px, out_px = invert_transforms(inp, output, dl, remove_outliers=True)
 
+                # capture raw dur output (mu, sigma²) before it's collapsed to [N,1]
+                dur_raw_cpu = output['dur'].cpu() if 'dur' in output else None
+
                 B = inp['fixation_len'].size(0)
                 for i in range(B):
                     n = int(inp['fixation_len'][i].item())
@@ -144,6 +147,9 @@ for ckpt_path, name in zip(ckpt_paths, names):
                         'tgt_mask':    _to_numpy(inp['tgt_mask'][i]),        # [*]
                         'src_norm':    src_norm_cpu[i].numpy(),              # [T, 3]
                     }
+                    # dur_raw: [N, 2] — col 0 = mu, col 1 = raw sigma² (apply softplus to get sigma²)
+                    if dur_raw_cpu is not None and dur_raw_cpu.shape[-1] >= 2:
+                        sample['dur_raw'] = dur_raw_cpu[i, :n, :2].numpy()
                     if has_denoise and 'clean_x' in inp_px and 'denoise' in out_px:
                         T = inp['src'].size(1)
                         sample['clean_x_px'] = _to_numpy(inp_px['clean_x'][i, :T, :2])  # [T, 2]

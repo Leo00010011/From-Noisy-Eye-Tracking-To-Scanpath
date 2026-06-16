@@ -10,3 +10,4 @@ hydralance/
 *.pt
 *.pth
 *.log
+vis_output_offline/

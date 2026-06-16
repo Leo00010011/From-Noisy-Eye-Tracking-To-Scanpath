@@ -36,6 +36,7 @@ import torch
 
 pred_paths = [
     os.path.join('predictions', 'first_recover.pth'),
+    os.path.join('predictions', 'duration_dist.pth'),
 ]
 
 # One HWC uint8 numpy image per sample (same order as data['samples']).
@@ -115,7 +116,7 @@ for pred_path in pred_paths:
         if img is not None:
             H, W = img.shape[:2]
         else:
-            W, H = _infer_dims(s)
+            W, H = 1920, 1080
 
         # noisy gaze: src_norm is [0,1] → scale to pixel space
         src_norm = s['src_norm']            # [T, 3]
