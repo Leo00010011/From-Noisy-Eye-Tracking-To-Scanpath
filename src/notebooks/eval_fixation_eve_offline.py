@@ -27,10 +27,13 @@ print("Project root:", PROJECT_ROOT)
 
 pred_paths = [
     os.path.join('predictions', 'first_recover.pth'),
+    os.path.join('predictions', 'duration_dist.pth'),
+    
 ]
 
 names = [
     'first recover',
+    'duration dist'
 ]
 
 
