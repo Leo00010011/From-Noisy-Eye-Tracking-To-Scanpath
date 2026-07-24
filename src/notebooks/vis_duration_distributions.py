@@ -1,11 +1,13 @@
 # %% [markdown]
 # # Duration Distribution Visualiser
-# Loads predictions saved by save_predictions_eve.py and plots the predicted
-# log-normal duration distributions for a few sample scanpaths.
+# Loads predictions saved by save_predictions_eve.py and renders the predicted
+# log-normal duration distribution for each fixation in a scanpath.
 #
-# For each chosen sample, one subplot per fixation shows the log-normal PDF
-# defined by the model's (mu, sigma²) output, with the ground-truth duration
-# marked as a vertical line.
+# Duration normalisation: linear min-max with min=0, max=1200 ms.
+# Everything is plotted in that normalised [0, 1] space so all subplots share
+# the same x-axis and are directly comparable.
+# Each PDF is peak-normalised to 1 so shape comparisons are unaffected by scale.
+# The GT duration is converted to the same space and marked on the curve.
 #
 # Usage:
 #   python src/notebooks/vis_duration_distributions.py
@@ -17,13 +19,13 @@
 import os
 import sys
 import random
+import math
 
 import numpy as np
 import torch
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import torch.nn.functional as F
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.chdir(PROJECT_ROOT)
@@ -33,34 +35,28 @@ print("Project root:", PROJECT_ROOT)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-PRED_PATH  = os.path.join('predictions', 'duration_dist.pth')
-OUT_DIR    = os.path.join('vis_output_offline', 'duration_distributions')
-N_SAMPLES  = 6      # number of scanpaths to visualise
-SEED       = 42
-X_MAX_MS   = 1200   # upper x-axis limit for duration plots (ms)
-N_POINTS   = 300    # resolution of the PDF curve
+PRED_PATH   = os.path.join('predictions', 'duration_dist.pth')
+OUT_DIR     = os.path.join('vis_output_offline', 'duration_distributions')
+N_SAMPLES   = 6      # scanpaths to visualise
+SEED        = 42
+DUR_MAX_MS  = 1200.0 # min-max normalisation denominator
+N_POINTS    = 500    # PDF resolution
+NCOLS_MAX   = 6      # max columns per figure
 
 epsilon = 1e-7
 
 
-# ── Log-normal PDF helpers ────────────────────────────────────────────────────
+# ── Log-normal helpers ────────────────────────────────────────────────────────
 
-def lognormal_pdf(x, mu, sigma2):
-    """Log-normal PDF evaluated at x (scalar or array), parameterised as in the loss."""
-    sigma2 = max(float(sigma2), epsilon)
+def softplus(x: float) -> float:
+    return math.log1p(math.exp(x)) if x < 20 else x
+
+
+def lognormal_pdf(x: np.ndarray, mu: float, sigma2: float) -> np.ndarray:
+    """Unnormalised log-normal PDF; x must be > 0."""
     x = np.maximum(x, epsilon)
-    return (1.0 / (x * np.sqrt(2 * np.pi * sigma2))
+    return (1.0 / (x * np.sqrt(2 * math.pi * sigma2))
             * np.exp(-((np.log(x) - mu) ** 2) / (2 * sigma2)))
-
-
-def lognormal_mode(mu, sigma2):
-    """Mode of the log-normal: exp(mu - sigma²)."""
-    return np.exp(mu - max(float(sigma2), epsilon))
-
-
-def lognormal_mean(mu, sigma2):
-    """Mean of the log-normal: exp(mu + sigma²/2)."""
-    return np.exp(mu + max(float(sigma2), epsilon) / 2)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -73,7 +69,6 @@ data    = torch.load(PRED_PATH, map_location='cpu', weights_only=False)
 name    = data['name']
 samples = data['samples']
 
-# Filter to samples that have dur_raw
 valid = [i for i, s in enumerate(samples) if 'dur_raw' in s]
 if not valid:
     raise RuntimeError(
@@ -82,26 +77,24 @@ if not valid:
     )
 
 chosen = random.sample(valid, min(N_SAMPLES, len(valid)))
-print(f"Visualising {len(chosen)} samples from '{name}'  ({PRED_PATH})")
-print(f"Total samples with dur_raw: {len(valid)} / {len(samples)}")
+print(f"Visualising {len(chosen)} samples from '{name}'")
+print(f"Samples with dur_raw: {len(valid)} / {len(samples)}")
 
-x_ms = np.linspace(epsilon, X_MAX_MS, N_POINTS)
+# Fixed x-axis in normalised [0, 1] space
+x_norm = np.linspace(epsilon, 1.0, N_POINTS)
 
 for fig_idx, idx in enumerate(chosen):
     s     = samples[idx]
     n_fix = s['fixation_len']
 
-    # dur_raw: [N, 2]  — col 0 = mu (normalised), col 1 = raw sigma² (pre-softplus)
-    dur_raw = s['dur_raw']           # numpy [N, 2]
-    # gt duration in pixel space (ms), trimmed to n_fix
-    gt_dur_ms = s['tgt_px'][:n_fix, 2]   # [N]
+    dur_raw   = s['dur_raw']               # [N, 2]: col0=mu, col1=raw_sigma2
+    gt_dur_ms = s['tgt_px'][:n_fix, 2]    # [N] ground-truth durations in ms
 
-    # Number of columns in the subplot grid
-    ncols = min(n_fix, 5)
-    nrows = (n_fix + ncols - 1) // ncols
+    ncols = min(n_fix, NCOLS_MAX)
+    nrows = math.ceil(n_fix / ncols)
 
     fig, axes = plt.subplots(nrows, ncols,
-                             figsize=(4 * ncols, 3.5 * nrows),
+                             figsize=(3.8 * ncols, 3.2 * nrows),
                              squeeze=False)
     fig.suptitle(
         f'{name}  |  sample {fig_idx + 1}/{len(chosen)}  (idx {idx},  n_fix={n_fix})',
@@ -116,53 +109,53 @@ for fig_idx, idx in enumerate(chosen):
             ax.axis('off')
             continue
 
-        mu_norm    = float(dur_raw[k, 0])
-        sigma2_raw = float(dur_raw[k, 1])
-        # Apply softplus to get the actual sigma² used in the loss
-        sigma2     = float(F.softplus(torch.tensor(sigma2_raw)).item()) + epsilon
+        mu     = float(dur_raw[k, 0])
+        sigma2 = softplus(float(dur_raw[k, 1])) + epsilon
 
-        # The model operates in normalised duration space; tgt_px is already in ms.
-        # We plot the distribution in normalised units and mark GT after the same
-        # inversion (or simply plot both in normalised space).
-        # Here we plot in normalised space and mark the GT normalised duration from
-        # reg_px col 2 (which is the mu-only estimate in px space after inversion).
-        # For simplicity: plot normalised distribution + mark gt_norm from tgt_norm.
-        # tgt_px[:, 2] is in ms — we don't have the inverse transform here, so we
-        # show the normalised distribution vs the normalised GT from reg_px.
-        # reg_px[:, 2] = mu_norm after inversion; tgt_px[:, 2] is in ms.
-        # → plot PDF in normalised space, mark GT normalised duration separately.
+        # PDF evaluated on the fixed [0, 1] grid
+        pdf = lognormal_pdf(x_norm, mu, sigma2)
 
-        # Normalised x axis (same space as mu)
-        # The log-normal is defined over positive reals; mu is in log(normalised_dur) space.
-        # x_norm range: 0 → a few sigmas above the mean
-        mean_norm = lognormal_mean(mu_norm, sigma2)
-        x_max_norm = max(mean_norm * 4, np.exp(mu_norm + 3 * np.sqrt(sigma2)))
-        x_norm = np.linspace(epsilon, x_max_norm, N_POINTS)
-        pdf    = lognormal_pdf(x_norm, mu_norm, sigma2)
+        # GT in normalised space
+        gt_norm = float(gt_dur_ms[k]) / DUR_MAX_MS
+        gt_norm = np.clip(gt_norm, epsilon, 1.0)
 
-        ax.plot(x_norm, pdf, color='steelblue', linewidth=1.8, label='predicted PDF')
-        ax.axvline(np.exp(mu_norm), color='steelblue', linestyle='--',
-                   linewidth=1, alpha=0.7, label=f'mode≈{lognormal_mode(mu_norm, sigma2):.3f}')
-        ax.axvline(mean_norm, color='navy', linestyle=':',
-                   linewidth=1, alpha=0.7, label=f'mean≈{mean_norm:.3f}')
+        # Density at GT point
+        pdf_at_gt = float(lognormal_pdf(np.array([gt_norm]), mu, sigma2)[0])
 
-        # Mark predicted point estimate (mu = exp(mu_norm) after exp)
-        pred_dur_norm = float(s['reg_px'][k, 2]) if k < len(s['reg_px']) else None
+        # Mode = exp(mu - sigma²),  E[Y] = exp(mu + sigma²/2)
+        mode_norm = np.exp(mu - sigma2)
+        mean_norm = np.exp(mu + sigma2 / 2.0)
 
-        # GT normalised duration: we can get it from tgt_px if we knew the scale,
-        # but we only have ms. Show it as a text annotation instead.
-        ax.set_title(f'Fix {k + 1}  |  GT {gt_dur_ms[k]:.0f} ms', fontsize=8)
-        ax.set_xlabel('Normalised duration', fontsize=7)
-        ax.set_ylabel('Density', fontsize=7)
+        ax.plot(x_norm, pdf, color='steelblue', linewidth=1.6)
+
+        # GT vertical line + dot on the curve
+        ax.axvline(gt_norm, color='tomato', linewidth=1.2, linestyle='--', alpha=0.85,
+                   label=f'GT={gt_norm:.3f}  f={pdf_at_gt:.2f}')
+        ax.scatter([gt_norm], [pdf_at_gt], color='tomato', s=40, zorder=5)
+
+        # Mean (E[Y])
+        if 0 < mean_norm < 1.0:
+            ax.axvline(mean_norm, color='darkorange', linewidth=1.0,
+                       linestyle='-', alpha=0.8, label=f'E[Y]={mean_norm:.3f}')
+
+        # Mode
+        if 0 < mode_norm < 1.0:
+            ax.axvline(mode_norm, color='mediumpurple', linewidth=1.0,
+                       linestyle='--', alpha=0.8, label=f'mode={mode_norm:.3f}')
+
+        ax.set_xlim(0.0, 1.0)
+        ax.set_ylim(bottom=0.0)
+        ax.set_title(f'Fix {k + 1}  —  GT {gt_dur_ms[k]:.0f} ms', fontsize=8)
+        ax.set_xlabel('Normalised duration  (0–1200 ms)', fontsize=6)
+        ax.set_ylabel('Density', fontsize=6)
         ax.tick_params(labelsize=6)
-        ax.legend(fontsize=5.5, loc='upper right')
+        ax.legend(fontsize=6, loc='upper right', handlelength=1.2)
 
-        # Annotate sigma
-        ax.text(0.02, 0.97,
-                f'μ={mu_norm:.3f}\nσ²={sigma2:.4f}\nσ={np.sqrt(sigma2):.3f}',
+        ax.text(0.03, 0.97,
+                f'μ={mu:.3f}  σ={math.sqrt(sigma2):.3f}',
                 transform=ax.transAxes, fontsize=6,
                 va='top', ha='left',
-                bbox=dict(boxstyle='round,pad=0.2', facecolor='lightyellow', alpha=0.7))
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='lightyellow', alpha=0.8))
 
     fig.tight_layout()
     out_path = os.path.join(OUT_DIR, f'sample_{fig_idx + 1:02d}_idx{idx:04d}.png')
