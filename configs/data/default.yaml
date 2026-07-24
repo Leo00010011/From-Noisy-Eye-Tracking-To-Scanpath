@@ -49,7 +49,7 @@ transforms:
     center_delta_norm: 200
     center_delta_r: 0.2
   AddIsotropicGaussianNoise:
-    mean: 76
+    mean: 46.4
     std: 29
   DiscretizationNoise:
     image_H: "${data.load.coord_height}"
