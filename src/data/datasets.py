@@ -548,7 +548,7 @@ class CoupledDataloader:
                  batch_size: int,
                  shuffle: bool,
                  num_workers: int,
-                 prefetch_factor: int = 2,
+                 prefetch_factor: int = 0,
                  pin_memory: bool = True,
                  persistent_workers: bool = True,
                  drop_last_batch: bool = True):
