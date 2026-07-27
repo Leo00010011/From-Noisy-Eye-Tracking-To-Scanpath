@@ -113,7 +113,7 @@ def load_model_and_data(ckpt_path: str, bundle_dir: str, cache_path: str, eyenet
     dl = CoupledDataloader(
         gaze_ds, Subset(img_ds, torch.arange(len(img_ds))),
         batch_size=cfg.data.load.batch_size, shuffle=False,               # FR11.3
-        num_workers=0, persistent_workers=False,
+        num_workers=1, persistent_workers=False,
         pin_memory=False, drop_last_batch=False,
     )
 
