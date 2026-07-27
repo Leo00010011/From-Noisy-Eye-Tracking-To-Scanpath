@@ -73,6 +73,24 @@ def _invert_src_to_px(src_row: torch.Tensor, transforms) -> np.ndarray:
     return s.squeeze(0).cpu().numpy()
 
 
+def _invert_denoise_to_px(denoise_row: torch.Tensor, transforms) -> np.ndarray:
+    """Invert a single denoise-head row (T, 2) of normalised coords back to pixels.
+
+    The denoise head operates in the same normalised coordinate space as ``x``, so its
+    inversion is the ``x``-coords Normalize alone. It is inverted here rather than via
+    ``invert_transforms``: that helper routes ``denoise`` through the clean_x path, which
+    requires an ``inputs['clean_x']`` this inference path deliberately does not produce,
+    and which inverts only through ``key=='clean_x'`` transforms (absent from eve_real).
+    Only coords-mode transforms are applied — the row has no time column.
+    """
+    d = denoise_row.unsqueeze(0).clone()
+    for t in reversed(transforms):
+        if (getattr(t, "key", None) == "x" and getattr(t, "mode", None) == "coords"
+                and hasattr(t, "inverse")):
+            d = t.inverse(d, None, "x")
+    return d.squeeze(0).cpu().numpy()
+
+
 def load_model_and_data(ckpt_path: str, bundle_dir: str, cache_path: str, eyenet_split=None):
     cfg = OmegaConf.load(os.path.join(ckpt_path, ".hydra", "config.yaml"))
     ckpt_img_size = _ckpt_img_size(cfg)
@@ -151,8 +169,11 @@ for ckpt_path, name in zip(ckpt_paths, names):
         for batch in tqdm(dl, desc="Saving"):
             inp = move_data_to_device(batch, device)
             out = eval_autoregressive(model, inp, only_last=True)
-            if has_denoise:
-                out.update(model.decode_denoise(**inp))
+
+            # Denoise head is inverted separately (see _invert_denoise_to_px); it must
+            # NOT enter invert_transforms, which would route it through the clean_x path.
+            denoise_norm = model.decode_denoise(**inp)["denoise"] if has_denoise else None
+
             inp_px, out_px = invert_transforms(inp, out, dl, remove_outliers=True)
 
             for i in range(inp["src"].size(0)):
@@ -170,7 +191,7 @@ for ckpt_path, name in zip(ckpt_paths, names):
                     "frame_indices": gaze_ds.frame_indices_at(idx)[:T],
                 }
                 if has_denoise:
-                    rec["denoise_px"] = out_px["denoise"][i, :T, :2].cpu().numpy()
+                    rec["denoise_px"] = _invert_denoise_to_px(denoise_norm[i, :T, :2], transforms)
                 records.append(rec)
 
     if len(records) != len(gaze_ds):                                          # FR11.5
