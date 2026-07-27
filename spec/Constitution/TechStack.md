@@ -78,6 +78,10 @@ The model partitions its submodules into `denoise_modules` and `fixation_modules
 | `PositionalEncoding` | `src/model/pos_encoders.py` | Fixed sinusoidal positional encoding indexed by sequence position (order in the trajectory). |
 | `GaussianFourierPosEncoder` | `src/model/pos_encoders.py` | Random Fourier feature encoding for continuous coordinates. Used in `shared_gaussian` and `fourier` input encoder modes. |
 | `RopePositionEmbedding` | `src/model/rope_positional_embeddings.py` | RoPE for the cross-attention between gaze trajectory and image patches. Active only when `use_rope=True`. |
+| `EyeNetGazeCache` | `src/data/eve_real_noise.py` | Projects EyeNet's per-frame normalized gaze predictions (`predictions.csv`) into a screen-space, `exp_key`-keyed HDF5 cache using `EveBundle.project_normalized_gaze`. Left/right eye screen intercepts are averaged in pixel space. `build` returns `(cache, skipped)`; every accessor resolves through an `exp_key → row` dict. See HDF5 layout below. |
+| `EveRealNoiseDataset` | `src/data/eve_real_noise.py` | Gaze dataset over the projected cache. `x = (3, T_valid)` `[x_px, y_px, t_ms]`; `y` is a `(3, max_fixations)` `PAD_TOKEN_ID` **placeholder** (no ground truth — only fixes the decode-step budget). No `clean_x`. Filtered by `eyenet_split` (`"val"`/`"test"`/`None`); an EVE split label raises. |
+| `EveRealNoiseImgDataset` | `src/data/eve_real_noise.py` | Stimulus dataset paired with `EveRealNoiseDataset` via the identical `_accepted_rows` filter, so index `i` refers to the same `exp_key` in both. Dedups by `stimulus_name`, squashes 1920×1080 → 256². |
+| `RealNoiseInferenceStore` | `src/data/eve_real_noise_store.py` | Keyed HDF5 writer/reader for model outputs (`save` uses mode `"w"`, unlike the cache's append mode). Stores predicted scanpaths, EOS logits, inverted `src_px`, `frame_indices`, optional `denoise_px`. See HDF5 layout below. |
 | `eval_metrics.py` | `src/eval/` | `eval_reg` (Euclidean coord error + duration MAE on masked positions), `eval_denoise` (MSE on denoised coords), `accuracy` / `precision` / `recall` for end-of-sequence head. |
 | `eval_utils.py` | `src/eval/` | Offline evaluation utilities: running inference on a split and aggregating metrics. |
 | `vis_scanpath.py` | `src/eval/` | Plotting predicted vs. ground-truth scanpaths overlaid on the stimulus image. |
@@ -105,6 +109,40 @@ A single training sample travels through these stages:
 5. **Loss and metrics**: `CombinedLossFunction` applies denoise loss (L1 on `clean_x[:,:,:2]`) and fixation loss (`SeparatedRegLossFunction` on coord + duration + end-of-sequence). `eval_reg` and `eval_denoise` from `eval_metrics.py` compute validation metrics.
 
 **Shape conventions**: `[B, T, 3]` for gaze trajectories, `[B, N, 3]` for fixation sequences, `[B, H*W, D]` for image patch tokens (with one CLS prefix token). Coordinates are always `(x, y)` normalised to `[0,1]`.
+
+## EVE Real-Noise Artifacts (inference-only path)
+
+A separate, `PipelineBuilder`-free code path (`configs/data/eve_real.yaml`, `dataset_type: "eve_real"`) runs a trained `MixerModel` on **real** degraded gaze — EyeNet's ResNet18 predictions on EVE, projected to the screen. Two split labels coexist: `eyenet_split` (ResNet18's partition — the *operative* filter; the recovery model must be tested on data EyeNet did not train on) and `eve_split` (EVE's partition — descriptive metadata, never used to filter). All 734 experiments are EyeNet val/test.
+
+**`EyeNetGazeCache`** — `data/eve_real_noise/eyenet_gaze_cache.h5`, group `/eyenet_gaze`, append mode (deletes/recreates only its own group). `N = 734`, 90 = center-camera frame count.
+
+| Dataset | Shape | dtype | Notes |
+|---|---|---|---|
+| `exp_keys` | `(N,)` | vlen UTF-8 | primary key, verified on load |
+| `eyenet_split` / `eve_split` / `stimulus_name` | `(N,)` | vlen UTF-8 | `eyenet_split` from CSV (operative), `eve_split` from bundle (metadata) |
+| `gaze_px` / `gt_gaze_px` | `(N, 90, 2)` | float32 | combined (eye-averaged) predicted / ray-derived GT intercept; `NaN` where invalid |
+| `validity` | `(N, 90)` | bool | combined per-frame validity |
+| `left_px` / `right_px` | `(N, 90, 2)` | float32 | per-eye intercepts |
+| `left_validity` / `right_validity` | `(N, 90)` | bool | per-eye validity |
+| `angular_error_deg` | `(N, 90, 2)` | float32 | CSV column; `[...,0]`=left, `[...,1]`=right |
+
+Group attrs: `timestamp_source` (`"synthesized_30hz"` — center-camera timestamps are synthesized at a fixed 30 Hz, no real timestamps in the bundle), `center_fps`, `source_csv`, `bundle_dir`, `built_at`, `n_offscreen`.
+
+**`RealNoiseInferenceStore`** — `outputs/eve_real_noise/{run_name}.h5`, group `/inference`, mode `"w"` (replaces the whole file). `K = max_fixations + 1` decode steps, `T = max valid frames`.
+
+| Dataset | Shape | dtype | Notes |
+|---|---|---|---|
+| `exp_keys` | `(N,)` | vlen UTF-8 | primary key |
+| `eyenet_split` / `eve_split` | `(N,)` | vlen UTF-8 | carried through per split |
+| `pred_scanpath` | `(N, K, 3)` | float32 | predicted `[x_px, y_px, dur_ms]`, all `K` steps retained |
+| `eos_logit` | `(N, K)` | float32 | raw EOS logits |
+| `pred_len` | `(N,)` | int32 | first `k` with `sigmoid(eos)>0.5`, else `K` (convenience, non-destructive) |
+| `src_px` | `(N, T, 3)` | float32 | model input inverted to px/ms; `NaN` padding |
+| `src_len` | `(N,)` | int32 | valid length per row |
+| `frame_indices` | `(N, T)` | int32 | source center-camera frame of each `src_px` column; `-1` padding |
+| `denoise_px` | `(N, T, 2)` | float32 | present only if the checkpoint has a denoise head |
+
+Group attrs: `run_name`, `checkpoint_path`, `img_size`, `max_fixations`, `gaze_cache_path`, `bundle_dir`, `created_at`, `has_denoise`, `eos_threshold`. All coordinates are in 1920×1080 screen pixels (recovered via `invert_transforms`, never hand-multiplied).
 
 ## Configuration System
 

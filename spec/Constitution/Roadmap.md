@@ -2,6 +2,7 @@
 
 ## Done
 
+- ✓ **EVE real-noise scanpath inference** — `EyeNetGazeCache` projects EyeNet's per-frame normalized gaze predictions (`predictions.csv`) into a screen-space, `exp_key`-keyed HDF5 cache via `EveBundle.project_normalized_gaze` (left/right eye intercepts averaged in pixel space → 89.6 px / 2.32 DVA median error vs ray-derived ground truth). `EveRealNoiseDataset` / `EveRealNoiseImgDataset` feed a trained `MixerModel` autoregressively over real degraded gaze; `RealNoiseInferenceStore` persists predicted scanpaths keyed by `exp_key`. Inference-only — no `clean_x`, no accuracy metrics, `PipelineBuilder` untouched. Filtering is on `eyenet_split` (the operative partition; EVE's split is metadata only). New files under `src/data/eve_real_noise*.py`, `configs/data/eve_real.yaml`, `scripts/build_eyenet_gaze_cache.py`, `src/notebooks/save_predictions_eve_real.py`; 52-test suite `tests/test_eve_real_noise.py`. All validation.md reference numbers reproduced on the production bundle. Spec: `spec/2026-07-27-eve-real-noise-scanpath-inference/`
 - **Spec-driven workflow bootstrapped** — Mission, TechStack, and Roadmap documents in place under `spec/Constitution/`
 - **Notebook infrastructure** — `review_utils`, `generate_review_notebooks`, `eval_batch` for offline analysis and scanpath visualisation
 - **Inference recorder** — `InferenceRecorder` hooks into model submodules to capture intermediate tensors for debugging; gated by `training.inference_recorder.enabled`
@@ -30,7 +31,7 @@
 
 ## In Progress
 
-- **Spec-driven development workflow** — Constitution documents written; sprint-level feature specs not yet started
+- **Spec-driven development workflow** — Constitution documents written; first sprint-level feature spec (EVE real-noise scanpath inference) delivered end-to-end under `spec/2026-07-27-eve-real-noise-scanpath-inference/`
 
 ---
 

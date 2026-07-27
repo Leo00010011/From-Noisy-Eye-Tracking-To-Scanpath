@@ -1,7 +1,50 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/ulloa/Miooooo/Master/thesis/projectes/eve_shared/EveDataset/src/**)"
+      "Bash(cd \"/c/Users/ulloa/Miooooo/Master/thesis/Projects/eve_shared\" && find . -name \"*.py\" -not -path \"*/eve_out/*\" -not -path \"*__pycache__*\" | sort)",
+      "Read(//c/Users/ulloa/Miooooo/Master/thesis/Projects/eve_shared/**)",
+      "Read(//c/Users/ulloa/Miooooo/Master/thesis/Projects/eve_shared/EveDataset/src/evedataset/**)"
+    ]
+  },
+   "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[console]::beep(880,150); [console]::beep(1100,200)",
+            "shell": "powershell"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[console]::beep(880,150); [console]::beep(1100,200)",
+            "shell": "powershell"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[console]::beep(880,150); [console]::beep(1100,200)",
+            "shell": "powershell"
+          }
+        ]
+      }
     ]
   }
+  ,
+    "model": "claude-opus-4-8",
+    "modelOptions": {
+      "effortLevel": "medium",
+      "alwaysThinkingEnabled": true
+    }  
 }

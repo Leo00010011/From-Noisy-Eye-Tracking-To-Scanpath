@@ -1,0 +1,75 @@
+# EVE real-noise (EyeNet) data configuration.
+# Consumed only by src/notebooks/save_predictions_eve_real.py — NOT by PipelineBuilder.
+#
+# Three ways this differs from configs/data/eve.yaml:
+#   1. No clean_x: has_precomputed_clean_x = false. This path has no Tobii reference,
+#      so no NormalizeCoords/NormalizeTime is applied to clean_x and the Denoise phase
+#      is out of scope.
+#   2. No run_key_filter: there is no WebGazer replica variant to select — the noisy
+#      signal is EyeNet's projected prediction, one per experiment.
+#   3. eyenet_split in place of any EVE split notion: the recovery model never saw EVE,
+#      so only EyeNet's partition is meaningful. There is deliberately no eve_split key.
+
+dataset_type: "eve_real"
+
+# Path to the directory containing bundle.h5 and stimuli/.
+# Must be overridden at run time — do not commit a machine-specific path here.
+bundle_dir: "MUST_OVERRIDE"
+
+# Projected screen-space gaze cache produced by scripts/build_eyenet_gaze_cache.py.
+gaze_cache_path: "data/eve_real_noise/eyenet_gaze_cache.h5"
+
+# EyeNet split filter. null runs both EyeNet val and test in one pass; set to "val" or
+# "test" to restrict. EVE split labels ('train') are rejected by the datasets.
+eyenet_split: null
+
+max_fixations: 20
+min_valid_frames: 5
+
+# No Tobii reference in this path (see difference 1 above).
+has_precomputed_clean_x: false
+
+load:
+  batch_size: 32
+  use_img_dataset: true
+  # Datasets are fully in RAM (N=734); workers add fork cost for no gain.
+  num_workers: 0
+  persistent_workers: false
+  prefetch_factor: 2
+  pin_memory: false
+  img_size: 256
+  log: true
+
+transforms:
+  transform_list:
+    - StandarizeTime
+    - NormalizeCoords
+    - NormalizeTime
+    - NormalizeFixationCoords
+    - NormalizeDuration
+
+  StandarizeTime: {}
+
+  NormalizeCoords:
+    key: "x"
+    mode: "coords"
+    image_H: 1080
+    image_W: 1920
+
+  # period_duration = 90 * (1000/30) = 3000 ms — 90 frames at 30 Hz.
+  NormalizeTime:
+    key: "x"
+    mode: "time"
+    period_duration: 3000
+
+  NormalizeFixationCoords:
+    key: "y"
+    mode: "coords"
+    image_H: 1080
+    image_W: 1920
+
+  # Matches the EVE scanpath pipeline's outlier cutoff.
+  NormalizeDuration:
+    key: "y"
+    mode: "time"
+    period_duration: 1200
