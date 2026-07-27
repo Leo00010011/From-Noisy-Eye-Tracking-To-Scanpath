@@ -46,7 +46,7 @@ OUT_DIR = os.path.join("outputs", "eve_real_noise")
 EYENET_SPLIT = None   # None (both), "val", or "test"
 
 ckpt_paths = [
-    os.path.join("outputs", "2026-06-15", "19-18-05"),
+    os.path.join("outputs", "2026-07-24", "16-17-19"),
 ]
 names = [
     "eve_real_duration_dist",
