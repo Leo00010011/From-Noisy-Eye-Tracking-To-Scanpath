@@ -1,0 +1,25 @@
+# Search-meta config for scripts/hp_search.py.
+# Loaded directly via OmegaConf.load by the driver — it is NOT part of the Hydra `main`
+# composition (it holds study / W&B / search-space settings, not training params).
+study:
+  study_name: "mixer_hp_search"
+  n_trials: 50
+  storage_dir: "outputs/hp_search"        # sqlite:///<storage_dir>/<study_name>.db
+  sampler_seed: 42
+  pruner:
+    n_startup_trials: 5
+    n_warmup_steps: 2
+wandb:
+  enabled: true
+  project: "noisy-eye-scanpath"
+  entity: null                            # null → default entity for the node's API key
+  mode: "online"                          # "online" | "offline" | "disabled"
+  group: "mixer_hp_search"                # defaults to study_name
+search_space:
+  weight_decay:   {low: 1.0e-5, high: 1.0e-1, log: true}
+  n_encoder:      {low: 2, high: 8}
+  n_decoder:      {low: 2, high: 8}
+  n_eye_decoder:  {low: 2, high: 8}
+  dropouts:       {low: 0.0, high: 0.5}   # applied to each of the 9 dropout keys
+  cls_weight:     {low: 0.05, high: 1.0}
+  dur_weight:     {low: 0.05, high: 1.0}

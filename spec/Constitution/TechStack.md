@@ -29,6 +29,8 @@ From `requirements.txt`:
 | `pillow 10.4.0` | Image loading in `FreeViewImgDataset` |
 | `huggingface-hub 0.30.1` | Fetching model weights |
 | `ninja 1.11.1.4` | Build backend for compiled C++ extensions (deformable attention) |
+| `optuna 4.9.0` | Hyperparameter search (TPE sampler, MedianPruner, SQLite study storage) — `scripts/hp_search.py` |
+| `wandb 0.18.7` | Experiment tracking for the hyperparameter search (one run per Optuna trial); gated by `training.wandb.enabled` (default `False`) |
 
 ## Architecture Overview
 
@@ -143,6 +145,37 @@ Group attrs: `timestamp_source` (`"synthesized_30hz"` — center-camera timestam
 | `denoise_px` | `(N, T, 2)` | float32 | present only if the checkpoint has a denoise head |
 
 Group attrs: `run_name`, `checkpoint_path`, `img_size`, `max_fixations`, `gaze_cache_path`, `bundle_dir`, `created_at`, `has_denoise`, `eos_threshold`. All coordinates are in 1920×1080 screen pixels (recovered via `invert_transforms`, never hand-multiplied).
+
+## Hyperparameter Search (Optuna + W&B)
+
+A standalone driver `scripts/hp_search.py` runs an Optuna study over the `MixerModel`, **not**
+through `@hydra.main`. It composes each trial's config with Hydra's `compose` API and drives the
+existing training loop:
+
+- **`configs/hp_search.yaml`** — search-meta config loaded directly via `OmegaConf.load` (NOT part
+  of the `main` composition). Holds `study.*` (name, `n_trials`, SQLite `storage_dir`,
+  `sampler_seed`, `pruner.*`), `wandb.*` (project/entity/mode/group, `enabled`), and
+  `search_space.*` bounds for the 15 tuned hyperparameters.
+- **`configs/exp/hp_search.yaml`** — a `@package _global_` reduced-budget override: Combined-only,
+  from scratch (`pretrained_encoder_path: null`), `E=40` epochs, `val_interval=5`. Two invariants:
+  `scheduler.warmup_steps + stable_steps + decay_steps == E` and
+  `scheduled_sampling.warmup_epochs + active_epochs <= E`. Adds `training.wandb.enabled` (the
+  driver flips it to `true` per trial).
+- **Driver functions**: `build_search_config`, `suggest_overrides(trial, search_space)` (samples
+  all 15 params — one Optuna param per dropout), `compose_trial_config(overrides)` (Hydra-composes
+  `main` with `exp=hp_search` + sampled overrides; clears `GlobalHydra` and re-`initialize`s per
+  call), `make_objective(search_cfg)`, `main()`. `DROPOUT_KEYS` lists the 9 mixer dropouts >0.
+- **Objective** = min `reg_error_val` over the trial (`MetricsStorage.best_metric_value`),
+  `direction="minimize"`. `MedianPruner` prunes via `train()`'s `trial.report()` per validation;
+  `study.optimize(..., catch=(Exception,))` records a crashing trial as FAILED and continues.
+- **`train(builder, trial=None) -> float | None`** (in `src/training/pipeline.py`): backward
+  compatible; when `trial` is given it reports for pruning and raises `optuna.TrialPruned`; when
+  `training.wandb.enabled` it logs `train/*` (per epoch) and `val/*` (per validation) to the
+  **already-initialised** wandb run (the driver owns `init`/`finish`; `train()` only `finish()`es
+  on the prune path). `optuna`/`wandb` are imported lazily so plain `train.py` needs neither.
+- **Artifacts**: `outputs/hp_search/<study_name>.db` (resumable SQLite study),
+  `outputs/hp_search/<study_name>/trial_<n>/{metrics.json,model.pth,split.pth,config.yaml}`, and
+  study-level `trials.csv` + `best_params.yaml`. Tests: `tests/test_hp_search.py`.
 
 ## Configuration System
 

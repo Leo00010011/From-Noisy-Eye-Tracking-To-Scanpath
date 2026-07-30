@@ -8,8 +8,10 @@ numba==0.62.1
 numpy==2.1.2
 omegaconf==2.3.0
 opencv-python==4.11.0.86
+optuna==4.9.0
 pandas==2.2.3
 pillow==10.4.0
 scipy==1.14.1
 tensorboard==2.19.0
 tensorboard-data-server==0.7.2
+wandb==0.18.7

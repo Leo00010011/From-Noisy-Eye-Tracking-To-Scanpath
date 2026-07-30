@@ -295,6 +295,29 @@ Train on CPU for debugging:
 py train.py model.device=cpu data.load.num_workers=0
 ```
 
+### Hyperparameter search
+
+An Optuna + Weights & Biases search harness tunes the `MixerModel` on the **Combined** phase
+(from scratch, reduced epoch budget). Each Optuna trial trains a model and reports the
+validation coordinate error (`reg_error_val`) as the single objective to minimise; weak trials
+are pruned with `MedianPruner`, and every trial's per-epoch metric curves and sampled
+hyperparameters are logged to W&B.
+
+```powershell
+py scripts/hp_search.py            # runs/resumes the Optuna study defined in configs/hp_search.yaml
+```
+
+- Edit `configs/hp_search.yaml` to change `n_trials`, the search-space ranges, the sampler seed,
+  or the W&B project/entity/mode.
+- Edit `configs/exp/hp_search.yaml` to change the reduced training budget `E` (keep the two
+  documented schedule invariants intact).
+- Results land in `outputs/hp_search/<study_name>/` (per-trial `metrics.json`, `model.pth`,
+  `split.pth`, `config.yaml`, plus a study-level `trials.csv` and `best_params.yaml`) and in the
+  configured W&B project.
+- The study persists to `outputs/hp_search/<study_name>.db` (SQLite) and is **resumable** — just
+  re-run the same command; Optuna picks up the remaining trial budget.
+- The W&B API key is expected to already be configured on the node (env var or `~/.netrc`).
+
 ## Evaluation
 
 Evaluation utilities are provided in `src/eval/` and in the analysis notebooks. The repository currently leans toward script- and notebook-based evaluation rather than a single dedicated CLI.

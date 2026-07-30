@@ -4,7 +4,7 @@ from src.training.training_utils import compute_loss, validate, move_data_to_dev
 from src.training.pipeline_builder import PipelineBuilder
 from src.model.model_io import save_checkpoint, save_splits
 
-def train(builder:PipelineBuilder):
+def train(builder:PipelineBuilder, trial=None):
         phases = builder.build_phases()
         needs_validate = builder.config.training.validate
         val_interval = builder.config.training.val_interval
@@ -65,6 +65,14 @@ def train(builder:PipelineBuilder):
             to_update_in_batch.append(denoise_dropout_scheduler)
         global_epoch = 0
         global_step = 0
+        # W&B logging is optional and off by default; the `training.wandb` key is absent for
+        # plain `train.py` runs, so `.get` keeps that path inert. `wandb` is imported lazily so
+        # normal training does not require it installed.
+        wandb_enabled = bool(builder.config.training.get("wandb", {}).get("enabled", False))
+        wb = None
+        if wandb_enabled:
+            import wandb as wb
+        val_report_step = 0  # monotonic counter for Optuna trial.report
         record_train_split = (
             inference_recorder is not None
             and builder.config.training.inference_recorder.get('split', 'train') in ('train', 'both')
@@ -134,9 +142,13 @@ def train(builder:PipelineBuilder):
                 for updater in to_update_in_epoch:
                     if updater is not None:
                         updater.step()
+                if wandb_enabled and wb.run is not None:
+                    wb.log({f"train/{key}": value for key, value in loss_info.items()},
+                           step=global_epoch)
                 if needs_validate and ((epoch + 1) % val_interval == 0):
                     if curriculum_noise is not None:
                         curriculum_noise.enabled = False
+                    prev_len = len(metrics_storage.metrics["reg_error_val"])
                     validate(
                         model,
                         loss_fn,
@@ -150,6 +162,26 @@ def train(builder:PipelineBuilder):
                     )
                     if curriculum_noise is not None:
                         curriculum_noise.enabled = True
+                    if wandb_enabled and wb.run is not None:
+                        log = {}
+                        for key in ("reg_error_val", "duration_error_val", "accuracy",
+                                    "precision_pos", "recall_pos"):
+                            seq = metrics_storage.metrics.get(key, [])
+                            if seq:
+                                log[f"val/{key}"] = seq[-1]
+                        wb.log(log, step=global_epoch)
+                    # Optuna pruning: only report when validate() actually appended a new
+                    # reg_error_val (it does so only when coord_error_acum > 0).
+                    new_len = len(metrics_storage.metrics["reg_error_val"])
+                    if trial is not None and new_len > prev_len:
+                        current = metrics_storage.metrics["reg_error_val"][-1]
+                        trial.report(current, val_report_step)
+                        val_report_step += 1
+                        if trial.should_prune():
+                            if wandb_enabled and wb.run is not None:
+                                wb.finish()
+                            import optuna
+                            raise optuna.TrialPruned()
                     metrics_storage.save_metrics()
                     is_best = metrics_storage.update_best()
                     if is_best:
@@ -164,3 +196,6 @@ def train(builder:PipelineBuilder):
                 global_epoch += 1
             
         print("Training finished!")
+        # Objective for hyperparameter search: the best (minimum) reg_error_val observed.
+        # None if the run never validated (train.py's main() ignores the return value).
+        return metrics_storage.best_metric_value if metrics_storage.metrics["reg_error_val"] else None

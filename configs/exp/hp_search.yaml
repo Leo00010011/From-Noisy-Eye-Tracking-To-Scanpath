@@ -1,0 +1,33 @@
+# @package _global_
+# Reduced-budget, Combined-only recipe for the Optuna hyperparameter search.
+# Sibling of only_combined.yaml but with shrunken epoch budgets so a trial is cheap.
+#
+# Invariants to preserve if E changes:
+#   scheduler.warmup_steps + stable_steps + decay_steps == training.Combined.epochs (== E)
+#   scheduled_sampling.warmup_epochs + active_epochs      <= training.Combined.epochs (== E)
+training:
+  decisive_metric: "reg_error_val"
+  pretrained_model: null
+  use_scheduled_sampling: true
+  Phases: ["Combined"]
+  num_epochs: 40                 # E — keeps the one_cycle path consistent if ever used
+  val_interval: 5                # → 8 validation points inside E=40 (pruning signal)
+  Combined:
+    name: "Combined"
+    denoise_weight: 0
+    decisive_metric: ${training.decisive_metric}
+    epochs: 40                   # E, reduced from 160
+  wandb:
+    enabled: false               # driver flips this to true per trial; default keeps train.py inert
+
+model:
+  pretrained_encoder_path: null  # train Combined from scratch (n_encoder is searched)
+
+scheduler:
+  warmup_steps: 5                # epochs; 5 + 25 + 10 == E == 40
+  stable_steps: 25
+  decay_steps: 10
+
+scheduled_sampling:
+  warmup_epochs: 5               # 5 + 25 == 30 <= E == 40
+  active_epochs: 25
