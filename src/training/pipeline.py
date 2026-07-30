@@ -143,8 +143,13 @@ def train(builder:PipelineBuilder, trial=None):
                     if updater is not None:
                         updater.step()
                 if wandb_enabled and wb.run is not None:
-                    wb.log({f"train/{key}": value for key, value in loss_info.items()},
-                           step=global_epoch)
+                    # No explicit `step=`: wandb buffers an explicit-step row until the step
+                    # advances, which hides the first epoch's metrics until the second logs.
+                    # Log `epoch` as a field instead (the driver sets it as the x-axis via
+                    # define_metric) so each call commits immediately.
+                    train_log = {f"train/{key}": value for key, value in loss_info.items()}
+                    train_log["epoch"] = global_epoch
+                    wb.log(train_log)
                 if needs_validate and ((epoch + 1) % val_interval == 0):
                     if curriculum_noise is not None:
                         curriculum_noise.enabled = False
@@ -163,13 +168,13 @@ def train(builder:PipelineBuilder, trial=None):
                     if curriculum_noise is not None:
                         curriculum_noise.enabled = True
                     if wandb_enabled and wb.run is not None:
-                        log = {}
+                        log = {"epoch": global_epoch}
                         for key in ("reg_error_val", "duration_error_val", "accuracy",
                                     "precision_pos", "recall_pos"):
                             seq = metrics_storage.metrics.get(key, [])
                             if seq:
                                 log[f"val/{key}"] = seq[-1]
-                        wb.log(log, step=global_epoch)
+                        wb.log(log)
                     # Optuna pruning: only report when validate() actually appended a new
                     # reg_error_val (it does so only when coord_error_acum > 0).
                     new_len = len(metrics_storage.metrics["reg_error_val"])

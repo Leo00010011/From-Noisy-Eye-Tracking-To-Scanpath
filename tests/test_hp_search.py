@@ -284,6 +284,7 @@ def _install_fake_wandb(monkeypatch, run_truthy=True):
         mod.login_called = True
 
     mod.log, mod.finish, mod.init, mod.login = log, finish, init, login
+    mod.define_metric = lambda *a, **k: None
     monkeypatch.setitem(sys.modules, "wandb", mod)
     return mod
 

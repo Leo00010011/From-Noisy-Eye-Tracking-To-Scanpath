@@ -135,6 +135,10 @@ def make_objective(search_cfg):
                 name=f"trial_{trial.number}", reinit=True,
                 config={"trial_number": trial.number, **{k: trial.params[k] for k in trial.params}},
             )
+            # Use `epoch` as the x-axis for all train/val curves (train() logs it as a field).
+            wandb.define_metric("epoch")
+            wandb.define_metric("train/*", step_metric="epoch")
+            wandb.define_metric("val/*", step_metric="epoch")
         try:
             builder = PipelineBuilder(cfg)
             best = train(builder, trial=trial)
