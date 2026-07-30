@@ -11,3 +11,4 @@ hydralance/
 *.pth
 *.log
 vis_output_offline/
+*.h5
