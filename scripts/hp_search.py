@@ -81,6 +81,35 @@ def _set_trial_paths(cfg, trial_dir):
             cfg.training.inference_recorder.output_dir = str(trial_dir / "inference_records")
 
 
+def build_storage(study_cfg, storage_dir):
+    """Return an Optuna storage. Prefers SQLite; falls back to file-based JournalStorage when
+    SQLAlchemy is unavailable/broken (common on HPC images) so the study is still resumable.
+
+    ``study.storage_backend`` in configs/hp_search.yaml selects the behaviour:
+    "auto" (default) tries SQLite then falls back; "sqlite" forces SQLite (raises on failure);
+    "journal" forces the SQLAlchemy-free journal backend.
+    """
+    backend = study_cfg.get("storage_backend", "auto")
+    name = study_cfg.study_name
+    if backend in ("sqlite", "auto"):
+        db_path = Path(storage_dir) / f"{name}.db"
+        url = f"sqlite:///{db_path.as_posix()}"
+        try:
+            storage = optuna.storages.RDBStorage(url)   # imports SQLAlchemy under the hood
+            print(f"[hp_search] Using SQLite storage: {url}")
+            return storage
+        except Exception as e:                            # broken/missing SQLAlchemy, etc.
+            if backend == "sqlite":
+                raise
+            print(f"[hp_search] SQLite storage unavailable ({type(e).__name__}: {e}); "
+                  f"falling back to JournalStorage.")
+    from optuna.storages import JournalStorage
+    from optuna.storages.journal import JournalFileBackend
+    log_path = Path(storage_dir) / f"{name}.log"
+    print(f"[hp_search] Using Journal storage: {log_path}")
+    return JournalStorage(JournalFileBackend(str(log_path)))
+
+
 def make_objective(search_cfg):
     """Return an ``objective(trial) -> float`` that runs one trial end to end."""
     study_name = search_cfg.study.study_name
@@ -131,8 +160,9 @@ def main():
     study_name = search_cfg.study.study_name
     out_root = REPO_ROOT / search_cfg.study.storage_dir / study_name
     out_root.mkdir(parents=True, exist_ok=True)
-    db_path = REPO_ROOT / search_cfg.study.storage_dir / f"{study_name}.db"
-    storage = f"sqlite:///{db_path.as_posix()}"
+    storage_dir = REPO_ROOT / search_cfg.study.storage_dir
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    storage = build_storage(search_cfg.study, storage_dir)
     pr = search_cfg.study.pruner
     study = optuna.create_study(
         study_name=study_name, direction="minimize", storage=storage, load_if_exists=True,

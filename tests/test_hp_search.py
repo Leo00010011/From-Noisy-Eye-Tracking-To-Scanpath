@@ -543,6 +543,39 @@ def test_failure_isolation(tmp_path, monkeypatch):
     assert fw.finish_called  # finished with exit_code=1 on the failing trial
 
 
+def test_build_storage_sqlite(tmp_path):
+    cfg = OmegaConf.create({"study_name": "sq", "storage_backend": "sqlite"})
+    st = H.build_storage(cfg, tmp_path)
+    assert isinstance(st, optuna.storages.RDBStorage)
+
+
+def test_build_storage_journal(tmp_path):
+    cfg = OmegaConf.create({"study_name": "jr", "storage_backend": "journal"})
+    st = H.build_storage(cfg, tmp_path)
+    from optuna.storages import JournalStorage
+    assert isinstance(st, JournalStorage)
+
+
+def test_build_storage_auto_falls_back_on_broken_sqlalchemy(tmp_path, monkeypatch):
+    """When SQLite/SQLAlchemy is broken (as on the HPC image), 'auto' uses JournalStorage."""
+    def boom(url):
+        raise ImportError("cannot import name 'util' from partially initialized module 'sqlalchemy'")
+    monkeypatch.setattr(optuna.storages, "RDBStorage", boom)
+    cfg = OmegaConf.create({"study_name": "au", "storage_backend": "auto"})
+    st = H.build_storage(cfg, tmp_path)
+    from optuna.storages import JournalStorage
+    assert isinstance(st, JournalStorage)
+
+
+def test_build_storage_sqlite_forced_raises_on_broken_sqlalchemy(tmp_path, monkeypatch):
+    def boom(url):
+        raise ImportError("broken sqlalchemy")
+    monkeypatch.setattr(optuna.storages, "RDBStorage", boom)
+    cfg = OmegaConf.create({"study_name": "sf", "storage_backend": "sqlite"})
+    with pytest.raises(ImportError):
+        H.build_storage(cfg, tmp_path)
+
+
 def test_config_snapshot_roundtrip(tmp_path):
     overrides = {"model.n_encoder": 6, "model.src_dropout": 0.33, "loss.cls_weight": 0.7}
     cfg = H.compose_trial_config(overrides)

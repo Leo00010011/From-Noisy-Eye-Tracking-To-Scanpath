@@ -314,8 +314,11 @@ py scripts/hp_search.py            # runs/resumes the Optuna study defined in co
 - Results land in `outputs/hp_search/<study_name>/` (per-trial `metrics.json`, `model.pth`,
   `split.pth`, `config.yaml`, plus a study-level `trials.csv` and `best_params.yaml`) and in the
   configured W&B project.
-- The study persists to `outputs/hp_search/<study_name>.db` (SQLite) and is **resumable** — just
-  re-run the same command; Optuna picks up the remaining trial budget.
+- The study persists under `outputs/hp_search/` and is **resumable** — just re-run the same
+  command; Optuna picks up the remaining trial budget. Storage backend is chosen by
+  `study.storage_backend` in `configs/hp_search.yaml`: `auto` (default) uses SQLite and
+  transparently falls back to a SQLAlchemy-free file `JournalStorage` if SQLite/SQLAlchemy is
+  broken (common on HPC container images); `sqlite` or `journal` force one explicitly.
 - The W&B API key is expected to already be configured on the node (env var or `~/.netrc`).
 
 ## Evaluation

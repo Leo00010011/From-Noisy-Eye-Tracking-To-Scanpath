@@ -173,7 +173,10 @@ existing training loop:
   `training.wandb.enabled` it logs `train/*` (per epoch) and `val/*` (per validation) to the
   **already-initialised** wandb run (the driver owns `init`/`finish`; `train()` only `finish()`es
   on the prune path). `optuna`/`wandb` are imported lazily so plain `train.py` needs neither.
-- **Artifacts**: `outputs/hp_search/<study_name>.db` (resumable SQLite study),
+- **Storage**: `build_storage` honours `study.storage_backend` — `auto` (default) uses SQLite and
+  falls back to a SQLAlchemy-free file `JournalStorage` (`<study_name>.log`) when SQLite/SQLAlchemy
+  is broken on the node; `sqlite`/`journal` force one. Both are resumable via `load_if_exists=True`.
+- **Artifacts**: `outputs/hp_search/<study_name>.db` (resumable SQLite study) or `.log` (journal),
   `outputs/hp_search/<study_name>/trial_<n>/{metrics.json,model.pth,split.pth,config.yaml}`, and
   study-level `trials.csv` + `best_params.yaml`. Tests: `tests/test_hp_search.py`.
 
