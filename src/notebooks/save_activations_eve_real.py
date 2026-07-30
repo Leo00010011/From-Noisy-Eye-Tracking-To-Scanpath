@@ -317,9 +317,7 @@ for ckpt_path, name in zip(ckpt_paths, names):
     model.set_phase("Fixation")
     model.to(device)
     model.eval()
-    if hasattr(model, "disable_kv_cache"):
-        model.disable_kv_cache()   # analysis pass is a full causal forward, not incremental
-
+    
     support = probe_recording_support(model)
     capture = support["fix_ok"] or support["eye_ok"]
     model_dim = int(getattr(model, "model_dim", 0))
