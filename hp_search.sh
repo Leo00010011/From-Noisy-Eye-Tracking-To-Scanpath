@@ -41,8 +41,12 @@ conda activate scanpath
 echo "Moving to project"
 cd projects/From-Noisy-Eye-Tracking-To-Scanpath/
 
-# W&B: assumes the API key is already configured on the node (env var or ~/.netrc).
-# If the compute node has no internet, log offline instead and sync later with `wandb sync`:
+echo "Exporting WANDB_API_KEY"
+# Never hardcode the key here -- it belongs in a file outside version control.
+# Create it once with: echo <key> > ~/.wandb_api_key && chmod 600 ~/.wandb_api_key
+# Exporting the key is what stops wandb from dropping into its interactive login prompt.
+export WANDB_API_KEY="$(cat ~/.wandb_api_key)"
+# If the compute node has no outbound internet, log offline instead and `wandb sync` later:
 #   export WANDB_MODE=offline
 
 echo "STARTING HYPERPARAMETER SEARCH"
