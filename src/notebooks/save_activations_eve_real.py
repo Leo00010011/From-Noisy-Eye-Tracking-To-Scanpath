@@ -63,7 +63,7 @@ from src.training.training_utils import move_data_to_device
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-BUNDLE_DIR = "/mnt/scratch/leonardo.ulloa/5519804/data/bundle"
+BUNDLE_DIR = "/mnt/scratch/leonardo.ulloa/5520050/data/bundle"
 CACHE_PATH = "data/eve_real_noise/eyenet_gaze_cache.h5"
 OUT_DIR = os.path.join("outputs", "eve_real_noise")
 EYENET_SPLIT = None   # None (both), "val", or "test"
