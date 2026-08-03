@@ -2,7 +2,7 @@
 # Loaded directly via OmegaConf.load by the driver — it is NOT part of the Hydra `main`
 # composition (it holds study / W&B / search-space settings, not training params).
 study:
-  study_name: "mixer_hp_search"
+  study_name: "mixer_hp_search_v2"
   n_trials: 50
   storage_dir: "outputs/hp_search"        # <storage_dir>/<study_name>.db (sqlite) or .log (journal)
   storage_backend: "auto"                 # "auto" (sqlite, fall back to journal) | "sqlite" | "journal"
@@ -10,6 +10,17 @@ study:
   pruner:
     n_startup_trials: 5
     n_warmup_steps: 2
+  # Warm-start this (new, narrower) study's TPE sampler + MedianPruner from a previous study.
+  # Only trials whose params fall inside the CURRENT search_space are imported; out-of-range
+  # trials are filtered out. Import happens once, only when this study is fresh (safe on resume).
+  # To start a warm-started run, give this study a NEW study_name and point study_name below at
+  # the previous one.
+  warm_start:
+    enabled: true
+    study_name: mixer_hp_search # previous study to import from (REQUIRED when enabled)
+    storage_dir: null           # defaults to study.storage_dir
+    storage_backend: "journal"  # defaults to study.storage_backend; must match the previous study
+    include_pruned: true        # also import PRUNED trials (their intermediate values feed the pruner)
 wandb:
   enabled: true
   project: "noisy-eye-scanpath"
@@ -17,10 +28,23 @@ wandb:
   mode: "online"                          # "online" | "offline" | "disabled"
   group: "mixer_hp_search"                # defaults to study_name
 search_space:
-  weight_decay:   {low: 1.0e-5, high: 1.0e-1, log: true}
-  n_encoder:      {low: 2, high: 8}
-  n_decoder:      {low: 2, high: 8}
-  n_eye_decoder:  {low: 2, high: 8}
-  dropouts:       {low: 0.0, high: 0.5}   # applied to each of the 9 dropout keys
-  cls_weight:     {low: 0.05, high: 1.0}
-  dur_weight:     {low: 0.05, high: 1.0}
+  weight_decay:   {low: 1.0e-5, high: 5.0e-4, log: False}
+  n_encoder:      {low: 2, high: 3}
+  n_decoder:      {low: 2, high: 3}
+  n_eye_decoder:  {low: 2, high: 3}
+  # Default dropout range — used for any dropout not overridden in dropout_ranges below.
+  dropouts:       {low: 0.0, high: 0.5}
+  # Per-dropout search ranges (each sampled independently). The trailing comment shows the
+  # value currently in configs/model/mixer_model.yaml so you can narrow around it.
+  dropout_ranges:
+    src_dropout:                 {low: 0.0, high: 0.15}   # current 0.2
+    decoder_dropout:             {low: 0.0, high: 0.2}   # current 0.1
+    eye_encoder_dropout:         {low: 0.3, high: 0.5}   # current 0.1
+    eye_decoder_dropout:         {low: 0.3, high: 0.5}   # current 0.1
+    image_features_dropout:      {low: 0.1, high: 0.2}   # current 0.1
+    dur_head_dropout:            {low: 0.3, high: 0.5}   # current 0.1
+    end_dropout:                 {low: 0.0, high: 0.5}   # current 0.1
+    reg_head_output_dropout:     {low: 0.2, high: 0.4}   # current 0.1
+    denoise_head_output_dropout: {low: 0.0, high: 0.5}   # current 0.1
+  cls_weight:     {low: 0.2, high: 0.5}
+  dur_weight:     {low: 0.1, high: 0.3}

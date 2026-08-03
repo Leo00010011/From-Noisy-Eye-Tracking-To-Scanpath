@@ -320,6 +320,14 @@ py scripts/hp_search.py            # runs/resumes the Optuna study defined in co
   transparently falls back to a SQLAlchemy-free file `JournalStorage` if SQLite/SQLAlchemy is
   broken (common on HPC container images); `sqlite` or `journal` force one explicitly.
 - The W&B API key is expected to already be configured on the node (env var or `~/.netrc`).
+- **Warm-starting a narrower study**: to refine ranges after a first search, give the study a
+  new `study.study_name`, tighten the `search_space`, and set `study.warm_start.enabled: true`
+  with `study.warm_start.study_name: <previous study>`. The driver imports the previous study's
+  trials into the new one — seeding both the TPE sampler and the MedianPruner — keeping only the
+  trials whose parameters still fall inside the new (subset) ranges and dropping the rest so
+  Optuna is never handed an out-of-range observation. The import runs once on a fresh study and
+  is skipped on resume, so re-submitting the job never double-imports. Set
+  `study.warm_start.storage_backend` to match how the previous study was stored (e.g. `journal`).
 
 ## Evaluation
 

@@ -9,12 +9,14 @@ objective to minimise. The study persists to SQLite so a killed HPC job resumes 
 Usage:
     py scripts/hp_search.py
 """
+import math
 import sys
 from pathlib import Path
 
 import hydra
 from omegaconf import OmegaConf, open_dict
 import optuna
+import optuna.distributions as optd
 
 # make `src` importable when run as `py scripts/hp_search.py`
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -47,13 +49,95 @@ def suggest_overrides(trial, search_space):
                       ("model.n_eye_decoder", "n_eye_decoder")):
         rng = space[name]
         ov[key] = trial.suggest_int(name, rng.low, rng.high)
-    d = space.dropouts
+    d_default = space.dropouts
+    d_ranges = space.get("dropout_ranges", None)   # optional per-dropout overrides
     for key in DROPOUT_KEYS:
         pname = key.split(".")[-1]                 # unique Optuna param name per dropout
-        ov[key] = trial.suggest_float(pname, d.low, d.high)
+        rng = d_ranges[pname] if (d_ranges is not None and pname in d_ranges) else d_default
+        ov[key] = trial.suggest_float(pname, rng.low, rng.high)
     ov["loss.cls_weight"] = trial.suggest_float("cls_weight", space.cls_weight.low, space.cls_weight.high)
     ov["loss.dur_weight"] = trial.suggest_float("dur_weight", space.dur_weight.low, space.dur_weight.high)
     return ov
+
+
+def build_search_distributions(space):
+    """Optuna distribution per sampled param, mirroring suggest_overrides' ranges/types.
+
+    Used to warm-start a new (narrower) study from a previous one: it defines the new search
+    space so imported trials can be filtered to what still fits and re-tagged with the new
+    distributions.
+    """
+    dists = {}
+    wd = space.weight_decay
+    dists["weight_decay"] = optd.FloatDistribution(
+        float(wd.low), float(wd.high), log=bool(wd.get("log", False)))
+    for name in ("n_encoder", "n_decoder", "n_eye_decoder"):
+        rng = space[name]
+        dists[name] = optd.IntDistribution(int(rng.low), int(rng.high))
+    d_default = space.dropouts
+    d_ranges = space.get("dropout_ranges", None)
+    for key in DROPOUT_KEYS:
+        pname = key.split(".")[-1]
+        rng = d_ranges[pname] if (d_ranges is not None and pname in d_ranges) else d_default
+        dists[pname] = optd.FloatDistribution(float(rng.low), float(rng.high))
+    for name in ("cls_weight", "dur_weight"):
+        rng = space[name]
+        dists[name] = optd.FloatDistribution(float(rng.low), float(rng.high))
+    return dists
+
+
+def _trial_fits(trial, dists):
+    """True iff the trial carries every param and each value lies inside the new distribution."""
+    for name, dist in dists.items():
+        if name not in trial.params:
+            return False
+        v = trial.params[name]
+        if isinstance(dist, optd.IntDistribution) and not float(v).is_integer():
+            return False
+        if v < dist.low or v > dist.high:
+            return False
+    return True
+
+
+def warm_start_study(new_study, prev_study, dists, include_pruned=True):
+    """Import COMPLETE (and optionally PRUNED) trials from prev_study into new_study, keeping
+    only those whose params fall inside the new distributions. Both the TPE sampler and the
+    MedianPruner read their state from the study's trials, so this warms up both. Trials with
+    any out-of-range param are dropped so Optuna is never handed an observation outside the new
+    space. Returns the number of imported trials."""
+    usable = {optuna.trial.TrialState.COMPLETE}
+    if include_pruned:
+        usable.add(optuna.trial.TrialState.PRUNED)
+    prev_trials = prev_study.get_trials(deepcopy=False)
+    to_add, sk_range, sk_state, err = [], 0, 0, 0
+    for t in prev_trials:
+        if t.state not in usable:
+            sk_state += 1
+            continue
+        if t.state == optuna.trial.TrialState.COMPLETE and (t.value is None or not math.isfinite(t.value)):
+            sk_state += 1
+            continue
+        if not _trial_fits(t, dists):
+            sk_range += 1
+            continue
+        try:
+            ft = optuna.trial.create_trial(
+                state=t.state,
+                value=t.value if t.state == optuna.trial.TrialState.COMPLETE else None,
+                params={n: t.params[n] for n in dists},
+                distributions={n: dists[n] for n in dists},
+                intermediate_values=dict(t.intermediate_values),
+            )
+            to_add.append(ft)
+        except Exception as e:                       # malformed historical trial → skip, keep going
+            err += 1
+            print(f"[hp_search] warm start: skipped a trial ({type(e).__name__}: {e})")
+    if to_add:
+        new_study.add_trials(to_add)
+    print(f"[hp_search] warm start from '{prev_study.study_name}': imported {len(to_add)} "
+          f"(skipped {sk_range} out-of-range, {sk_state} unusable-state, {err} errored) "
+          f"of {len(prev_trials)} previous trials.")
+    return len(to_add)
 
 
 def _fmt(v):
@@ -159,6 +243,42 @@ def make_objective(search_cfg):
     return objective
 
 
+def maybe_warm_start(study, search_cfg):
+    """If study.warm_start.enabled, seed the (fresh) new study from a previous study's trials,
+    filtered to the current search space. No-op when the study already has trials (resume) so a
+    re-submitted job never double-imports. Returns the number of trials imported."""
+    ws = search_cfg.study.get("warm_start", None)
+    if ws is None or not ws.get("enabled", False):
+        return 0
+    existing = len(study.get_trials(deepcopy=False))
+    if existing > 0:
+        print(f"[hp_search] warm start requested but study '{study.study_name}' already has "
+              f"{existing} trials; skipping import (this is a resume).")
+        return 0
+    prev_name = ws.get("study_name", None)
+    if not prev_name:
+        raise ValueError("study.warm_start.enabled is true but study.warm_start.study_name is unset.")
+    prev_dir = REPO_ROOT / (ws.get("storage_dir", None) or search_cfg.study.storage_dir)
+    prev_backend = ws.get("storage_backend", None) or search_cfg.study.get("storage_backend", "auto")
+    same_store = (prev_dir == REPO_ROOT / search_cfg.study.storage_dir
+                  and prev_backend == search_cfg.study.get("storage_backend", "auto"))
+    if prev_name == study.study_name and same_store:
+        raise ValueError("warm_start.study_name must differ from study.study_name (or use a "
+                         "different storage) — importing a study into itself is not allowed.")
+    prev_storage = build_storage(
+        OmegaConf.create({"study_name": prev_name, "storage_backend": prev_backend}), prev_dir)
+    try:
+        prev_study = optuna.load_study(study_name=prev_name, storage=prev_storage)
+    except Exception as e:
+        raise RuntimeError(
+            f"Could not load previous study '{prev_name}' from {prev_dir} "
+            f"(backend={prev_backend}): {e}. Check that warm_start.study_name and "
+            f"warm_start.storage_backend match how the previous study was stored.") from e
+    dists = build_search_distributions(search_cfg.search_space)
+    return warm_start_study(study, prev_study, dists,
+                            include_pruned=bool(ws.get("include_pruned", True)))
+
+
 def main():
     search_cfg = build_search_config()
     study_name = search_cfg.study.study_name
@@ -174,6 +294,8 @@ def main():
         pruner=optuna.pruners.MedianPruner(
             n_startup_trials=pr.n_startup_trials, n_warmup_steps=pr.n_warmup_steps),
     )
+    # Warm-start the sampler + pruner from a previous study (if configured) before optimizing.
+    maybe_warm_start(study, search_cfg)
     # catch=(Exception,) so a single failing trial (e.g. CUDA OOM from a large n_* corner) is
     # recorded FAILED and the study proceeds to the next trial (FR9). optuna handles
     # optuna.TrialPruned separately (→ PRUNED) regardless of `catch`.

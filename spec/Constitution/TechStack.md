@@ -173,6 +173,13 @@ existing training loop:
   `training.wandb.enabled` it logs `train/*` (per epoch) and `val/*` (per validation) to the
   **already-initialised** wandb run (the driver owns `init`/`finish`; `train()` only `finish()`es
   on the prune path). `optuna`/`wandb` are imported lazily so plain `train.py` needs neither.
+- **Warm start**: `maybe_warm_start` (config `study.warm_start.*`) seeds a new, narrower study's
+  TPE sampler + MedianPruner from a previous study's trials. `build_search_distributions` defines
+  the new space; `_trial_fits` filters imported trials to those whose params lie inside it (subset
+  ranges) so Optuna never sees an out-of-range observation; `warm_start_study` rebuilds them as
+  `FrozenTrial`s (COMPLETE + optionally PRUNED, intermediate values preserved) and `add_trials`.
+  Runs once on a fresh study, skipped on resume (no double-import); rejects importing a study into
+  itself.
 - **Storage**: `build_storage` honours `study.storage_backend` — `auto` (default) uses SQLite and
   falls back to a SQLAlchemy-free file `JournalStorage` (`<study_name>.log`) when SQLite/SQLAlchemy
   is broken on the node; `sqlite`/`journal` force one. Both are resumable via `load_if_exists=True`.

@@ -430,6 +430,32 @@ def test_dropout_param_names_distinct():
     assert set(dropout_names).issubset(set(trial.params.keys()))
 
 
+def test_per_dropout_ranges_respected():
+    """A dropout with its own entry in dropout_ranges uses it; others fall back to `dropouts`."""
+    space = OmegaConf.create({
+        "weight_decay": {"low": 1e-5, "high": 1e-1, "log": True},
+        "n_encoder": {"low": 2, "high": 8}, "n_decoder": {"low": 2, "high": 8},
+        "n_eye_decoder": {"low": 2, "high": 8},
+        "dropouts": {"low": 0.0, "high": 0.5},
+        "dropout_ranges": {"src_dropout": {"low": 0.30, "high": 0.31}},
+        "cls_weight": {"low": 0.05, "high": 1.0}, "dur_weight": {"low": 0.05, "high": 1.0},
+    })
+    study = optuna.create_study(sampler=optuna.samplers.TPESampler(seed=0))
+    for _ in range(30):
+        t = study.ask()
+        ov = H.suggest_overrides(t, space)
+        assert 0.30 <= ov["model.src_dropout"] <= 0.31       # narrowed key honoured
+        assert 0.0 <= ov["model.decoder_dropout"] <= 0.5     # falls back to default range
+        study.tell(t, 0.0)
+
+
+def test_config_dropout_ranges_cover_all_keys():
+    """Every dropout in DROPOUT_KEYS has an entry under search_space.dropout_ranges."""
+    sc = H.build_search_config()
+    names = {k.split(".")[-1] for k in H.DROPOUT_KEYS}
+    assert names == set(sc.search_space.dropout_ranges.keys())
+
+
 def test_model_consumes_src_dropout_override():
     from src.model.mixer_model import MixerModel
     try:
@@ -575,6 +601,155 @@ def test_build_storage_sqlite_forced_raises_on_broken_sqlalchemy(tmp_path, monke
     cfg = OmegaConf.create({"study_name": "sf", "storage_backend": "sqlite"})
     with pytest.raises(ImportError):
         H.build_storage(cfg, tmp_path)
+
+
+# ── Warm-start (import a previous study into a narrower one) ───────────────────
+
+import optuna.distributions as optd  # noqa: E402
+
+
+def test_build_search_distributions_types_and_bounds():
+    sc = H.build_search_config()
+    dists = H.build_search_distributions(sc.search_space)
+    assert set(dists.keys()) == {k.split(".")[-1] for k in FR2_KEYS}
+    assert isinstance(dists["n_encoder"], optd.IntDistribution)
+    assert isinstance(dists["weight_decay"], optd.FloatDistribution)
+    assert dists["weight_decay"].log == bool(sc.search_space.weight_decay.get("log", False))
+    # per-dropout range flows through
+    r = sc.search_space.dropout_ranges.src_dropout
+    assert dists["src_dropout"].low == r.low and dists["src_dropout"].high == r.high
+
+
+def test_trial_fits_filters_out_of_range():
+    dists = {"src_dropout": optd.FloatDistribution(0.0, 0.15),
+             "n_encoder": optd.IntDistribution(2, 3)}
+    inside = optuna.trial.create_trial(
+        state=optuna.trial.TrialState.COMPLETE, value=0.1,
+        params={"src_dropout": 0.1, "n_encoder": 3},
+        distributions={"src_dropout": optd.FloatDistribution(0.0, 0.5),
+                       "n_encoder": optd.IntDistribution(2, 8)})
+    outside = optuna.trial.create_trial(
+        state=optuna.trial.TrialState.COMPLETE, value=0.1,
+        params={"src_dropout": 0.4, "n_encoder": 3},   # 0.4 outside [0,0.15]
+        distributions={"src_dropout": optd.FloatDistribution(0.0, 0.5),
+                       "n_encoder": optd.IntDistribution(2, 8)})
+    missing = optuna.trial.create_trial(
+        state=optuna.trial.TrialState.COMPLETE, value=0.1,
+        params={"src_dropout": 0.1},
+        distributions={"src_dropout": optd.FloatDistribution(0.0, 0.5)})
+    assert H._trial_fits(inside, dists)
+    assert not H._trial_fits(outside, dists)
+    assert not H._trial_fits(missing, dists)
+
+
+def _wide_prev_study():
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    study = optuna.create_study(
+        direction="minimize", sampler=optuna.samplers.TPESampler(seed=1),
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=1, n_warmup_steps=0))
+
+    def wide(t):
+        d = t.suggest_float("src_dropout", 0.0, 0.5)
+        x = t.suggest_int("n_encoder", 2, 8)
+        for step in range(3):
+            t.report(d + 0.1 * step, step)
+            if t.should_prune():
+                raise optuna.TrialPruned()
+        return d + 0.01 * x
+    study.optimize(wide, n_trials=15)
+    return study
+
+
+def test_warm_start_imports_only_in_range():
+    prev = _wide_prev_study()
+    dists = {"src_dropout": optd.FloatDistribution(0.0, 0.15),
+             "n_encoder": optd.IntDistribution(2, 3)}
+    new = optuna.create_study(direction="minimize")
+    n = H.warm_start_study(new, prev, dists, include_pruned=True)
+    assert n == len(new.get_trials(deepcopy=False))
+    # every imported trial fits the new (narrow) ranges
+    for t in new.get_trials(deepcopy=False):
+        assert 0.0 <= t.params["src_dropout"] <= 0.15
+        assert 2 <= t.params["n_encoder"] <= 3
+    # nothing out of range slipped through
+    assert n < len(prev.get_trials(deepcopy=False))
+
+
+def test_warm_start_excludes_pruned_when_disabled():
+    prev = _wide_prev_study()
+    dists = {"src_dropout": optd.FloatDistribution(0.0, 0.5),
+             "n_encoder": optd.IntDistribution(2, 8)}
+    new = optuna.create_study(direction="minimize")
+    H.warm_start_study(new, prev, dists, include_pruned=False)
+    assert all(t.state == optuna.trial.TrialState.COMPLETE
+               for t in new.get_trials(deepcopy=False))
+
+
+def _warm_cfg(tmp_path, new_name, prev_name, enabled=True):
+    sc = OmegaConf.create(OmegaConf.to_container(H.build_search_config(), resolve=True))
+    sc.study.study_name = new_name
+    sc.study.storage_dir = str(tmp_path)
+    sc.study.storage_backend = "sqlite"
+    sc.study.warm_start = {"enabled": enabled, "study_name": prev_name,
+                           "storage_dir": None, "storage_backend": None, "include_pruned": True}
+    return sc
+
+
+def test_maybe_warm_start_end_to_end(tmp_path):
+    # previous WIDE study persisted to sqlite in tmp_path
+    prev_storage = H.build_storage(
+        OmegaConf.create({"study_name": "prev", "storage_backend": "sqlite"}), tmp_path)
+    prev = optuna.create_study(study_name="prev", direction="minimize", storage=prev_storage,
+                               sampler=optuna.samplers.TPESampler(seed=1))
+
+    def wide(t):
+        d = t.suggest_float("src_dropout", 0.0, 0.5)
+        for name in ("decoder_dropout", "eye_encoder_dropout", "eye_decoder_dropout",
+                     "image_features_dropout", "dur_head_dropout", "end_dropout",
+                     "reg_head_output_dropout", "denoise_head_output_dropout"):
+            t.suggest_float(name, 0.0, 0.5)
+        t.suggest_int("n_encoder", 2, 8); t.suggest_int("n_decoder", 2, 8)
+        t.suggest_int("n_eye_decoder", 2, 8)
+        t.suggest_float("weight_decay", 1e-5, 1e-1)
+        t.suggest_float("cls_weight", 0.05, 1.0); t.suggest_float("dur_weight", 0.05, 1.0)
+        return d
+    prev.optimize(wide, n_trials=8)
+
+    sc = _warm_cfg(tmp_path, new_name="new", prev_name="prev")
+    new_storage = H.build_storage(sc.study, REPO_ROOT / sc.study.storage_dir
+                                  if not Path(sc.study.storage_dir).is_absolute()
+                                  else Path(sc.study.storage_dir))
+    new = optuna.create_study(study_name="new", direction="minimize", storage=new_storage,
+                              load_if_exists=True, sampler=optuna.samplers.TPESampler(seed=2))
+    imported = H.maybe_warm_start(new, sc)
+    assert imported == len(new.get_trials(deepcopy=False))
+    assert imported >= 0
+    # resume guard: a second call on the now-non-empty study imports nothing
+    again = H.maybe_warm_start(new, sc)
+    assert again == 0
+
+
+def test_maybe_warm_start_disabled_is_noop():
+    sc = H.build_search_config()
+    # no warm_start block present after resolve? build a minimal cfg with disabled
+    cfg = OmegaConf.create({"study": {"study_name": "x", "storage_dir": "outputs/hp_search",
+                                      "storage_backend": "auto",
+                                      "warm_start": {"enabled": False}},
+                            "search_space": sc.search_space})
+    study = optuna.create_study(direction="minimize")
+    assert H.maybe_warm_start(study, cfg) == 0
+
+
+def test_maybe_warm_start_rejects_self_import():
+    sc = H.build_search_config()
+    cfg = OmegaConf.create({"study": {"study_name": "same", "storage_dir": "outputs/hp_search",
+                                      "storage_backend": "auto",
+                                      "warm_start": {"enabled": True, "study_name": "same",
+                                                     "storage_dir": None, "storage_backend": None}},
+                            "search_space": sc.search_space})
+    study = optuna.create_study(study_name="same", direction="minimize")
+    with pytest.raises(ValueError):
+        H.maybe_warm_start(study, cfg)
 
 
 def test_config_snapshot_roundtrip(tmp_path):
