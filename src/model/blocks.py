@@ -98,7 +98,12 @@ class MultiHeadedAttention(nn.Module):
         self.scale = 1.0 / (self.head_dim ** 0.5)
         self.use_kv_cache = use_kv_cache
         self.kv_cache = None
-        
+        # Cross-attention only: reuse the projected memory K/V across several forward passes that
+        # share the same (loop-invariant) memory tensor — see `enable_memory_kv_cache`. Kept
+        # separate from `use_kv_cache` because that flag also switches self-attention into
+        # incremental single-token mode, which is an inference-only contract.
+        self.cache_memory_kv = False
+
         if is_self_attention:
             self.proj_in = nn.Linear(model_dim,total_dim*3, bias = False, **factory_kwargs)
         else:
@@ -108,11 +113,28 @@ class MultiHeadedAttention(nn.Module):
         
     def clear_kv_cache(self):
         self.kv_cache = None
-    
+
     def disable_kv_cache(self):
         self.kv_cache = None
         self.use_kv_cache = False
-    
+
+    def enable_memory_kv_cache(self):
+        """Cache the projected memory K/V for cross-attention (no-op for self-attention).
+
+        Valid only while the memory tensor is unchanged; the cached entry keeps its autograd
+        graph, so it must be released with `disable_memory_kv_cache` before the next batch.
+        """
+        if not self.is_self_attention:
+            self.cache_memory_kv = True
+            self.kv_cache = None
+
+    def disable_memory_kv_cache(self):
+        if not self.is_self_attention:
+            self.cache_memory_kv = False
+            if not self.use_kv_cache:
+                self.kv_cache = None
+
+
     def forward(self,query:torch.Tensor,
                      key :torch.Tensor = None,
                      attn_mask :torch.Tensor= None,
@@ -128,7 +150,7 @@ class MultiHeadedAttention(nn.Module):
             if self.kv_cache is None:
                 result = self.proj_kv(key)
                 key, value = torch.chunk(result, 2,dim = -1)
-                if self.use_kv_cache:
+                if self.use_kv_cache or self.cache_memory_kv:
                     self.kv_cache = (key, value)
             else:
                 key = self.kv_cache[0]
@@ -368,7 +390,16 @@ class DoubleInputDecoder(nn.Module):
         self.self_attn.disable_kv_cache()
         self.first_cross_attn.disable_kv_cache()
         self.second_cross_attn.disable_kv_cache()
-    
+
+    def enable_memory_kv_cache(self):
+        """Reuse the projected mem1/mem2 K/V across repeated calls with the same memories."""
+        self.first_cross_attn.enable_memory_kv_cache()
+        self.second_cross_attn.enable_memory_kv_cache()
+
+    def disable_memory_kv_cache(self):
+        self.first_cross_attn.disable_memory_kv_cache()
+        self.second_cross_attn.disable_memory_kv_cache()
+
     def forward(self, src,
                       mem1,
                       mem2,
@@ -678,8 +709,28 @@ class DeformableAttention(nn.Module):
         self.output_proj = nn.Linear(embed_dim, embed_dim, **factory_kwargs)
         
         self.dropout = nn.Dropout(dropout)
-        
+
+        # See MultiHeadedAttention.enable_memory_kv_cache — the projected value map depends only
+        # on `value`, so it can be reused across forward passes that share the same memory.
+        self.cache_memory_kv = False
+        self.value_cache = None
+
         self._reset_parameters()
+
+    def clear_kv_cache(self):
+        self.value_cache = None
+
+    def disable_kv_cache(self):
+        self.value_cache = None
+        self.cache_memory_kv = False
+
+    def enable_memory_kv_cache(self):
+        self.cache_memory_kv = True
+        self.value_cache = None
+
+    def disable_memory_kv_cache(self):
+        self.cache_memory_kv = False
+        self.value_cache = None
 
     def _reset_parameters(self):
         # Initialize offsets to 0
@@ -719,9 +770,14 @@ class DeformableAttention(nn.Module):
         H, W = spatial_shape
         # 1. Project Input Features
         # (Batch, H*W, Head, Head_Dim) -> (Batch, Head, Head_Dim, H, W)
-        value = self.value_proj(value)
-        value = value.view(bs, H * W, self.num_heads, self.head_dim)
-        value = value.permute(0, 2, 3, 1).view(bs, self.num_heads, self.head_dim, H, W)
+        if self.value_cache is not None:
+            value = self.value_cache
+        else:
+            value = self.value_proj(value)
+            value = value.view(bs, H * W, self.num_heads, self.head_dim)
+            value = value.permute(0, 2, 3, 1).view(bs, self.num_heads, self.head_dim, H, W)
+            if self.cache_memory_kv:
+                self.value_cache = value
         
         # 2. Generate Offsets and Attention Weights
         # Offsets: (Batch, Num_Queries, Heads, Points, 2)
@@ -972,7 +1028,16 @@ class DeformableDoubleInputDecoder(nn.Module):
         self.self_attn.disable_kv_cache()
         self.first_cross_attn.disable_kv_cache()
         self.second_cross_attn.disable_kv_cache()
-    
+
+    def enable_memory_kv_cache(self):
+        """Reuse the projected mem1 K/V and the mem2 deformable value map across repeated calls."""
+        self.first_cross_attn.enable_memory_kv_cache()
+        self.second_cross_attn.enable_memory_kv_cache()
+
+    def disable_memory_kv_cache(self):
+        self.first_cross_attn.disable_memory_kv_cache()
+        self.second_cross_attn.disable_memory_kv_cache()
+
     def forward(self, src,
                       mem1,
                       mem2,

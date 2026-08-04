@@ -557,6 +557,22 @@ class MixerModel(nn.Module):
         for mod in self.decoder:
             mod.disable_kv_cache()
 
+    def enable_memory_kv_cache(self):
+        """Let the fixation decoder reuse the projected encoder/image memories.
+
+        `decode_fixation` reads both memories from `self.src` / `self.image_src`, which are fixed
+        between two `encode` calls. Scheduled sampling calls it once per decode step, so without
+        this every layer re-projects the same memory tensors N times and keeps all N copies alive
+        for the backward pass. Must be paired with `disable_memory_kv_cache` once the memories
+        change (i.e. before the next `encode`), otherwise stale graphs are reused.
+        """
+        for mod in self.decoder:
+            mod.enable_memory_kv_cache()
+
+    def disable_memory_kv_cache(self):
+        for mod in self.decoder:
+            mod.disable_memory_kv_cache()
+
     def param_summary(self):
         summ = f"""MixerModel Summary:
         Number of Encoder Layers: {self.n_encoder}
@@ -722,11 +738,10 @@ class MixerModel(nn.Module):
             if self.n_eye_decoder > 0:
                 
                 for mod in self.eye_decoder:
-                    for mod in self.eye_decoder:
-                        if self.use_deformable_eye_decoder:
-                            src = mod(src, image_src, src_mask, reference_points = src_coords)
-                        else:   
-                            src = mod(src, image_src, src_mask, None)
+                    if self.use_deformable_eye_decoder:
+                        src = mod(src, image_src, src_mask, reference_points = src_coords)
+                    else:
+                        src = mod(src, image_src, src_mask, None)
                 if self.norm_first:
                     src = self.final_fenh_norm_src(src)
                 
@@ -872,8 +887,11 @@ class MixerModel(nn.Module):
         self.scheduled_sampling = scheduled_sampling
         self.scheduled_sampling.set_model(self)
         
-    def forward(self, **kwargs):
+    def forward(self, skip_denoise = False, **kwargs):
         # src, tgt shape (B,L,F)
+        # `skip_denoise` drops the denoise branch of the Combined phase for this call. It is set
+        # by ScheduledSampling, which runs the denoise head once outside its decode loop (the
+        # head reads only the loop-invariant encoder output).
         if self.scheduled_sampling is not None and ('pass_sampler' not in kwargs or kwargs['pass_sampler'] is False) and self.scheduled_sampling.get_current_ratio() > 0:
             return self.scheduled_sampling(**kwargs)
         if 'pass_sampler' not in kwargs or kwargs['pass_sampler'] is False:
@@ -883,7 +901,7 @@ class MixerModel(nn.Module):
         elif self.phase == 'Fixation':
             return self.decode_fixation(**kwargs)
         elif self.phase == 'Combined':
-            denoise_output = self.decode_denoise(**kwargs)  
+            denoise_output = {} if skip_denoise else self.decode_denoise(**kwargs)
             fixation_output = self.decode_fixation(**kwargs)
             return {**denoise_output, **fixation_output}
         return self.decode_fixation(**kwargs)

@@ -356,27 +356,44 @@ class ScheduledSampling:
         input['tgt'] = None
         input['tgt_mask'] = None
         self.model.encode(**input)
+        # The denoise head reads only the encoder output, which `encode` just fixed for the whole
+        # loop. Running it once here instead of once per decode step avoids keeping N identical
+        # copies (and their graphs) alive — `get_final_output` discarded all but the last anyway.
+        denoise_output = {}
+        if getattr(self.model, 'phase', None) == 'Combined':
+            denoise_output = self.model.decode_denoise(**input)
+            input['skip_denoise'] = True
+        # Same argument for the decoder's cross-attention memories: `src` and `image_src` do not
+        # change between decode steps, so their projections are computed once and reused.
+        has_memory_cache = hasattr(self.model, 'enable_memory_kv_cache')
+        if has_memory_cache:
+            self.model.enable_memory_kv_cache()
         t = 0
         final_output = []
         has_to_eval = True
-        while t < seq_len or has_to_eval:
-            has_to_eval = False
-            output = self.model(**input) 
-            final_output.append(self.get_latest_output(output))
-            if t == seq_len - 1:
-                break
-            reg = concat_reg(output)
-            current_step_pred = reg[:, -1:, :] 
-            if (torch.rand(1).item() < use_model_prob) or not self.model.training:
-                next_token = current_step_pred.detach()
-            else:
-                next_token = ori_tgt[:, t, :].unsqueeze(1)
-                
-            if input['tgt'] is None or self.use_kv_cache:
-                input['tgt'] = next_token
-            else:
-                input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
-            t += 1     
+        try:
+            while t < seq_len or has_to_eval:
+                has_to_eval = False
+                output = self.model(**input)
+                final_output.append(self.get_latest_output(output))
+                if t == seq_len - 1:
+                    break
+                reg = concat_reg(output)
+                current_step_pred = reg[:, -1:, :]
+                if (torch.rand(1).item() < use_model_prob) or not self.model.training:
+                    next_token = current_step_pred.detach()
+                else:
+                    next_token = ori_tgt[:, t, :].unsqueeze(1)
+
+                if input['tgt'] is None or self.use_kv_cache:
+                    input['tgt'] = next_token
+                else:
+                    input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
+                t += 1
+        finally:
+            # Release the cached memories (and the graphs they hold) before the next batch.
+            if has_memory_cache:
+                self.model.disable_memory_kv_cache()
         if self.use_kv_cache:
             self.model.clear_kv_cache()
         input['tgt_mask'] = tgt_mask
@@ -384,7 +401,7 @@ class ScheduledSampling:
         if 'in_tgt' in input:
             input['in_tgt'] = ori_tgt
         output = self.get_final_output(final_output)
-        return output
+        return {**denoise_output, **output}
 
 def get_cosine_schedule_alphas_bar(num_steps, s=0.008):
     steps = np.linspace(0, num_steps, num_steps)
