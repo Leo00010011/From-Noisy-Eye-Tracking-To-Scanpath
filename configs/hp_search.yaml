@@ -2,7 +2,7 @@
 # Loaded directly via OmegaConf.load by the driver — it is NOT part of the Hydra `main`
 # composition (it holds study / W&B / search-space settings, not training params).
 study:
-  study_name: "mixer_hp_search_v2"
+  study_name: "mixer_hp_search_v3"
   n_trials: 50
   storage_dir: "outputs/hp_search"        # <storage_dir>/<study_name>.db (sqlite) or .log (journal)
   storage_backend: "auto"                 # "auto" (sqlite, fall back to journal) | "sqlite" | "journal"

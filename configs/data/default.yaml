@@ -5,7 +5,7 @@ defaults:
 load:
   batch_size: 128
   use_img_dataset: True
-  num_workers: 4
+  num_workers: 2
   persistent_workers: True
   prefetch_factor: 2
   downsample_int: 33
