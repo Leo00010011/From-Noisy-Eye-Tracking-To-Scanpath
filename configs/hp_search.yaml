@@ -29,9 +29,9 @@ wandb:
   group: "mixer_hp_search"                # defaults to study_name
 search_space:
   weight_decay:   {low: 1.0e-5, high: 5.0e-4, log: False}
-  n_encoder:      {low: 2, high: 3}
-  n_decoder:      {low: 2, high: 3}
-  n_eye_decoder:  {low: 2, high: 3}
+  n_encoder:      {low: 2, high: 6}
+  n_decoder:      {low: 2, high: 6}
+  n_eye_decoder:  {low: 2, high: 6}
   # Default dropout range — used for any dropout not overridden in dropout_ranges below.
   dropouts:       {low: 0.0, high: 0.5}
   # Per-dropout search ranges (each sampled independently). The trailing comment shows the
