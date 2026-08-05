@@ -42,6 +42,6 @@ echo "Moving to project"
 cd projects/From-Noisy-Eye-Tracking-To-Scanpath/
 
 echo "STARTING TRAINING"
-py train.py exp=final_c41 scheduled_sampling.warmup_epochs=20 training.wandb.name=c41_w20_mp085
+python train.py exp=final_c41 scheduled_sampling.warmup_epochs=20 training.wandb.name=c41_w20_mp085
 
 echo "Finished debug at: $(date)"

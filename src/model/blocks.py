@@ -739,7 +739,10 @@ class DeformableAttention(nn.Module):
         # Grid Init: Initialize bias to the "Star Pattern"
         thetas = torch.arange(self.num_heads, dtype=self.dtype, device=self.device) * (2.0 * math.pi / self.num_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1) # (Heads, 2)
-        
+        # Normalize so each head's dominant axis has unit magnitude (Deformable-DETR). Point i then
+        # sits exactly i+1 feature cells away along that axis, instead of i+1 along the diagonal.
+        grid_init = grid_init / grid_init.abs().max(-1, keepdim=True)[0]
+
         # (Heads, Points, 2)
         grid_init = grid_init.unsqueeze(1).repeat(1, self.num_points, 1) 
         

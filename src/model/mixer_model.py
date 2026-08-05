@@ -472,45 +472,26 @@ class MixerModel(nn.Module):
             self.denoise_modules.append(self.denoise_head)
 
     def get_parameter_groups(self, lr):
-        if self.use_deformable_eye_decoder:
-            param_dicts = [
-            {
-                "params": [
-                    p for n, p in self.named_parameters() 
-                    if ("sampling_offsets" not in n 
-                        and "image_encoder" not in n 
-                        and p.requires_grad)
-                ],
-                "lr": lr,  # Standard LR (e.g., 1e-4)
-            },
-            {
-                "params": [
-                    p for n, p in self.named_parameters() 
-                    if "sampling_offsets" in n and p.requires_grad
-                ],
-                "lr": lr * 10,  # 10x larger LR (e.g., 1e-3)
-            },
-            # {
-            #     "params": [
-            #         p for n, p in self.named_parameters() 
-            #         if "image_encoder" in n and p.requires_grad
-            #     ],
-            #     "lr": lr * 0.1,  # 0.1x smaller LR (e.g., 1e-4)
-            # }
-            ]
-            # print("DINO PARAMS")
-            # if len(param_dicts[2]["params"]) > 0:
-            #     print("DINO PARAMS FOUND")
-        else:
-            param_dicts = [
-                {
-                    "params": [
-                        p for n, p in self.named_parameters() 
-                        if p.requires_grad
-                    ],
-                    "lr": lr,  # Standard LR (e.g., 1e-4)
-                },
-            ]
+        # The deformable sampling offsets need a 10x LR to move at all (their weight is zero-init
+        # and the grid_sample gradient through them is small). Gate on either decoder: the eye
+        # decoder and the fixation decoder each own an independent set of `sampling_offsets`, so
+        # keying off `use_deformable_eye_decoder` alone silently left the fixation decoder's
+        # offsets at the standard LR whenever only that one was enabled.
+        # A frozen image encoder is already excluded by `requires_grad`; filtering it by name as
+        # well would drop it from the optimizer even when `image_encoder.freeze=False`.
+        uses_deformable = self.use_deformable_eye_decoder or self.use_deformable_fixation_decoder
+        standard, offsets = [], []
+        for n, p in self.named_parameters():
+            if not p.requires_grad:
+                continue
+            if uses_deformable and "sampling_offsets" in n:
+                offsets.append(p)
+            else:
+                standard.append(p)
+
+        param_dicts = [{"params": standard, "lr": lr}]
+        if offsets:
+            param_dicts.append({"params": offsets, "lr": lr * 10})
         return param_dicts
 
     def get_key_name(self, model, module_list):
