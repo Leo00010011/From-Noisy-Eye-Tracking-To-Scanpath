@@ -1,0 +1,50 @@
+{
+  "n_decoder": {
+    "value": 3
+  },
+  "n_encoder": {
+    "value": 3
+  },
+  "cls_weight": {
+    "value": 0.12767108035142832
+  },
+  "dur_weight": {
+    "value": 0.8798996929014383
+  },
+  "end_dropout": {
+    "value": 0.019656069920549468
+  },
+  "src_dropout": {
+    "value": 0.060317935550300406
+  },
+  "trial_number": {
+    "value": 42
+  },
+  "weight_decay": {
+    "value": 0.00004739584301027366
+  },
+  "n_eye_decoder": {
+    "value": 2
+  },
+  "decoder_dropout": {
+    "value": 0.23038938401636289
+  },
+  "dur_head_dropout": {
+    "value": 0.34519741431468265
+  },
+  "eye_decoder_dropout": {
+    "value": 0.18213493052403773
+  },
+  "eye_encoder_dropout": {
+    "value": 0.10316685920289624
+  },
+  "image_features_dropout": {
+    "value": 0.25170863542742844
+  },
+  "reg_head_output_dropout": {
+    "value": 0.3997051994545213
+  },
+  "denoise_head_output_dropout": {
+    "value": 0.3139501947454539
+  }
+}

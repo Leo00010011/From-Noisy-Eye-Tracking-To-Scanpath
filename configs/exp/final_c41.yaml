@@ -1,0 +1,63 @@
+# @package _global_
+# Final Training — best HP-search config #41 (Optuna trial 41).
+# Full-budget, Combined-only, from-scratch recipe. Reports to W&B group "final training".
+#
+# Round 1 (this file, defaults below): max_prob=0.85, sweep scheduled_sampling.warmup_epochs.
+#   py train.py exp=final_c41 scheduled_sampling.warmup_epochs=20 training.wandb.name=c41_w20_mp085
+#   py train.py exp=final_c41 scheduled_sampling.warmup_epochs=50 training.wandb.name=c41_w50_mp085
+# Round 2 (winner only): flip max_prob to 1.0, e.g.
+#   py train.py exp=final_c41 scheduled_sampling.warmup_epochs=<best> scheduled_sampling.max_prob=1.0 training.wandb.name=c41_w<best>_mp10
+#
+# Invariants (E == training.Combined.epochs == 430):
+#   scheduler.warmup_steps + stable_steps + decay_steps == 430
+#   scheduled_sampling.warmup_epochs + active_epochs      <= 430
+training:
+  decisive_metric: "reg_error_val"
+  pretrained_model: null
+  use_scheduled_sampling: true
+  Phases: ["Combined"]
+  num_epochs: 430                # E — keeps the one_cycle path consistent if ever used
+  val_interval: 5
+  weight_decay: 0.00009132348475718357   # trial 41
+  Combined:
+    name: "Combined"
+    denoise_weight: 0
+    decisive_metric: ${training.decisive_metric}
+    epochs: 430                  # E
+  wandb:
+    enabled: true
+    project: "noisy-eye-scanpath"
+    entity: null
+    mode: "online"
+    group: "final training"
+    name: null                   # set per run on the CLI, e.g. training.wandb.name=c41_w20_mp085
+
+model:
+  pretrained_encoder_path: null  # Combined from scratch (matches HP search)
+  # --- trial 41 architecture + dropouts ---
+  n_encoder: 2
+  n_decoder: 2
+  n_eye_decoder: 2
+  src_dropout: 0.07595134675614718
+  decoder_dropout: 0.06941358632470507
+  eye_encoder_dropout: 0.3204373724016073
+  eye_decoder_dropout: 0.0909400421995724
+  image_features_dropout: 0.1728336416619316
+  dur_head_dropout: 0.4483942049530059
+  end_dropout: 0.23698082013143615
+  reg_head_output_dropout: 0.3337788692605136
+  denoise_head_output_dropout: 0.08615993560081492
+
+loss:
+  cls_weight: 0.2326745678682372   # trial 41
+  dur_weight: 0.08882518545315493  # trial 41
+
+scheduler:
+  warmup_steps: 30                 # 30 + 380 + 20 == 430 == E
+  stable_steps: 380
+  decay_steps: 20
+
+scheduled_sampling:
+  warmup_epochs: 20                # overridden per run: {20, 50}
+  active_epochs: 50                # 50 + 50 == 100 <= 430
+  max_prob: 0.85                   # round 1; round 2 winner uses 1.0
