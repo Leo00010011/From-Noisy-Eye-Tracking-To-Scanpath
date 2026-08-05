@@ -986,7 +986,7 @@ class DeformableDoubleInputDecoder(nn.Module):
         self.second_cross_attn = DeformableAttention(embed_dim=model_dim,
                                                     num_heads=n_heads,
                                                     num_points=num_points,
-                                                    dropout= dropout_p,
+                                                    dropout= 0,
                                             **factory_kwargs)
         self.second_cross_attn_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
         self.second_cross_attn_dropout = nn.Dropout(dropout_p)
