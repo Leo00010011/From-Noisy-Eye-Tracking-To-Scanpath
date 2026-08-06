@@ -23,7 +23,7 @@ class TinyRecorderModel(torch.nn.Module):
             embed_dim=4,
             num_heads=2,
             num_points=2,
-            dropout=0.0,
+            attn_dropout=0.0,
         )
 
     def forward(self):

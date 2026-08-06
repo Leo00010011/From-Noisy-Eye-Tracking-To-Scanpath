@@ -23,6 +23,12 @@ decoder_dropout: 0.1
 use_deformable_eye_decoder: True
 use_deformable_fixation_decoder: True
 geometric_sigma: 0
+# Dropout on the post-softmax deformable sampling weights, separate from the residual-branch
+# dropout (`decoder_dropout` / `eye_decoder_dropout`) applied to the block's output.
+decoder_attn_dropout: 0
+eye_decoder_attn_dropout: 0
+# False => raw unit-circle star pattern for the initial sampling offsets (pre-4295f5b behaviour).
+normalize_grid_init: True
 eye_encoder_dropout: 0.1
 eye_decoder_dropout: 0.1
 reg_head_dropout: 0

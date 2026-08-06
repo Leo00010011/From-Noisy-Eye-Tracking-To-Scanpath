@@ -62,6 +62,9 @@ class MixerModel(nn.Module):
                        geometric_sigma = 0,
                        denoise_head_output_dropout = 0,
                        decoder_dropout = 0,
+                       decoder_attn_dropout = 0,
+                       eye_decoder_attn_dropout = 0,
+                       normalize_grid_init = True,
                        n_adapter = 0,
                        pred_dur_pdf = 0,
                        n_eye_decoder = 0,
@@ -119,6 +122,9 @@ class MixerModel(nn.Module):
         self.add_denoise_head = add_denoise_head
         self.use_deformable_eye_decoder = use_deformable_eye_decoder
         self.decoder_dropout = decoder_dropout
+        self.decoder_attn_dropout = decoder_attn_dropout
+        self.eye_decoder_attn_dropout = eye_decoder_attn_dropout
+        self.normalize_grid_init = normalize_grid_init
         self.geometric_sigma = geometric_sigma
         self.reg_head_output_dropout = reg_head_output_dropout
         self.use_deformable_fixation_decoder = use_deformable_fixation_decoder
@@ -282,6 +288,8 @@ class MixerModel(nn.Module):
                                                 ff_dim = ff_dim,
                                                 dropout_p = eye_decoder_dropout,
                                                 geometric_sigma = self.geometric_sigma,
+                                                attn_dropout = self.eye_decoder_attn_dropout,
+                                                normalize_grid_init = self.normalize_grid_init,
                                                 activation= activation,
                                                 norm_first= norm_first,
                                                 num_points = 4,
@@ -312,6 +320,8 @@ class MixerModel(nn.Module):
                                            n_heads = n_heads,
                                            ff_dim = ff_dim,
                                            dropout_p = self.decoder_dropout,
+                                           attn_dropout = self.decoder_attn_dropout,
+                                           normalize_grid_init = self.normalize_grid_init,
                                            activation= activation,
                                            norm_first= norm_first,
                                            use_kv_cache = use_kv_cache,

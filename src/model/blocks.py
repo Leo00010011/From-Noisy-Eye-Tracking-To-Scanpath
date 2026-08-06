@@ -678,8 +678,9 @@ class DeformableAttention(nn.Module):
         embed_dim=256,
         num_heads=8,
         num_points=4,
-        dropout=0.1,
+        attn_dropout=0.0,
         geometric_sigma = 0,
+        normalize_grid_init = True,
         device = 'cpu',
         dtype = torch.float32
     ):
@@ -695,8 +696,13 @@ class DeformableAttention(nn.Module):
         self.num_points = num_points
         self.head_dim = embed_dim // num_heads
         self.geometric_sigma = geometric_sigma
+        # Dropout on the post-softmax sampling weights. Distinct from the residual-branch dropout
+        # the enclosing decoder applies to this module's *output* — keep it explicit so the two are
+        # never conflated (they were, silently, before the fix in bf92d75).
+        self.attn_dropout_p = attn_dropout
+        self.normalize_grid_init = normalize_grid_init
 
-        # 1. Sampling Offsets: 
+        # 1. Sampling Offsets:
         # Output dim: num_heads * num_points * 2 (x, y)
         self.sampling_offsets = nn.Linear(embed_dim, num_heads * num_points * 2, **factory_kwargs)
         
@@ -708,7 +714,7 @@ class DeformableAttention(nn.Module):
         self.value_proj = nn.Linear(embed_dim, embed_dim, **factory_kwargs)
         self.output_proj = nn.Linear(embed_dim, embed_dim, **factory_kwargs)
         
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(attn_dropout)
 
         # See MultiHeadedAttention.enable_memory_kv_cache — the projected value map depends only
         # on `value`, so it can be reused across forward passes that share the same memory.
@@ -741,7 +747,10 @@ class DeformableAttention(nn.Module):
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1) # (Heads, 2)
         # Normalize so each head's dominant axis has unit magnitude (Deformable-DETR). Point i then
         # sits exactly i+1 feature cells away along that axis, instead of i+1 along the diagonal.
-        grid_init = grid_init / grid_init.abs().max(-1, keepdim=True)[0]
+        # Off => the raw unit-circle star pattern (shorter diagonal-head offsets, tighter initial
+        # receptive field); this is what the HP search trials were trained with.
+        if self.normalize_grid_init:
+            grid_init = grid_init / grid_init.abs().max(-1, keepdim=True)[0]
 
         # (Heads, Points, 2)
         grid_init = grid_init.unsqueeze(1).repeat(1, self.num_points, 1) 
@@ -865,6 +874,8 @@ class DeformableDecoder(nn.Module):
                       num_points = 4,
                       spatial_shape = (16, 16),
                       geometric_sigma = 0,
+                      attn_dropout = 0.0,
+                      normalize_grid_init = True,
                       device = 'cpu',
                       dtype = torch.float32):
         super().__init__()
@@ -892,7 +903,8 @@ class DeformableDecoder(nn.Module):
                                             num_heads=n_heads,
                                             num_points=num_points,
                                             geometric_sigma=geometric_sigma,
-                                            dropout= 0,
+                                            attn_dropout= attn_dropout,
+                                            normalize_grid_init= normalize_grid_init,
                                             **factory_kwargs)
         self.norm2 = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
         self.dropout2 = nn.Dropout(dropout_p)
@@ -949,6 +961,8 @@ class DeformableDoubleInputDecoder(nn.Module):
                       use_kv_cache = False,
                       spatial_shape = (16, 16),
                       num_points = 4,
+                      attn_dropout = 0.0,
+                      normalize_grid_init = True,
                       device = 'cpu',
                       dtype = torch.float32):
         super().__init__()
@@ -989,7 +1003,8 @@ class DeformableDoubleInputDecoder(nn.Module):
         self.second_cross_attn = DeformableAttention(embed_dim=model_dim,
                                                     num_heads=n_heads,
                                                     num_points=num_points,
-                                                    dropout= 0,
+                                                    attn_dropout= attn_dropout,
+                                                    normalize_grid_init= normalize_grid_init,
                                             **factory_kwargs)
         self.second_cross_attn_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
         self.second_cross_attn_dropout = nn.Dropout(dropout_p)
