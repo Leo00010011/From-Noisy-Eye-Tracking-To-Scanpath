@@ -53,11 +53,11 @@ loss:
   dur_weight: 0.08882518545315493  # trial 41
 
 scheduler:
-  warmup_steps: 30                 # 30 + 380 + 20 == 430 == E
-  stable_steps: 380
-  decay_steps: 20
+  warmup_steps: 5                 # 30 + 380 + 20 == 430 == E
+  stable_steps: 200
+  decay_steps: 100
 
 scheduled_sampling:
-  warmup_epochs: 20                # overridden per run: {20, 50}
-  active_epochs: 50                # 50 + 50 == 100 <= 430
+  warmup_epochs: 5                # overridden per run: {20, 50}
+  active_epochs: 25                # 50 + 50 == 100 <= 430
   max_prob: 0.85                   # round 1; round 2 winner uses 1.0
