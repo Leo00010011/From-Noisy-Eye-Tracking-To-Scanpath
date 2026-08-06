@@ -55,7 +55,7 @@ model:
   # Both are now explicit knobs; these values reproduce the code trial 41 was searched on.
   decoder_attn_dropout: 0.06941358632470507   # == decoder_dropout, as the pre-bf92d75 code did
   eye_decoder_attn_dropout: 0                 # eye decoder always passed 0 — unchanged
-  normalize_grid_init: true                  # pre-4295f5b offset init
+  normalize_grid_init: false                  # pre-4295f5b offset init
 
 loss:
   cls_weight: 0.2326745678682372   # trial 41
