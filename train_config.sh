@@ -50,6 +50,6 @@ export WANDB_API_KEY="$(cat ~/.wandb_api_key)"
 #   export WANDB_MODE=offline
 
 echo "STARTING TRAINING"
-python train.py exp=final_c41 scheduled_sampling.warmup_epochs=20 training.wandb.name=c41_w20_mp085_v2
+python train.py exp=final_c41 scheduled_sampling.warmup_epochs=20 training.wandb.name=c41_w05_mp085_v3
 
 echo "Finished debug at: $(date)"
