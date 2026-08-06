@@ -64,8 +64,13 @@ loss:
 scheduler:
   # Matches trial 41 (warmup 5) for the first 30 epochs, then holds peak LR far longer before a
   # long decay instead of trial 41's 10-epoch decay at E=40.
-  warmup_steps: 5                  # 5 + 325 + 100 == 430 == E
-  stable_steps: 325
+  # NOTE: 5 + 200 + 100 == 305 < E == 430 is DELIBERATE, not a broken invariant. Training stalls
+  # quickly at the peak LR, so the schedule is front-loaded and the remaining 125 epochs run at
+  # min_lr. WarmupStableDecayScheduler caps `decay_step` at `decay_steps`, so past step 305 the
+  # cosine term is exactly 0 and the LR sits flat at min_lr — verified, no wrap-around.
+  # Do not "fix" the sum to 430; that would extend the peak-LR phase and change the run.
+  warmup_steps: 5
+  stable_steps: 200
   decay_steps: 100
 
 scheduled_sampling:
