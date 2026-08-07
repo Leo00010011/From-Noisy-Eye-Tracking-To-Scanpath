@@ -17,7 +17,7 @@ training:
   pretrained_model: null
   use_scheduled_sampling: true
   Phases: ["Combined"]
-  num_epochs: 430                # E — keeps the one_cycle path consistent if ever used
+  num_epochs: 330                # E — keeps the one_cycle path consistent if ever used
   val_interval: 5
   weight_decay: 0.00009132348475718357   # trial 41
   Combined:
@@ -70,12 +70,12 @@ scheduler:
   # cosine term is exactly 0 and the LR sits flat at min_lr — verified, no wrap-around.
   # Do not "fix" the sum to 430; that would extend the peak-LR phase and change the run.
   warmup_steps: 5
-  stable_steps: 200
+  stable_steps: 100
   decay_steps: 100
 
 scheduled_sampling:
   # Identical to trial 41 (5 / 25): prob steps to 0.09 at epoch 5, hits the 0.85 cap at ~26,
   # clamped from epoch 30. Do NOT override warmup_epochs on the CLI — that breaks the match.
   warmup_epochs: 5                 # 5 + 25 == 30 <= 430
-  active_epochs: 25
-  max_prob: 0.85                   # round 1; round 2 winner uses 1.0
+  active_epochs: 45
+  max_prob: 0.95                   # round 1; round 2 winner uses 1.0
