@@ -1,0 +1,67 @@
+# @package _global_
+# Final Training — best "large" HP-search config (Optuna trial 9).
+# Full-budget, Combined-only, from-scratch recipe. Reports to W&B group "final training".
+#
+# Larger architecture than c41/c42 (n_encoder=4, n_decoder=4, n_eye_decoder=3).
+#
+# Round 1 (this file, defaults below): max_prob=0.85, sweep scheduled_sampling.warmup_epochs.
+#   py train.py exp=final_large scheduled_sampling.warmup_epochs=20 training.wandb.name=large_w20_mp085
+#   py train.py exp=final_large scheduled_sampling.warmup_epochs=50 training.wandb.name=large_w50_mp085
+# Round 2 (winner only): flip max_prob to 1.0, e.g.
+#   py train.py exp=final_large scheduled_sampling.warmup_epochs=<best> scheduled_sampling.max_prob=1.0 training.wandb.name=large_w<best>_mp10
+#
+# Invariants (E == training.Combined.epochs == 430):
+#   scheduler.warmup_steps + stable_steps + decay_steps == 430
+#   scheduled_sampling.warmup_epochs + active_epochs      <= 430
+training:
+  decisive_metric: "reg_error_val"
+  pretrained_model: null
+  use_scheduled_sampling: true
+  Phases: ["Combined"]
+  num_epochs: 430                # E — keeps the one_cycle path consistent if ever used
+  val_interval: 5
+  weight_decay: 0.00016836943669017003   # trial 9 (large)
+  Combined:
+    name: "Combined"
+    denoise_weight: 0
+    decisive_metric: ${training.decisive_metric}
+    epochs: 430                  # E
+  wandb:
+    enabled: true
+    project: "noisy-eye-scanpath"
+    entity: null
+    mode: "online"
+    group: "final training"
+    name: null                   # set per run on the CLI, e.g. training.wandb.name=large_w20_mp085
+
+model:
+  pretrained_encoder_path: null  # Combined from scratch (matches HP search)
+  # --- trial 9 (large) architecture + dropouts ---
+  n_encoder: 4
+  n_decoder: 4
+  n_eye_decoder: 3
+  src_dropout: 0.14576731240814408
+  decoder_dropout: 0.19248945898842224
+  eye_encoder_dropout: 0.35035645916507285
+  eye_decoder_dropout: 0.3994497011784771
+  image_features_dropout: 0.13008783098167698
+  dur_head_dropout: 0.3569680988754935
+  end_dropout: 0.0184434736772664
+  reg_head_output_dropout: 0.3219128667959794
+  denoise_head_output_dropout: 0.25133951161443074
+  decoder_attn_dropout: 0
+  eye_decoder_attn_dropout: 0
+loss:
+  cls_weight: 0.2154436253749968   # trial 9 (large)
+  dur_weight: 0.1557292928473223   # trial 9 (large)
+
+scheduler:
+  warmup_steps: 20                 
+  stable_steps: 200
+  decay_steps: 100
+
+scheduled_sampling:
+  # Not part of the HP search — mirrors the c42 recipe. Sweep warmup_epochs per run.
+  warmup_epochs: 30                # overridden per run: {20, 50}
+  active_epochs: 50                # 50 + 50 == 100 <= 430
+  max_prob: 0.85                   # round 1; round 2 winner uses 1.0
