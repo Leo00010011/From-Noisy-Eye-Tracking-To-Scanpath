@@ -391,11 +391,13 @@ class ScheduledSampling:
                     input['tgt'] = torch.concat([input['tgt'], next_token], dim=1)
                 t += 1
         finally:
-            # Release the cached memories (and the graphs they hold) before the next batch.
+            # Release the cached memories (and the graphs they hold) before the next batch. Both
+            # calls belong in the `finally`: if an exception escapes the decode loop and is caught
+            # upstream, a cache left populated here would be silently reused by the next batch.
             if has_memory_cache:
                 self.model.disable_memory_kv_cache()
-        if self.use_kv_cache:
-            self.model.clear_kv_cache()
+            if self.use_kv_cache:
+                self.model.clear_kv_cache()
         input['tgt_mask'] = tgt_mask
         input['tgt'] = tgt
         if 'in_tgt' in input:

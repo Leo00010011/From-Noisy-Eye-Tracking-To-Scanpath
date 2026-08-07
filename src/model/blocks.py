@@ -129,10 +129,14 @@ class MultiHeadedAttention(nn.Module):
             self.kv_cache = None
 
     def disable_memory_kv_cache(self):
+        # Clear unconditionally: in a cross-attention module `use_kv_cache` and `cache_memory_kv`
+        # both store the same entry (the projected memory K/V), so there is no second owner whose
+        # state we would be clobbering. Keeping the entry alive here would let one generation
+        # loop's memory — and its graph — be read back by the next one, since `forward` reuses a
+        # populated cache without re-checking either flag.
         if not self.is_self_attention:
             self.cache_memory_kv = False
-            if not self.use_kv_cache:
-                self.kv_cache = None
+            self.kv_cache = None
 
 
     def forward(self,query:torch.Tensor,
@@ -171,7 +175,8 @@ class MultiHeadedAttention(nn.Module):
             elif self.use_kv_cache:
                 self.kv_cache = (key, value)
         # rope
-        if q_rope is not None and k_rope is not None:
+        if q_rope is not None:
+            # Self-attention call sites pass only `q_rope`; keys share the query's positions there.
             query, key = apply_rope(query, key, q_rope, k_rope if k_rope is not None else q_rope)
         if _module_recording_enabled(self) and not self.is_self_attention:
             attn_scores = torch.matmul(query, key.transpose(-2, -1)) * self.scale
