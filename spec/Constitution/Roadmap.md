@@ -33,7 +33,7 @@
 ## In Progress
 
 - **Spec-driven development workflow** — Constitution documents written; first sprint-level feature spec (EVE real-noise scanpath inference) delivered end-to-end under `spec/2026-07-27-eve-real-noise-scanpath-inference/`
-- **Multi-scale image backbone migration (Mask2Former)** — replacing the single-scale frozen DINOv3 image encoder with a vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** (from the Mask2Former clone at `../mask2former/`), and making the eye-decoder and fixation-decoder deformable cross-attentions **multi-scale**. Factored into six independently testable features **F1–F6** (see the dedicated Backlog subsection below and the TechStack "Multi-scale Image Backbone Migration" section for full contracts). **F1 (the linchpin primitive) is ✓ DONE** — `DeformableAttention` is now N-level capable and byte-identical at `n_levels=1`; its as-built API and the corrected Mask2Former shape reference live in TechStack §"Deformable param-layout compatibility". **Next up: F2** (vendored ResNet50 + pixel decoder + COCO weight loader), which consumes F1 at `n_levels=3`; F3 is parallelizable. **DINOv3 remains selectable** — the new backbone is additive, gated by a config group, so the existing single-scale path and its checkpoints keep working throughout.
+- **Multi-scale image backbone migration (Mask2Former)** — replacing the single-scale frozen DINOv3 image encoder with a vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** (from the Mask2Former clone at `../mask2former/`), and making the eye-decoder and fixation-decoder deformable cross-attentions **multi-scale**. Factored into six independently testable features **F1–F6** (see the dedicated Backlog subsection below and the TechStack "Multi-scale Image Backbone Migration" section for full contracts). **F1 (the deformable primitive) is ✓ DONE** — `DeformableAttention` is now N-level capable and byte-identical at `n_levels=1`; its as-built API and the multi-scale shape reference live in TechStack §"Deformable param layout (F1 as-built)". **Next up: F2** (vendored **torchvision ResNet50 (ImageNet) + freshly-initialized pixel decoder**), which consumes F1 at `n_levels=3`; F3 is parallelizable. The backbone is **ImageNet-pretrained ResNet50 frozen + trainable pixel decoder** — no external segmentation checkpoint is loaded. **DINOv3 remains selectable** — the new backbone is additive, gated by a config group, so the existing single-scale path and its checkpoints keep working throughout.
 
 ---
 
@@ -52,10 +52,11 @@ Priority order within each group.
 
 Six features, in dependency order. **Locked decisions** (from the planning session): vendor a
 detectron2-free minimal port; extend the existing `grid_sample` deformable op (retro-compatible,
-with a sibling-class escape hatch); load **Mask2Former R50 COCO-panoptic** weights, **frozen**;
-keep the full pixel decoder (its internal 6-layer MSDeform transformer encoder) with **3 feature
-levels**; **no CUDA custom op** (pure-PyTorch `grid_sample`, InferenceRecorder-compatible). Each
-feature is a separate implementation session. Full interface contracts live in TechStack.
+with a sibling-class escape hatch); backbone = **torchvision ResNet50 (ImageNet) frozen** +
+**freshly-initialized, trainable pixel decoder** (no external checkpoint); keep the full pixel
+decoder (its internal 6-layer MSDeform transformer encoder) with **3 feature levels**; **no CUDA
+custom op** (pure-PyTorch `grid_sample`, InferenceRecorder-compatible). Each feature is a separate
+implementation session. Full interface contracts live in TechStack.
 
 Dependency graph: `F1 → {F2, F4}`; `F3 → F6`; `{F2, F3, F4} → F6`. Suggested order **F1 → F2 →
 F3 → F4 → F6** (F3 parallelizable with F2).
@@ -64,9 +65,9 @@ F3 → F4 → F6** (F3 parallelizable with F2).
   (`src/model/blocks.py`) generalized in place (class name preserved) to *N* levels via a new
   `n_levels: int = 1` constructor arg. `sampling_offsets` → `Linear(d, n_heads·n_levels·n_points·2)`,
   `attention_weights` → `Linear(d, n_heads·n_levels·n_points)`, softmax **jointly** over the flattened
-  `n_levels·n_points` axis — byte-for-byte the Mask2Former `MSDeformAttn` layout and star-pattern init
-  (verified against `../mask2former/.../ops/modules/ms_deform_attn.py`), so F2 loads pretrained
-  pixel-decoder weights by name/shape. `forward(query, reference_points, value, spatial_shape,
+  `n_levels·n_points` axis — the same `MSDeformAttn` param layout and star-pattern init Mask2Former
+  uses (verified against `../mask2former/.../ops/modules/ms_deform_attn.py`), which is the op F2's
+  pixel decoder instantiates fresh at `n_levels=3`. `forward(query, reference_points, value, spatial_shape,
   level_start_index=None)` is polymorphic: `spatial_shape` accepts a legacy `(H,W)` tuple (1 level) or
   a `(n_levels,2)` LongTensor; `reference_points` accepts `(B,Nq,2)` (broadcast) or `(B,Nq,n_levels,2)`;
   `level_start_index` is derived via `cumsum` when absent and consistency-checked when supplied. At
@@ -79,15 +80,21 @@ F3 → F4 → F6** (F3 parallelizable with F2).
   `DeformableDoubleInputDecoder` are untouched (F4's job) and their legacy calls stay byte-identical.
   Escape hatch (sibling `MultiScaleDeformableAttention`) not needed — the single class carries both
   paths. 28-test suite `tests/test_ms_deformable_attention.py`. Spec:
-  `spec/2026-09-01-multi-scale-deformable-attention-primitive/`. **Note:** validation.md's Mask2Former
-  layout reference (`768`/`384`) is a spec typo; the correct shapes for `(d=256,L=3,H=8,P=4)` are
-  `sampling_offsets (192,256)`, `attention_weights (96,256)`, matched by both this module and the
-  pretrained checkpoint.
+  `spec/2026-09-01-multi-scale-deformable-attention-primitive/`. **Note:** that spec's validation.md
+  layout reference (`768`/`384`) is a typo; the correct shapes for `(d=256,L=3,H=8,P=4)` are
+  `sampling_offsets (192,256)`, `attention_weights (96,256)` — what F2's pixel-decoder attention
+  builds.
 - **F2 — Vendored Mask2Former backbone (detectron2-free)** — torchvision ResNet50 → `{res2..res5}`
   feeding a ported `MSDeformAttnPixelDecoder` (detectron2 pieces inlined: `PositionEmbeddingSine`,
   `nn.Conv2d`+`nn.GroupNorm`, no registry/`@configurable`), internal attention = F1 at
   `n_levels=3`, `conv_dim=256`. Returns 3 enhanced multi-scale maps `[B,256,Hₗ,Wₗ]`, no CLS.
-  Includes a COCO-checkpoint weight loader (key remap + checksum) and freezing.
+  ResNet50 uses **torchvision ImageNet weights** (warn-and-continue on fetch failure → random init);
+  the pixel decoder is **freshly initialized**. Freezing is **granular**: ResNet50 frozen (kept in
+  `eval()` so BN running stats are frozen), pixel decoder **trainable**. An **optional** stride-4
+  (res2, 64²) FPN + `mask_features` branch (`return_stride4`, default off) is built only when
+  requested, for a future heatmap-regression iteration. Input is assumed pipeline-normalized (no
+  internal mean/std). New file `src/model/ms_deform_backbone.py`; suite `tests/test_ms_deform_backbone.py`.
+  Spec: `spec/2026-09-01-vendored-mask2former-backbone/`.
 - **F3 — Multi-scale feature contract / backbone adapter** — a small bundle
   `MultiScaleFeatures(value:[B,ΣHₗWₗ,D], spatial_shapes, level_start_index, reference_grids)` that
   decouples `MixerModel` from backbone specifics. Kills the `mem[:,1:,:]` CLS assumption, the
@@ -104,9 +111,11 @@ F3 → F4 → F6** (F3 parallelizable with F2).
   `decode_fixation` consume the F3 bundle with per-level positional encoding + a `level_embed`;
   guard DINOv3-only attribute access behind backbone type. Retro-compat: a DINOv3-backbone run
   trains identically and old single-scale checkpoints still load.
-- **Open items (non-blocking)** — exact COCO checkpoint variant (panoptic assumed) and its local
-  path convention; whether the stride-4 `mask_features` is exposed as a 4th decoder level; how
-  aggressively to share the `shared_gaussian` basis across scales.
+- **Open items (non-blocking)** — the stride-4 (res2, 64²) map is produced behind F2's
+  `return_stride4` flag, but wiring it as a real 4th decoder level (F4/F6) is deferred to the
+  heatmap-regression iteration; how aggressively to share the `shared_gaussian` basis across scales;
+  whether to later revive external pretrained pixel-decoder weights (COCO/ADE) as an ablation
+  (would require reintroducing a key-remap loader).
 
 ### Engineering Correctness
 

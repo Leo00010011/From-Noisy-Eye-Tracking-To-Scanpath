@@ -83,24 +83,31 @@ dependency graph, and status live in `Roadmap.md`.
    `src/model/blocks.py:680`) to *N* levels, **retro-compatible** with the single-scale iteration.
    If multi-level branching hurts readability, split into a sibling `MultiScaleDeformableAttention`
    and leave the original untouched.
-3. **Weights**: load **Mask2Former R50 COCO-panoptic** checkpoint (ResNet50 + pixel decoder),
-   **frozen** initially (like DINOv3 today); unfreezing is a later ablation. Semantic multi-scale
-   features match the mission's "bottom-up saliency landscape" premise.
+3. **Weights & freezing**: backbone = **torchvision ResNet50 with ImageNet weights**
+   (`IMAGENET1K_V2`, warn-and-continue → random init on fetch failure), **frozen** and kept in
+   `eval()` so BatchNorm running stats are frozen (like DINOv3 today). The **pixel decoder is
+   freshly initialized and trainable** — no external segmentation checkpoint is loaded, so a frozen
+   random decoder is avoided. Reviving external pretrained pixel-decoder weights (Mask2Former
+   COCO/ADE) is a later ablation that would reintroduce a key-remap loader. Input is assumed
+   **pre-normalized by the pipeline** (no internal mean/std, mirroring `DinoV3Wrapper`).
 4. **Keep the full pixel decoder** — its internal 6-layer MSDeformAttn transformer encoder runs, so
-   the decoders consume *enhanced* (cross-scale-fused) features, **3 feature levels** (configurable).
+   the decoders consume *enhanced* (cross-scale-fused) features, **3 feature levels**. An optional
+   stride-4 (res2, 64²) FPN + `mask_features` branch (`return_stride4`, default off) is built only
+   on request, reserved for a future heatmap-regression iteration.
 5. **No CUDA custom op.** Sampling uses pure-PyTorch `grid_sample` (compilation-free, works with
    `InferenceRecorder` and its hooks). The CUDA `MSDeformAttnFunction` is not built or imported.
 
-### Deformable param-layout compatibility (why F1 is the linchpin) — F1 IMPLEMENTED
+### Deformable param layout (F1 as-built) — F1 IMPLEMENTED
 
-The pretrained pixel-decoder checkpoint's `MSDeformAttn` stores `sampling_offsets`
-(`n_heads·n_levels·n_points·2`), `attention_weights` (`n_heads·n_levels·n_points`), `value_proj`,
-`output_proj`. The extended `DeformableAttention` (F1) reproduces exactly this parameter layout
-so F2 loads those weights by name/shape. At **`n_levels=1`** that layout collapses to
-the *current* single-scale `DeformableAttention` shapes — so the same class serves both: old
+F2's pixel decoder instantiates `DeformableAttention` (F1) **fresh** at `n_levels=3`. F1 follows
+Mask2Former's `MSDeformAttn` param layout — `sampling_offsets` (`n_heads·n_levels·n_points·2`),
+`attention_weights` (`n_heads·n_levels·n_points`), `value_proj`, `output_proj` — so its shapes are a
+known-good reference (and would still load external pixel-decoder weights by name/shape if that
+ablation is ever revived). At **`n_levels=1`** that layout collapses to the *current* single-scale
+`DeformableAttention` shapes and numerics **byte-for-byte** — so the same class serves both: old
 single-scale checkpoints (e.g. HP-search runs) load with zero missing/unexpected keys, and the
-softmax over `n_levels·n_points` reduces to the current points-only softmax. This dual constraint
-(match the checkpoint *and* stay byte-identical at 1 level) is what made F1 the first thing built.
+softmax over `n_levels·n_points` reduces to the current points-only softmax. That byte-identity at 1
+level is why F1 was built first — the whole migration rides on the single-scale path staying intact.
 
 **As-built F1 API** (`DeformableAttention` in `src/model/blocks.py`, delivered
 `spec/2026-09-01-multi-scale-deformable-attention-primitive/`) — this is the concrete contract
@@ -117,14 +124,14 @@ forward(query,               # (B, Nq, embed_dim)
     -> (B, Nq, embed_dim)
 ```
 
-- **Correct Mask2Former shape reference** (the F2 weight loader must assert these, NOT
-  validation.md's `768`/`384`, which are a typo): for `MSDeformAttn(d_model=256, n_levels=3,
-  n_heads=8, n_points=4)` — `sampling_offsets (192, 256)`, `attention_weights (96, 256)`,
+- **Multi-scale shape reference** (F2's pixel-decoder attention builds these; NOT the F1
+  validation.md's `768`/`384`, which are a typo): for `(d_model=256, n_levels=3, n_heads=8,
+  n_points=4)` — `sampling_offsets (192, 256)`, `attention_weights (96, 256)`,
   `value_proj (256, 256)`, `output_proj (256, 256)`. Verified against
-  `../mask2former/mask2former/modeling/pixel_decoder/ops/modules/ms_deform_attn.py`. F1's init
-  (`grid_init.view(H,1,1,2).repeat(1,L,P,1)`) is byte-identical to that file's `_reset_parameters`,
-  **except** F1 deliberately does not zero `value_proj`/`output_proj` biases (preserves fresh-init
-  byte-identity with pre-F1 runs; the loaded checkpoint overwrites those biases anyway).
+  `../mask2former/mask2former/modeling/pixel_decoder/ops/modules/ms_deform_attn.py`. F1's star-pattern
+  init (`grid_init.view(H,1,1,2).repeat(1,L,P,1)`) matches that file's `_reset_parameters`,
+  **except** F1 deliberately does not zero `value_proj`/`output_proj` biases — this preserves
+  fresh-init byte-identity with pre-F1 single-scale runs.
 - **Softmax is joint** over the flattened `n_levels·n_points` axis (matches Mask2Former), then the
   weighted sum runs over both levels and points.
 - **KV-cache** (`enable_memory_kv_cache`) now caches a **per-level list** of reshaped value maps
@@ -165,20 +172,23 @@ backbones present one interface to `MixerModel`.
 ### Resolution budget (A3)
 
 At `img_size=256`, ResNet50 strides give res2=64², res3=32², res4=16², res5=8². The transformer
-encoder consumes res3/res4/res5 (32²/16²/8²); the stride-4 `mask_features` (res2, 64²) is produced
-but its use as a 4th decoder level is an open item. `conv_dim=256` is fixed by the pretrained
-weights; do not change it without retraining the pixel decoder.
+encoder consumes res3/res4/res5 (32²/16²/8²); the stride-4 res2 (64²) map + `mask_features` are
+produced only when F2's `return_stride4` flag is set, and wiring them as a real 4th decoder level
+(F4/F6) is deferred to the heatmap-regression iteration. `conv_dim=256` is fixed by design (the F1
+attention layout and the `img_input_proj` 256→`model_dim` contract); changing it is a constructor
+option but not the default path.
 
 ### Files to be created / touched
 
-- **New** (indicative): `src/model/ms_deform_backbone.py` (ResNet50 + vendored pixel decoder,
-  weight loader), and the `MultiScaleFeatures` bundle + backbone adapters (F3).
-- **Extended**: `src/model/blocks.py` (`DeformableAttention`, `DeformableDecoder`,
-  `DeformableDoubleInputDecoder`), `src/model/mixer_model.py` (`encode`/`decode_fixation`),
+- **New** (F2): `src/model/ms_deform_backbone.py` (torchvision ResNet50 extractor + vendored,
+  detectron2-free pixel decoder using F1 at `n_levels=3`; ImageNet weights via torchvision, no
+  custom weight loader). F3 adds the `MultiScaleFeatures` bundle + backbone adapters.
+- **Extended**: `src/model/blocks.py` (`DeformableAttention` done in F1; `DeformableDecoder`,
+  `DeformableDoubleInputDecoder` in F4), `src/model/mixer_model.py` (`encode`/`decode_fixation`),
   `src/training/pipeline_builder.py` (backbone construction, `img_input_proj` 256→512).
-- **New config group**: `configs/model/image_encoder/` (selects `dinov3` vs `mask2former`;
-  Mask2Former entry carries the local checkpoint path + pinned commit/checksum, mirroring the
-  DINOv3 `repo_path`/`weights` convention).
+- **New config group** (F6): `configs/model/image_encoder/` (selects `dinov3` vs `mask2former`;
+  Mask2Former entry carries freeze flags, `return_stride4`, and the torchvision ImageNet weights id
+  — no external checkpoint path).
 
 ## Key Classes and Their Responsibilities
 
