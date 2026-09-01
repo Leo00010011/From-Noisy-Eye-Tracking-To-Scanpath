@@ -33,6 +33,7 @@
 ## In Progress
 
 - **Spec-driven development workflow** — Constitution documents written; first sprint-level feature spec (EVE real-noise scanpath inference) delivered end-to-end under `spec/2026-07-27-eve-real-noise-scanpath-inference/`
+- **Multi-scale image backbone migration (Mask2Former)** — replacing the single-scale frozen DINOv3 image encoder with a vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** (from the Mask2Former clone at `../mask2former/`), and making the eye-decoder and fixation-decoder deformable cross-attentions **multi-scale**. Factored into six independently testable features **F1–F6** (see the dedicated Backlog subsection below and the TechStack "Multi-scale Image Backbone Migration" section for full contracts). Currently at the planning stage: the factorization is locked; F1's contract is the linchpin and is implemented first. **DINOv3 remains selectable** — the new backbone is additive, gated by a config group, so the existing single-scale path and its checkpoints keep working throughout.
 
 ---
 
@@ -46,6 +47,52 @@ Priority order within each group.
 - **Seeded reproducibility enforcement** — `torch.manual_seed`, `numpy.random.seed`, `random.seed`, and `torch.backends.cudnn.deterministic` are not set in the training entry point. The Mission claims runs are re-runnable from a config + seed; this is not currently true.
 - **Formal baseline comparison infrastructure** — no script runs PathModel and MixerModel on the same split with the same seed and produces a comparison table. Required for the ablation section.
 - **Comparison against SOTA scanpath models** — Mission scopes comparisons against Gazeformer, ScanDy, IORE (or equivalent); no integration or evaluation harness exists yet.
+
+### Architecture Migration: Multi-scale Image Backbone (Mask2Former)
+
+Six features, in dependency order. **Locked decisions** (from the planning session): vendor a
+detectron2-free minimal port; extend the existing `grid_sample` deformable op (retro-compatible,
+with a sibling-class escape hatch); load **Mask2Former R50 COCO-panoptic** weights, **frozen**;
+keep the full pixel decoder (its internal 6-layer MSDeform transformer encoder) with **3 feature
+levels**; **no CUDA custom op** (pure-PyTorch `grid_sample`, InferenceRecorder-compatible). Each
+feature is a separate implementation session. Full interface contracts live in TechStack.
+
+Dependency graph: `F1 → {F2, F4}`; `F3 → F6`; `{F2, F3, F4} → F6`. Suggested order **F1 → F2 →
+F3 → F4 → F6** (F3 parallelizable with F2).
+
+- **F1 — Multi-scale deformable attention primitive** — generalize `DeformableAttention`
+  (`src/model/blocks.py:680`) from single-scale to *N* levels. Param layout becomes
+  `n_heads·n_levels·n_points·(2|1)`; with `n_levels=1` it is byte-identical to today, so existing
+  state_dicts load unchanged (class name preserved). Linchpin: its param layout must match
+  Mask2Former's `MSDeformAttn` so F2 can load pretrained pixel-decoder weights, and its
+  `n_levels=1` retro-compat is what F4 relies on. Pure `grid_sample`; keeps star-pattern init,
+  `geometric_sigma`, KV-cache, recorder hooks. Escape hatch: if multi-level branching hurts the
+  single-scale path, split into a sibling `MultiScaleDeformableAttention` and leave the original
+  untouched.
+- **F2 — Vendored Mask2Former backbone (detectron2-free)** — torchvision ResNet50 → `{res2..res5}`
+  feeding a ported `MSDeformAttnPixelDecoder` (detectron2 pieces inlined: `PositionEmbeddingSine`,
+  `nn.Conv2d`+`nn.GroupNorm`, no registry/`@configurable`), internal attention = F1 at
+  `n_levels=3`, `conv_dim=256`. Returns 3 enhanced multi-scale maps `[B,256,Hₗ,Wₗ]`, no CLS.
+  Includes a COCO-checkpoint weight loader (key remap + checksum) and freezing.
+- **F3 — Multi-scale feature contract / backbone adapter** — a small bundle
+  `MultiScaleFeatures(value:[B,ΣHₗWₗ,D], spatial_shapes, level_start_index, reference_grids)` that
+  decouples `MixerModel` from backbone specifics. Kills the `mem[:,1:,:]` CLS assumption, the
+  single `patch_resolution` tuple, and `image_encoder.model.patch_size`/`.rope_embed` access.
+  Two producers: the F2 backbone (3 levels) and a DINOv3 wrapper (1 level, CLS stripped at the
+  boundary).
+- **F4 — Multiscale-capable eye & fixation decoders** — `DeformableDecoder`
+  (`src/model/blocks.py:870`) and `DeformableDoubleInputDecoder` (`:957`) consume the F3 bundle +
+  per-level reference points; retro-compatible (single level ⇒ current output). Swap inner op for
+  F1, take `spatial_shapes`/`level_start_index` instead of a fixed tuple, broadcast
+  `reference_points (B,Nq,2) → (B,Nq,n_levels,2)`.
+- **F6 — MixerModel + PipelineBuilder + config integration** — build the backbone from a new
+  `configs/model/image_encoder/` group; `img_input_proj` 256→`model_dim`; `encode`/
+  `decode_fixation` consume the F3 bundle with per-level positional encoding + a `level_embed`;
+  guard DINOv3-only attribute access behind backbone type. Retro-compat: a DINOv3-backbone run
+  trains identically and old single-scale checkpoints still load.
+- **Open items (non-blocking)** — exact COCO checkpoint variant (panoptic assumed) and its local
+  path convention; whether the stride-4 `mask_features` is exposed as a 4th decoder level; how
+  aggressively to share the `shared_gaussian` basis across scales.
 
 ### Engineering Correctness
 

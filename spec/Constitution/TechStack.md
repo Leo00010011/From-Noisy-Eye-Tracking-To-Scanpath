@@ -54,6 +54,88 @@ The model partitions its submodules into `denoise_modules` and `fixation_modules
 - `use_deformable_eye_decoder=True`, `use_deformable_fixation_decoder=True` — deformable attention in both cross-attention stages
 - `image_encoder.name="dinov3_vits16"`, frozen
 
+## Multi-scale Image Backbone Migration (Mask2Former) — In Progress
+
+The image encoder is being migrated from the single-scale frozen **DINOv3 ViT-S/16** to a
+vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** lifted from the Mask2Former
+codebase, and the eye/fixation deformable cross-attentions are being generalized to **multi-scale**.
+This section is the source of truth for the migration's design; the six-feature breakdown (F1–F6),
+dependency graph, and status live in `Roadmap.md`.
+
+### Source and target
+
+- **Mask2Former clone**: `../mask2former/` (sibling of this repo). Relevant files:
+  `mask2former/modeling/pixel_decoder/msdeformattn.py` (`MSDeformAttnPixelDecoder`,
+  `MSDeformAttnTransformerEncoderOnly`) and
+  `mask2former/modeling/pixel_decoder/ops/modules/ms_deform_attn.py` (`MSDeformAttn`, plus the
+  pure-PyTorch reference `ms_deform_attn_core_pytorch`).
+- **We take only**: torchvision ResNet50 (as the `{res2..res5}` feature extractor) and the pixel
+  decoder's MSDeformAttn transformer encoder. We do **not** take the Mask2Former segmentation
+  head, the query-based mask decoder, or detectron2.
+
+### Locked decisions (planning session)
+
+1. **Vendor a minimal, detectron2-free port.** detectron2 pieces are inlined/replaced:
+   `PositionEmbeddingSine` copied in, `Conv2d`/`get_norm` → `nn.Conv2d` + `nn.GroupNorm(32, ·)`,
+   `@configurable`/`SEM_SEG_HEADS_REGISTRY`/`ShapeSpec` dropped. Avoids the Windows detectron2
+   build and keeps deps pinnable.
+2. **Extend the existing `grid_sample` deformable op** (`DeformableAttention` in
+   `src/model/blocks.py:680`) to *N* levels, **retro-compatible** with the single-scale iteration.
+   If multi-level branching hurts readability, split into a sibling `MultiScaleDeformableAttention`
+   and leave the original untouched.
+3. **Weights**: load **Mask2Former R50 COCO-panoptic** checkpoint (ResNet50 + pixel decoder),
+   **frozen** initially (like DINOv3 today); unfreezing is a later ablation. Semantic multi-scale
+   features match the mission's "bottom-up saliency landscape" premise.
+4. **Keep the full pixel decoder** — its internal 6-layer MSDeformAttn transformer encoder runs, so
+   the decoders consume *enhanced* (cross-scale-fused) features, **3 feature levels** (configurable).
+5. **No CUDA custom op.** Sampling uses pure-PyTorch `grid_sample` (compilation-free, works with
+   `InferenceRecorder` and its hooks). The CUDA `MSDeformAttnFunction` is not built or imported.
+
+### Deformable param-layout compatibility (why F1 is the linchpin)
+
+The pretrained pixel-decoder checkpoint's `MSDeformAttn` stores `sampling_offsets`
+(`n_heads·n_levels·n_points·2`), `attention_weights` (`n_heads·n_levels·n_points`), `value_proj`,
+`output_proj`. The extended `DeformableAttention` (F1) must reproduce exactly this parameter layout
+so F2 loads those weights by name/shape. Conveniently, at **`n_levels=1`** that layout collapses to
+the *current* single-scale `DeformableAttention` shapes — so the same class serves both: old
+single-scale checkpoints (e.g. HP-search runs) load with zero missing/unexpected keys, and the
+softmax over `n_levels·n_points` reduces to the current points-only softmax. This dual constraint
+(match the checkpoint *and* stay byte-identical at 1 level) is what makes F1 the first thing built.
+
+### Contract changes vs. the current DINOv3 path
+
+| Aspect | DINOv3 (current) | Mask2Former (target) |
+|---|---|---|
+| Encoder output | `[B, H·W+1, 384]`, **CLS prefix**, single scale | 3 maps `[B, 256, Hₗ, Wₗ]`, **no CLS** |
+| CLS handling | decoders strip via `mem[:,1:,:]` | stripped once at the F3 boundary (no per-decoder slice) |
+| Spatial shape | single `patch_resolution` tuple `(16,16)` | per-level `spatial_shapes (n_levels,2)` + `level_start_index` |
+| Reference points | `(B, Nq, 2)` | `(B, Nq, n_levels, 2)` (broadcast from the 2-D form) |
+| Channel dim | 384 → `img_input_proj` → 512 | 256 (`conv_dim`) → `img_input_proj` → 512 |
+| Attr access | `image_encoder.model.patch_size`, `.rope_embed` | guarded behind backbone type (absent on ResNet50) |
+
+**Canonical multi-scale memory bundle (F3)** — flattened value `[B, ΣHₗWₗ, D]`, `spatial_shapes`,
+`level_start_index`, `reference_grids`; shared by the pixel decoder's internal attention, the eye
+decoder, and the fixation decoder. A DINOv3 wrapper also emits this bundle at `n_levels=1` so both
+backbones present one interface to `MixerModel`.
+
+### Resolution budget (A3)
+
+At `img_size=256`, ResNet50 strides give res2=64², res3=32², res4=16², res5=8². The transformer
+encoder consumes res3/res4/res5 (32²/16²/8²); the stride-4 `mask_features` (res2, 64²) is produced
+but its use as a 4th decoder level is an open item. `conv_dim=256` is fixed by the pretrained
+weights; do not change it without retraining the pixel decoder.
+
+### Files to be created / touched
+
+- **New** (indicative): `src/model/ms_deform_backbone.py` (ResNet50 + vendored pixel decoder,
+  weight loader), and the `MultiScaleFeatures` bundle + backbone adapters (F3).
+- **Extended**: `src/model/blocks.py` (`DeformableAttention`, `DeformableDecoder`,
+  `DeformableDoubleInputDecoder`), `src/model/mixer_model.py` (`encode`/`decode_fixation`),
+  `src/training/pipeline_builder.py` (backbone construction, `img_input_proj` 256→512).
+- **New config group**: `configs/model/image_encoder/` (selects `dinov3` vs `mask2former`;
+  Mask2Former entry carries the local checkpoint path + pinned commit/checksum, mirroring the
+  DINOv3 `repo_path`/`weights` convention).
+
 ## Key Classes and Their Responsibilities
 
 | Class | File | Role |
