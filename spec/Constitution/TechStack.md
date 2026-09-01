@@ -91,16 +91,60 @@ dependency graph, and status live in `Roadmap.md`.
 5. **No CUDA custom op.** Sampling uses pure-PyTorch `grid_sample` (compilation-free, works with
    `InferenceRecorder` and its hooks). The CUDA `MSDeformAttnFunction` is not built or imported.
 
-### Deformable param-layout compatibility (why F1 is the linchpin)
+### Deformable param-layout compatibility (why F1 is the linchpin) — F1 IMPLEMENTED
 
 The pretrained pixel-decoder checkpoint's `MSDeformAttn` stores `sampling_offsets`
 (`n_heads·n_levels·n_points·2`), `attention_weights` (`n_heads·n_levels·n_points`), `value_proj`,
-`output_proj`. The extended `DeformableAttention` (F1) must reproduce exactly this parameter layout
-so F2 loads those weights by name/shape. Conveniently, at **`n_levels=1`** that layout collapses to
+`output_proj`. The extended `DeformableAttention` (F1) reproduces exactly this parameter layout
+so F2 loads those weights by name/shape. At **`n_levels=1`** that layout collapses to
 the *current* single-scale `DeformableAttention` shapes — so the same class serves both: old
 single-scale checkpoints (e.g. HP-search runs) load with zero missing/unexpected keys, and the
 softmax over `n_levels·n_points` reduces to the current points-only softmax. This dual constraint
-(match the checkpoint *and* stay byte-identical at 1 level) is what makes F1 the first thing built.
+(match the checkpoint *and* stay byte-identical at 1 level) is what made F1 the first thing built.
+
+**As-built F1 API** (`DeformableAttention` in `src/model/blocks.py`, delivered
+`spec/2026-09-01-multi-scale-deformable-attention-primitive/`) — this is the concrete contract
+F2/F4 consume:
+
+```python
+DeformableAttention(embed_dim, num_heads, num_points, n_levels=1, attn_dropout=0.0,
+                    geometric_sigma=0, normalize_grid_init=True, device, dtype)
+forward(query,               # (B, Nq, embed_dim)
+        reference_points,    # (B, Nq, 2) broadcast across levels, OR (B, Nq, n_levels, 2); [0,1]
+        value,               # (B, ΣHₗWₗ, embed_dim) flattened multi-level memory
+        spatial_shape,       # (H,W) tuple (⇒1 level) OR (n_levels,2) LongTensor rows (Hₗ,Wₗ)
+        level_start_index=None)  # (n_levels,) LongTensor; derived via cumsum when None
+    -> (B, Nq, embed_dim)
+```
+
+- **Correct Mask2Former shape reference** (the F2 weight loader must assert these, NOT
+  validation.md's `768`/`384`, which are a typo): for `MSDeformAttn(d_model=256, n_levels=3,
+  n_heads=8, n_points=4)` — `sampling_offsets (192, 256)`, `attention_weights (96, 256)`,
+  `value_proj (256, 256)`, `output_proj (256, 256)`. Verified against
+  `../mask2former/mask2former/modeling/pixel_decoder/ops/modules/ms_deform_attn.py`. F1's init
+  (`grid_init.view(H,1,1,2).repeat(1,L,P,1)`) is byte-identical to that file's `_reset_parameters`,
+  **except** F1 deliberately does not zero `value_proj`/`output_proj` biases (preserves fresh-init
+  byte-identity with pre-F1 runs; the loaded checkpoint overwrites those biases anyway).
+- **Softmax is joint** over the flattened `n_levels·n_points` axis (matches Mask2Former), then the
+  weighted sum runs over both levels and points.
+- **KV-cache** (`enable_memory_kv_cache`) now caches a **per-level list** of reshaped value maps
+  `[(B·n_heads, head_dim, Hₗ, Wₗ)]`; precondition unchanged — memory geometry (`spatial_shape`)
+  must be fixed while the cache is warm.
+- **Recorder tensors gained a level axis** (keys unchanged): `sampling_offsets` /
+  `sampling_locations` `(B,Nq,n_heads,L,n_points,2)`, `attention_weights` (post-softmax)
+  `(B,Nq,n_heads,L,n_points)`, `reference_points` `(B,Nq,L,2)`. At `L=1` the extra axis is a
+  squeezable singleton, so existing recorder consumers keep working.
+- **Error conditions** (all `ValueError`): `spatial_shape` row count ≠ `self.n_levels`;
+  `Σ Hₗ·Wₗ ≠ value.shape[1]`; `reference_points` last dim ≠ 2 (box refs out of scope) or level
+  axis ≠ `n_levels`; `level_start_index` inconsistent with `spatial_shape`; `embed_dim %
+  num_heads` (at construction).
+- **Decoders are still single-scale.** F1 left `DeformableDecoder` /
+  `DeformableDoubleInputDecoder` untouched — they still pass a `(H,W)` tuple + `(B,Nq,2)` ref
+  points and slice CLS via `mem[:,1:,:]`. **F4 opts them into the tensor `spatial_shape` +
+  per-level ref-point form.** ⚠️ Pre-existing latent bug for F4 to fix: the non-`norm_first`
+  branch of `DeformableDoubleInputDecoder.forward` (`blocks.py:1125`) calls `__cross_attention2`
+  with `attn_mask`/`src_rope`/`mem2_rope` kwargs it does not accept, and (unlike the `norm_first`
+  branch) does not strip CLS. Operative runs use `norm_first=True`, so it is currently dead code.
 
 ### Contract changes vs. the current DINOv3 path
 

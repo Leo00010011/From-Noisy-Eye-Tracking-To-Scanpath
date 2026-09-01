@@ -33,7 +33,7 @@
 ## In Progress
 
 - **Spec-driven development workflow** — Constitution documents written; first sprint-level feature spec (EVE real-noise scanpath inference) delivered end-to-end under `spec/2026-07-27-eve-real-noise-scanpath-inference/`
-- **Multi-scale image backbone migration (Mask2Former)** — replacing the single-scale frozen DINOv3 image encoder with a vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** (from the Mask2Former clone at `../mask2former/`), and making the eye-decoder and fixation-decoder deformable cross-attentions **multi-scale**. Factored into six independently testable features **F1–F6** (see the dedicated Backlog subsection below and the TechStack "Multi-scale Image Backbone Migration" section for full contracts). Currently at the planning stage: the factorization is locked; F1's contract is the linchpin and is implemented first. **DINOv3 remains selectable** — the new backbone is additive, gated by a config group, so the existing single-scale path and its checkpoints keep working throughout.
+- **Multi-scale image backbone migration (Mask2Former)** — replacing the single-scale frozen DINOv3 image encoder with a vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** (from the Mask2Former clone at `../mask2former/`), and making the eye-decoder and fixation-decoder deformable cross-attentions **multi-scale**. Factored into six independently testable features **F1–F6** (see the dedicated Backlog subsection below and the TechStack "Multi-scale Image Backbone Migration" section for full contracts). **F1 (the linchpin primitive) is ✓ DONE** — `DeformableAttention` is now N-level capable and byte-identical at `n_levels=1`; its as-built API and the corrected Mask2Former shape reference live in TechStack §"Deformable param-layout compatibility". **Next up: F2** (vendored ResNet50 + pixel decoder + COCO weight loader), which consumes F1 at `n_levels=3`; F3 is parallelizable. **DINOv3 remains selectable** — the new backbone is additive, gated by a config group, so the existing single-scale path and its checkpoints keep working throughout.
 
 ---
 
@@ -60,15 +60,29 @@ feature is a separate implementation session. Full interface contracts live in T
 Dependency graph: `F1 → {F2, F4}`; `F3 → F6`; `{F2, F3, F4} → F6`. Suggested order **F1 → F2 →
 F3 → F4 → F6** (F3 parallelizable with F2).
 
-- **F1 — Multi-scale deformable attention primitive** — generalize `DeformableAttention`
-  (`src/model/blocks.py:680`) from single-scale to *N* levels. Param layout becomes
-  `n_heads·n_levels·n_points·(2|1)`; with `n_levels=1` it is byte-identical to today, so existing
-  state_dicts load unchanged (class name preserved). Linchpin: its param layout must match
-  Mask2Former's `MSDeformAttn` so F2 can load pretrained pixel-decoder weights, and its
-  `n_levels=1` retro-compat is what F4 relies on. Pure `grid_sample`; keeps star-pattern init,
-  `geometric_sigma`, KV-cache, recorder hooks. Escape hatch: if multi-level branching hurts the
-  single-scale path, split into a sibling `MultiScaleDeformableAttention` and leave the original
-  untouched.
+- ✓ **F1 — Multi-scale deformable attention primitive** — DONE. `DeformableAttention`
+  (`src/model/blocks.py`) generalized in place (class name preserved) to *N* levels via a new
+  `n_levels: int = 1` constructor arg. `sampling_offsets` → `Linear(d, n_heads·n_levels·n_points·2)`,
+  `attention_weights` → `Linear(d, n_heads·n_levels·n_points)`, softmax **jointly** over the flattened
+  `n_levels·n_points` axis — byte-for-byte the Mask2Former `MSDeformAttn` layout and star-pattern init
+  (verified against `../mask2former/.../ops/modules/ms_deform_attn.py`), so F2 loads pretrained
+  pixel-decoder weights by name/shape. `forward(query, reference_points, value, spatial_shape,
+  level_start_index=None)` is polymorphic: `spatial_shape` accepts a legacy `(H,W)` tuple (1 level) or
+  a `(n_levels,2)` LongTensor; `reference_points` accepts `(B,Nq,2)` (broadcast) or `(B,Nq,n_levels,2)`;
+  `level_start_index` is derived via `cumsum` when absent and consistency-checked when supplied. At
+  `n_levels=1` the param layout, init, and forward output are **byte-identical** to the pre-F1 class
+  (`torch.equal`), so existing single-scale checkpoints (HP-search runs) load with zero
+  missing/unexpected keys. Pure `grid_sample` (per-level loop, no CUDA op); star-pattern init,
+  `geometric_sigma` jitter, KV-cache (now a per-level value list), and recorder hooks preserved
+  (recorded tensors gain a level axis: `sampling_offsets/locations (B,Nq,H,L,P,2)`,
+  `attention_weights (B,Nq,H,L,P)`, `reference_points (B,Nq,L,2)`). `DeformableDecoder` /
+  `DeformableDoubleInputDecoder` are untouched (F4's job) and their legacy calls stay byte-identical.
+  Escape hatch (sibling `MultiScaleDeformableAttention`) not needed — the single class carries both
+  paths. 28-test suite `tests/test_ms_deformable_attention.py`. Spec:
+  `spec/2026-09-01-multi-scale-deformable-attention-primitive/`. **Note:** validation.md's Mask2Former
+  layout reference (`768`/`384`) is a spec typo; the correct shapes for `(d=256,L=3,H=8,P=4)` are
+  `sampling_offsets (192,256)`, `attention_weights (96,256)`, matched by both this module and the
+  pretrained checkpoint.
 - **F2 — Vendored Mask2Former backbone (detectron2-free)** — torchvision ResNet50 → `{res2..res5}`
   feeding a ported `MSDeformAttnPixelDecoder` (detectron2 pieces inlined: `PositionEmbeddingSine`,
   `nn.Conv2d`+`nn.GroupNorm`, no registry/`@configurable`), internal attention = F1 at

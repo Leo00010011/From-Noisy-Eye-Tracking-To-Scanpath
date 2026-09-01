@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from typing import Tuple
 import math
+import itertools
 
 from src.training.inference_recorder import record_module_value
 
@@ -683,6 +684,7 @@ class DeformableAttention(nn.Module):
         embed_dim=256,
         num_heads=8,
         num_points=4,
+        n_levels=1,
         attn_dropout=0.0,
         geometric_sigma = 0,
         normalize_grid_init = True,
@@ -699,6 +701,11 @@ class DeformableAttention(nn.Module):
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.num_points = num_points
+        # Number of feature levels this module samples over. n_levels=1 collapses the param layout
+        # and forward numerics to the original single-scale DeformableAttention byte-for-byte, so
+        # existing checkpoints load unchanged; n_levels>1 matches Mask2Former's MSDeformAttn layout
+        # (head -> level -> point -> xy ordering) so pretrained pixel-decoder weights load by shape.
+        self.n_levels = n_levels
         self.head_dim = embed_dim // num_heads
         self.geometric_sigma = geometric_sigma
         # Dropout on the post-softmax sampling weights. Distinct from the residual-branch dropout
@@ -708,12 +715,12 @@ class DeformableAttention(nn.Module):
         self.normalize_grid_init = normalize_grid_init
 
         # 1. Sampling Offsets:
-        # Output dim: num_heads * num_points * 2 (x, y)
-        self.sampling_offsets = nn.Linear(embed_dim, num_heads * num_points * 2, **factory_kwargs)
-        
+        # Output dim: num_heads * n_levels * num_points * 2 (x, y)
+        self.sampling_offsets = nn.Linear(embed_dim, num_heads * n_levels * num_points * 2, **factory_kwargs)
+
         # 2. Attention Weights:
-        # Output dim: num_heads * num_points
-        self.attention_weights = nn.Linear(embed_dim, num_heads * num_points, **factory_kwargs)
+        # Output dim: num_heads * n_levels * num_points
+        self.attention_weights = nn.Linear(embed_dim, num_heads * n_levels * num_points, **factory_kwargs)
         
         # 3. Projections
         self.value_proj = nn.Linear(embed_dim, embed_dim, **factory_kwargs)
@@ -757,13 +764,15 @@ class DeformableAttention(nn.Module):
         if self.normalize_grid_init:
             grid_init = grid_init / grid_init.abs().max(-1, keepdim=True)[0]
 
-        # (Heads, Points, 2)
-        grid_init = grid_init.unsqueeze(1).repeat(1, self.num_points, 1) 
-        
+        # (Heads, Levels, Points, 2) — the same star pattern is replicated across every level.
+        # At n_levels=1 the level axis is a singleton, so view(-1) flattens in the identical
+        # head -> point -> xy order as the original (Heads, Points, 2) code (byte-identical bias).
+        grid_init = grid_init.view(self.num_heads, 1, 1, 2).repeat(1, self.n_levels, self.num_points, 1)
+
         # Scale the points (Point 0 -> 1x, Point 1 -> 2x, etc.)
         for i in range(self.num_points):
-            grid_init[:, i, :] *= i + 1
-            
+            grid_init[:, :, i, :] *= i + 1
+
         with torch.no_grad():
             self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
             
@@ -772,98 +781,122 @@ class DeformableAttention(nn.Module):
         nn.init.xavier_uniform_(self.value_proj.weight.data)
         nn.init.xavier_uniform_(self.output_proj.weight.data)
 
-    def forward(self, query, reference_points, value, spatial_shape):
+    def forward(self, query, reference_points, value, spatial_shape, level_start_index=None):
         """
         Args:
             query: (Batch, Num_Queries, Embed_Dim)
-            reference_points: (Batch, Num_Queries, 2) - Normalized [0, 1]
-            value: (Batch, H*W, Embed_Dim) - The image feature map
-            spatial_shape: (H, W) tuple - Shape of the feature map
-            
+            reference_points: (Batch, Num_Queries, 2) or (Batch, Num_Queries, n_levels, 2),
+                normalized [0, 1]. A 2-D form is broadcast across all levels.
+            value: (Batch, Sum_l(H_l*W_l), Embed_Dim) - flattened multi-level feature map
+                (single map (Batch, H*W, Embed_Dim) when n_levels == 1).
+            spatial_shape: (H, W) tuple/list (=> 1 level) OR (n_levels, 2) int tensor with
+                rows (H_l, W_l).
+            level_start_index: optional (n_levels,) int tensor [0, H0W0, H0W0+H1W1, ...];
+                derived from spatial_shape when None.
+
         Returns:
             output: (Batch, Num_Queries, Embed_Dim)
         """
         bs, num_queries, _ = query.shape
-        H, W = spatial_shape
-        # 1. Project Input Features
-        # (Batch, H*W, Head, Head_Dim) -> (Batch, Head, Head_Dim, H, W)
-        if self.value_cache is not None:
-            value = self.value_cache
-        else:
-            value = self.value_proj(value)
-            value = value.view(bs, H * W, self.num_heads, self.head_dim)
-            value = value.permute(0, 2, 3, 1).view(bs, self.num_heads, self.head_dim, H, W)
-            if self.cache_memory_kv:
-                self.value_cache = value
-        
-        # 2. Generate Offsets and Attention Weights
-        # Offsets: (Batch, Num_Queries, Heads, Points, 2)
-        sampling_offsets = self.sampling_offsets(query).view(
-            bs, num_queries, self.num_heads, self.num_points, 2
-        )
-        
-        # Weights: (Batch, Num_Queries, Heads, Points)
-        attention_weights = self.attention_weights(query).view(
-            bs, num_queries, self.num_heads, self.num_points
-        )
-        attention_weights = F.softmax(attention_weights, -1)
 
+        # --- Step 3: normalize polymorphic inputs to canonical multi-level tensors ---
+        if torch.is_tensor(spatial_shape):
+            shapes = spatial_shape.to(device=value.device, dtype=torch.long)   # (L, 2)
+        else:  # legacy (H, W) tuple/list => single level
+            shapes = torch.as_tensor([spatial_shape], device=value.device, dtype=torch.long)  # (1, 2)
+        L = shapes.shape[0]
+        if L != self.n_levels:
+            raise ValueError(
+                f"spatial_shape has {L} levels but module has n_levels={self.n_levels}"
+            )
+        level_sizes = (shapes[:, 0] * shapes[:, 1]).tolist()   # [H_l*W_l]
+        if sum(level_sizes) != value.shape[1]:
+            raise ValueError(
+                f"Sum of H_l*W_l ({sum(level_sizes)}) does not match value length ({value.shape[1]})"
+            )
+        expected_start = [0, *itertools.accumulate(level_sizes)][:-1]
+        if level_start_index is None:
+            level_start_index = torch.as_tensor(expected_start, device=value.device, dtype=torch.long)
+        elif level_start_index.tolist() != expected_start:
+            raise ValueError(
+                f"level_start_index {level_start_index.tolist()} inconsistent with spatial_shape "
+                f"(expected {expected_start})"
+            )
+
+        # reference_points -> (B, Nq, L, 2)
+        if reference_points.shape[-1] != 2:
+            raise ValueError("reference_points last dim must be 2 (box refs are out of scope)")
+        if reference_points.dim() == 3:                       # (B, Nq, 2) -> broadcast across levels
+            reference_points = reference_points[:, :, None, :].expand(-1, -1, L, -1)
+        elif reference_points.shape[2] != L:
+            raise ValueError(
+                f"reference_points level axis ({reference_points.shape[2]}) must equal n_levels ({L})"
+            )
+
+        # --- Step 4: project + (optionally cache) the value, split per level ---
+        if self.value_cache is not None:
+            value_levels = self.value_cache               # list of (bs*heads, head_dim, H_l, W_l)
+        else:
+            v = self.value_proj(value)                    # (bs, Sum_l H_l*W_l, embed_dim)
+            v = v.view(bs, value.shape[1], self.num_heads, self.head_dim)
+            v_split = v.split(level_sizes, dim=1)         # L x (bs, H_l*W_l, heads, head_dim)
+            value_levels = []
+            for (H, W), v_l in zip(shapes.tolist(), v_split):
+                # (bs, H_l*W_l, heads, head_dim) -> (bs*heads, head_dim, H_l, W_l)
+                v_l = v_l.permute(0, 2, 3, 1).reshape(bs * self.num_heads, self.head_dim, H, W)
+                value_levels.append(v_l)
+            if self.cache_memory_kv:
+                self.value_cache = value_levels
+
+        # --- Step 5: offsets, weights, joint softmax, per-level sampling locations ---
+        # Offsets: (Batch, Num_Queries, Heads, Levels, Points, 2)
+        sampling_offsets = self.sampling_offsets(query).view(
+            bs, num_queries, self.num_heads, self.n_levels, self.num_points, 2
+        )
+        # Weights softmaxed jointly over the flattened (Levels * Points) axis (matches Mask2Former).
+        attention_weights = self.attention_weights(query).view(
+            bs, num_queries, self.num_heads, self.n_levels * self.num_points
+        )
+        attention_weights = F.softmax(attention_weights, -1).view(
+            bs, num_queries, self.num_heads, self.n_levels, self.num_points
+        )
         attention_weights = self.dropout(attention_weights)
-        # 3. Compute Sampling Locations
-        # sampling_offsets are unconstrained, so we normalize them by H and W
-        # (Batch, Num_Queries, Heads, Points, 2)
+
         if self.training and self.geometric_sigma > 0:
-            # Create noise: (Batch, Num_Queries, Heads, Points, 2)
-            # Use a small sigma, e.g., 0.1 or 0.05
             noise = torch.randn_like(sampling_offsets) * self.geometric_sigma
             sampling_offsets = sampling_offsets + noise
-            
-        offset_normalizer = torch.tensor([W, H], device=query.device, dtype=query.dtype)
-        
-        # Ref Points: (Batch, Num_Queries, 1, 1, 2) -> Broadcasat to Heads & Points
-        sampling_locations = reference_points[:, :, None, None, :] \
-                             + sampling_offsets / offset_normalizer[None, None, None, None, :]
+
+        # Per-level normalizer [W_l, H_l]: (L, 2)
+        offset_normalizer = torch.stack([shapes[..., 1], shapes[..., 0]], -1)
+        # (B, Nq, 1, L, 1, 2) + (B, Nq, H, L, P, 2) / (1, 1, 1, L, 1, 2) -> (B, Nq, H, L, P, 2)
+        sampling_locations = reference_points[:, :, None, :, None, :] \
+            + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
+
         if _module_recording_enabled(self):
             record_module_value(self, "sampling_offsets", sampling_offsets)
             record_module_value(self, "attention_weights", attention_weights)
             record_module_value(self, "sampling_locations", sampling_locations)
             record_module_value(self, "reference_points", reference_points)
 
-        # 4. Grid Sample
-        # We need to reshape inputs to use grid_sample efficiently
-        # New Batch Size = Batch * Heads
-        
-        # Reshape Value: (Batch*Heads, Head_Dim, H, W)
-        # log view parameters
-        value_flat = value.reshape(bs * self.num_heads, self.head_dim, H, W)
-        
-        # Reshape Grid: (Batch*Heads, Num_Queries, Points, 2)
-        # Also convert [0, 1] -> [-1, 1] for grid_sample
-        sampling_grid = 2 * sampling_locations - 1
-        sampling_grid = sampling_grid.permute(0, 2, 1, 3, 4).flatten(0, 1)
+        # --- Step 6: per-level grid_sample and reduce over (levels, points) ---
+        sampling_grids = 2 * sampling_locations - 1           # [0,1] -> [-1,1]
+        sampled_per_level = []
+        for l, v_l in enumerate(value_levels):
+            # grid for this level: (B, Nq, H, P, 2) -> (B*H, Nq, P, 2)
+            grid_l = sampling_grids[:, :, :, l].permute(0, 2, 1, 3, 4).flatten(0, 1)
+            sampled = F.grid_sample(
+                v_l, grid_l, mode='bilinear', padding_mode='zeros', align_corners=False
+            )                                                 # (B*H, head_dim, Nq, P)
+            sampled_per_level.append(sampled)
 
-        # Sample! 
-        # Output: (Batch*Heads, Head_Dim, Num_Queries, Points)
-        sampled_values = F.grid_sample(
-            value_flat, 
-            sampling_grid, 
-            mode='bilinear', 
-            padding_mode='zeros', 
-            align_corners=False
+        # stack levels: (B*H, head_dim, Nq, L, P) -> flatten (L, P)
+        sampled = torch.stack(sampled_per_level, dim=-2).flatten(-2)   # (B*H, head_dim, Nq, L*P)
+        weights = attention_weights.permute(0, 2, 1, 3, 4).reshape(
+            bs * self.num_heads, 1, num_queries, self.n_levels * self.num_points
         )
-        
-        # 5. Apply Attention Weights
-        # Reshape weights: (Batch*Heads, 1, Num_Queries, Points)
-        attention_weights = attention_weights.permute(0, 2, 1, 3).flatten(0, 1).unsqueeze(1)
-        
-        # Weighted Sum over Points
-        # (Batch*Heads, Head_Dim, Num_Queries)
-        output = (sampled_values * attention_weights).sum(-1)
-        
-        # 6. Final Projection
-        # (Batch, Num_Queries, Embed_Dim)
+        output = (sampled * weights).sum(-1)                  # (B*H, head_dim, Nq)
         output = output.view(bs, self.num_heads * self.head_dim, num_queries).transpose(1, 2)
-        
+
         return self.output_proj(output)
     
     
