@@ -153,6 +153,59 @@ forward(query,               # (B, Nq, embed_dim)
   with `attn_mask`/`src_rope`/`mem2_rope` kwargs it does not accept, and (unlike the `norm_first`
   branch) does not strip CLS. Operative runs use `norm_first=True`, so it is currently dead code.
 
+### Vendored backbone (F2 as-built) — F2 IMPLEMENTED
+
+`Mask2FormerBackbone` (`src/model/ms_deform_backbone.py`, delivered
+`spec/2026-09-01-vendored-mask2former-backbone/`) is the concrete image-side backbone F3/F6 consume.
+It is **additive** — modifies no existing file, and DINOv3 stays selectable.
+
+**Deviation from locked-decision 3 (user-directed, planning session).** The Mask2Former R50
+**COCO-panoptic** checkpoint (backbone + pixel decoder), the Caffe2/detectron2 key-remap, and the
+weight checksum were **dropped**. The backbone uses **torchvision ResNet50 ImageNet weights**
+(`IMAGENET1K_V2`→`V1`→random, warn-and-continue on fetch failure, never raises) and the pixel decoder
+is **freshly initialized**. Because a *frozen* random decoder would emit fixed random projections,
+freezing is **granular**: ResNet50 frozen, pixel decoder trainable. (This section supersedes
+locked-decision 3 above and the "external COCO checkpoint" language; reviving external
+pretrained pixel-decoder weights remains a deferred ablation that would reintroduce a key-remap
+loader.)
+
+**As-built API.**
+
+```python
+Mask2FormerBackbone(conv_dim=256, n_heads=8, n_points=4, transformer_enc_layers=6,
+                    transformer_dim_feedforward=1024, transformer_dropout=0.0,
+                    transformer_in_features=("res3","res4","res5"), return_stride4=False,
+                    mask_dim=256, freeze_backbone=True, freeze_pixel_decoder=False,
+                    imagenet_weights="IMAGENET1K_V2", device="cpu", dtype=torch.float32)
+forward(x)  # (B,3,H,W), pipeline-normalized
+    -> [res5, res4, res3]                       # 3 maps [B,256,Hₗ,Wₗ], coarse→fine, no CLS
+    -> ([res5,res4,res3,res2_fpn], mask_features)  # when return_stride4=True
+```
+
+- **Feature extractor**: `create_feature_extractor(resnet50, {layer1:res2, layer2:res3, layer3:res4,
+  layer4:res5})`. At `img_size=256`: res2 `(B,256,64,64)`, res3 `(B,512,32,32)`, res4 `(B,1024,16,16)`,
+  res5 `(B,2048,8,8)`. Shapes are **dynamic** (128²→res5 4²; non-square 256×192→res5 8×6).
+- **Pixel decoder** (`MSDeformAttnPixelDecoder`): `input_shape` is a plain `Dict[str,(channels,stride)]`;
+  input projections `nn.Conv2d(Cₗ,256,1)+nn.GroupNorm(32,256)` ordered low→high res (res5,res4,res3);
+  `PositionEmbeddingSine(128, normalize=True)` (copied verbatim, faithful to source at `atol=1e-6`);
+  a 6-layer `MSDeformAttnTransformerEncoderOnly` owning `level_embed (3,256)`. `forward_features`
+  returns the 3 split maps coarse→fine; the optional stride-4 branch adds an FPN lateral/output conv
+  on res2 + a `mask_features` 1×1 conv (all **built only** when `return_stride4=True`).
+- **Deformable op**: each encoder layer's `self_attn` is F1 `DeformableAttention(256, num_heads=8,
+  num_points=4, n_levels=3)` — `sampling_offsets (192,256)`, `attention_weights (96,256)`,
+  `value_proj/output_proj (256,256)` — called `self_attn(src+pos, ref, src, spatial_shapes,
+  level_start_index)`, **no `padding_mask`**. `spatial_shapes = [[8,8],[16,16],[32,32]]`,
+  `level_start_index = [0,64,320]`, `reference_points (B,ΣHₗWₗ,3,2)` from plain `linspace(0.5,N-0.5,N)/N`
+  grids (no `valid_ratios`). `_reset_parameters` skips `self_attn.` params so F1's star-pattern init
+  survives the encoder's generic xavier flood.
+- **Freezing**: `freeze_backbone=True` (default) sets every ResNet param `requires_grad=False` and a
+  `train(mode)` override re-asserts `feature_extractor.eval()` so BN running stats stay frozen;
+  `freeze_pixel_decoder=False` (default) keeps the decoder trainable. Independent flags.
+- **Purity**: no detectron2/fvcore/CUDA `MSDeformAttn` in the import graph (subprocess-asserted); all
+  conv/norm are `torch.nn`; F1 recorder hooks carry through with a level axis of 3.
+- **CLS-free**: output maps are always 4-D `(B,C,H,W)` — the DINOv3 `mem[:,1:,:]` convention is
+  absent (F3 strips DINOv3's CLS at the bundle boundary instead).
+
 ### Contract changes vs. the current DINOv3 path
 
 | Aspect | DINOv3 (current) | Mask2Former (target) |
@@ -180,9 +233,10 @@ option but not the default path.
 
 ### Files to be created / touched
 
-- **New** (F2): `src/model/ms_deform_backbone.py` (torchvision ResNet50 extractor + vendored,
+- **New** (F2, ✓ DONE): `src/model/ms_deform_backbone.py` (torchvision ResNet50 extractor + vendored,
   detectron2-free pixel decoder using F1 at `n_levels=3`; ImageNet weights via torchvision, no
-  custom weight loader). F3 adds the `MultiScaleFeatures` bundle + backbone adapters.
+  custom weight loader) + `tests/test_ms_deform_backbone.py`. F3 adds the `MultiScaleFeatures`
+  bundle + backbone adapters.
 - **Extended**: `src/model/blocks.py` (`DeformableAttention` done in F1; `DeformableDecoder`,
   `DeformableDoubleInputDecoder` in F4), `src/model/mixer_model.py` (`encode`/`decode_fixation`),
   `src/training/pipeline_builder.py` (backbone construction, `img_input_proj` 256→512).
@@ -198,6 +252,7 @@ option but not the default path.
 | `MixerModel` | `src/model/mixer_model.py` | Full image-conditioned model. Maintains `denoise_modules` / `fixation_modules` lists; `set_phase()` freezes the inactive group. `load_encoder()` cherry-picks encoder weights from a checkpoint by module name. |
 | `PathModel` | `src/model/path_model.py` | Gaze-only baseline. Simpler: single encoder stack → decoder stack → head. `set_phase()` is a no-op. |
 | `DinoV3Wrapper` | `src/model/dino_wrapper.py` | Wraps a locally cloned DINOv3 model. Returns per-patch tokens including a CLS prefix token. Loaded from a local `.pth` file, not from HuggingFace at runtime. |
+| `Mask2FormerBackbone` | `src/model/ms_deform_backbone.py` | **F2 multi-scale image backbone.** Torchvision ResNet50 (ImageNet, frozen + eval so BN stats freeze) → vendored detectron2-free `MSDeformAttnPixelDecoder` (fresh init, trainable) whose 6-layer transformer runs F1 `DeformableAttention` at `n_levels=3`. `forward(x)` returns 3 enhanced CLS-free maps `[B,256,Hₗ,Wₗ]` coarse→fine `[res5,res4,res3]` (+ optional stride-4 `res2_fpn` and `mask_features` when `return_stride4=True`). Additive — DINOv3 stays selectable. |
 | `FreeViewInMemory` | `src/data/datasets.py` | **Primary dataset class.** Loads all scanpath data from the HDF5 file into RAM at startup. Applies the configured transform pipeline per `__getitem__`. Paired with `seq2seq_padded_collate_fn` for variable-length sequence batching. |
 | `DeduplicatedMemoryDataset` | `src/data/datasets.py` | Image dataset that avoids loading the same stimulus image multiple times. Used when `use_img_dataset=True`. |
 | `CoupledDataloader` | `src/data/datasets.py` | Synchronises iteration over the gaze dataset (`FreeViewInMemory`) and the image dataset (`DeduplicatedMemoryDataset`), yielding matched (gaze, image) batch pairs. |

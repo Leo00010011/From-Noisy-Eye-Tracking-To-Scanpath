@@ -33,7 +33,7 @@
 ## In Progress
 
 - **Spec-driven development workflow** — Constitution documents written; first sprint-level feature spec (EVE real-noise scanpath inference) delivered end-to-end under `spec/2026-07-27-eve-real-noise-scanpath-inference/`
-- **Multi-scale image backbone migration (Mask2Former)** — replacing the single-scale frozen DINOv3 image encoder with a vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** (from the Mask2Former clone at `../mask2former/`), and making the eye-decoder and fixation-decoder deformable cross-attentions **multi-scale**. Factored into six independently testable features **F1–F6** (see the dedicated Backlog subsection below and the TechStack "Multi-scale Image Backbone Migration" section for full contracts). **F1 (the deformable primitive) is ✓ DONE** — `DeformableAttention` is now N-level capable and byte-identical at `n_levels=1`; its as-built API and the multi-scale shape reference live in TechStack §"Deformable param layout (F1 as-built)". **Next up: F2** (vendored **torchvision ResNet50 (ImageNet) + freshly-initialized pixel decoder**), which consumes F1 at `n_levels=3`; F3 is parallelizable. The backbone is **ImageNet-pretrained ResNet50 frozen + trainable pixel decoder** — no external segmentation checkpoint is loaded. **DINOv3 remains selectable** — the new backbone is additive, gated by a config group, so the existing single-scale path and its checkpoints keep working throughout.
+- **Multi-scale image backbone migration (Mask2Former)** — replacing the single-scale frozen DINOv3 image encoder with a vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** (from the Mask2Former clone at `../mask2former/`), and making the eye-decoder and fixation-decoder deformable cross-attentions **multi-scale**. Factored into six independently testable features **F1–F6** (see the dedicated Backlog subsection below and the TechStack "Multi-scale Image Backbone Migration" section for full contracts). **F1 and F2 are ✓ DONE.** F1 (`DeformableAttention`) is now N-level capable and byte-identical at `n_levels=1`; its as-built API and the multi-scale shape reference live in TechStack §"Deformable param layout (F1 as-built)". F2 (`Mask2FormerBackbone` in `src/model/ms_deform_backbone.py`) is the vendored, detectron2-free **torchvision ResNet50 (ImageNet, frozen) + freshly-initialized, trainable pixel decoder** consuming F1 at `n_levels=3`; it emits 3 CLS-free multi-scale maps `[B,256,Hₗ,Wₗ]`. **Next up: F3** (the `MultiScaleFeatures` bundle decoupling `MixerModel` from backbone specifics); F4 is parallelizable. The backbone is **ImageNet-pretrained ResNet50 frozen + trainable pixel decoder** — no external segmentation checkpoint is loaded. **DINOv3 remains selectable** — the new backbone is additive, gated by a config group, so the existing single-scale path and its checkpoints keep working throughout.
 
 ---
 
@@ -84,17 +84,34 @@ F3 → F4 → F6** (F3 parallelizable with F2).
   layout reference (`768`/`384`) is a typo; the correct shapes for `(d=256,L=3,H=8,P=4)` are
   `sampling_offsets (192,256)`, `attention_weights (96,256)` — what F2's pixel-decoder attention
   builds.
-- **F2 — Vendored Mask2Former backbone (detectron2-free)** — torchvision ResNet50 → `{res2..res5}`
-  feeding a ported `MSDeformAttnPixelDecoder` (detectron2 pieces inlined: `PositionEmbeddingSine`,
-  `nn.Conv2d`+`nn.GroupNorm`, no registry/`@configurable`), internal attention = F1 at
-  `n_levels=3`, `conv_dim=256`. Returns 3 enhanced multi-scale maps `[B,256,Hₗ,Wₗ]`, no CLS.
-  ResNet50 uses **torchvision ImageNet weights** (warn-and-continue on fetch failure → random init);
-  the pixel decoder is **freshly initialized**. Freezing is **granular**: ResNet50 frozen (kept in
-  `eval()` so BN running stats are frozen), pixel decoder **trainable**. An **optional** stride-4
-  (res2, 64²) FPN + `mask_features` branch (`return_stride4`, default off) is built only when
-  requested, for a future heatmap-regression iteration. Input is assumed pipeline-normalized (no
-  internal mean/std). New file `src/model/ms_deform_backbone.py`; suite `tests/test_ms_deform_backbone.py`.
-  Spec: `spec/2026-09-01-vendored-mask2former-backbone/`.
+- ✓ **F2 — Vendored Mask2Former backbone (detectron2-free)** — DONE. `Mask2FormerBackbone`
+  (`src/model/ms_deform_backbone.py`): torchvision ResNet50 → `{res2..res5}` (via
+  `create_feature_extractor`, `{layer1..layer4}`→`{res2..res5}`) feeding a ported
+  `MSDeformAttnPixelDecoder` (detectron2 pieces inlined: `PositionEmbeddingSine` copied verbatim,
+  `nn.Conv2d`+`nn.GroupNorm(32,·)`, `xavier_uniform_` init, no registry/`@configurable`/`ShapeSpec`;
+  `input_shape` is a plain `Dict[str,(channels,stride)]`). Internal 6-layer transformer encoder's
+  `self_attn` = F1 `DeformableAttention` at `n_levels=3` (`sampling_offsets (192,256)`,
+  `attention_weights (96,256)`), softmax joint over `n_levels·n_points`; the `masks`/`valid_ratios`/
+  `padding_mask` machinery is dropped (fixed image size ⇒ no padding), reference points are plain
+  `linspace(0.5,N-0.5,N)/N` grids. `_reset_parameters` skips `self_attn.` params so F1's star-pattern
+  init survives the generic xavier flood. `forward(x)` returns **3 enhanced multi-scale maps**
+  `[B,256,Hₗ,Wₗ]` in **coarse→fine** order `[res5(8²),res4(16²),res3(32²)]` at `img_size=256`,
+  **no CLS**; shapes are dynamic (128²→res5 4², non-square 256×192→res5 8×6). ResNet50 uses
+  **torchvision ImageNet weights** (`IMAGENET1K_V2`→`V1`→random-init, warn-and-continue on fetch
+  failure, never raises). Pixel decoder is **freshly initialized**. Freezing is **granular**:
+  ResNet50 frozen + kept in `eval()` (BN running stats frozen) via a `train()` override, pixel
+  decoder **trainable** (independent `freeze_backbone`/`freeze_pixel_decoder` flags). Optional
+  stride-4 (res2, 64²) FPN + `mask_features` branch (`return_stride4`, default off) is **built only**
+  when requested → `forward` then returns `([res5,res4,res3,res2_fpn], mask_features)`, `num_levels=4`.
+  Input assumed pipeline-normalized (no internal mean/std, mirroring `DinoV3Wrapper`). Pure PyTorch —
+  no detectron2/fvcore/CUDA `MSDeformAttn` in the import graph (subprocess-asserted); F1 recorder
+  hooks carry through with a level axis of 3. **Modifies no existing file** (additive; DINOv3 stays
+  selectable). 31-test suite `tests/test_ms_deform_backbone.py`. Spec:
+  `spec/2026-09-01-vendored-mask2former-backbone/`. **Deviation from the original F2 plan (locked
+  decision 3):** the Mask2Former R50 **COCO-panoptic** checkpoint + Caffe2 key-remap + checksum
+  loader were dropped in favor of ImageNet R50 + fresh decoder (user-directed, planning session), so
+  there is no external checkpoint, no weight translation, and no checksum. **Next up: F3** (the
+  `MultiScaleFeatures` bundle; F4 parallelizable).
 - **F3 — Multi-scale feature contract / backbone adapter** — a small bundle
   `MultiScaleFeatures(value:[B,ΣHₗWₗ,D], spatial_shapes, level_start_index, reference_grids)` that
   decouples `MixerModel` from backbone specifics. Kills the `mem[:,1:,:]` CLS assumption, the
