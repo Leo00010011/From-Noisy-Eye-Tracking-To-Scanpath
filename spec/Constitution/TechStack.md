@@ -145,13 +145,14 @@ forward(query,               # (B, Nq, embed_dim)
   `Σ Hₗ·Wₗ ≠ value.shape[1]`; `reference_points` last dim ≠ 2 (box refs out of scope) or level
   axis ≠ `n_levels`; `level_start_index` inconsistent with `spatial_shape`; `embed_dim %
   num_heads` (at construction).
-- **Decoders are still single-scale.** F1 left `DeformableDecoder` /
-  `DeformableDoubleInputDecoder` untouched — they still pass a `(H,W)` tuple + `(B,Nq,2)` ref
-  points and slice CLS via `mem[:,1:,:]`. **F4 opts them into the tensor `spatial_shape` +
-  per-level ref-point form.** ⚠️ Pre-existing latent bug for F4 to fix: the non-`norm_first`
-  branch of `DeformableDoubleInputDecoder.forward` (`blocks.py:1125`) calls `__cross_attention2`
-  with `attn_mask`/`src_rope`/`mem2_rope` kwargs it does not accept, and (unlike the `norm_first`
-  branch) does not strip CLS. Operative runs use `norm_first=True`, so it is currently dead code.
+- **Decoders are multi-scale-capable as of F4** (see §"Multiscale-capable decoders (F4 as-built)").
+  `DeformableDecoder` / `DeformableDoubleInputDecoder` now take an `n_levels` arg and a polymorphic
+  `forward(..., spatial_shapes=None, level_start_index=None)`: `spatial_shapes is None` is the legacy
+  single-scale path (CLS-prefixed `mem[:,1:,:]`, fixed `(H,W)` tuple, `n_levels==1`); a supplied
+  `spatial_shapes` tensor is the F3 multi-scale path (CLS-free `value`, per-level tensors). The
+  formerly-flagged latent bug (the non-`norm_first` branch forwarding `attn_mask`/`src_rope`/
+  `mem2_rope` kwargs `__cross_attention2` rejected and never stripping CLS) is **fixed** — both
+  branches now call `__cross_attention2` identically.
 
 ### Vendored backbone (F2 as-built) — F2 IMPLEMENTED
 
@@ -206,6 +207,113 @@ forward(x)  # (B,3,H,W), pipeline-normalized
 - **CLS-free**: output maps are always 4-D `(B,C,H,W)` — the DINOv3 `mem[:,1:,:]` convention is
   absent (F3 strips DINOv3's CLS at the bundle boundary instead).
 
+### Multi-scale feature contract (F3 as-built) — F3 IMPLEMENTED
+
+`src/model/ms_features.py` (delivered `spec/2026-09-02-multi-scale-feature-contract-backbone-adapter/`)
+is the one backbone-agnostic image-feature contract F4/F6 consume. It is **additive** — modifies no
+existing file, so DINOv3 and the F2 backbone stay untouched and old checkpoints keep loading. F3
+builds the contract but does **not** yet consume it: `MixerModel`'s `mem[:,1:,:]`, `patch_resolution`,
+and `.rope_embed` access are removed in F6; the decoders in F4.
+
+**As-built API.**
+
+```python
+build_level_start_index(spatial_shapes) -> (L,) int64          # [0, H0W0, H0W0+H1W1, ...]
+build_reference_grids(spatial_shapes, device="cpu",
+                      dtype=torch.float32) -> (S, 2) float      # per-token (x,y) centers in (0,1)
+
+@dataclass
+class MultiScaleFeatures:
+    value: (B, S, D) float; spatial_shapes: (L, 2) int64
+    level_start_index: (L,) int64; reference_grids: (S, 2) float
+    # __post_init__ validates all shapes/dtypes/consistency (ValueError, no coercion)
+    # properties: num_levels, embed_dim, batch_size, seq_len; level_sizes() -> list[int]
+    # to(device=None, dtype=None) -> new bundle; dtype casts ONLY value+reference_grids
+
+class Mask2FormerFeatureAdapter(nn.Module):   # __init__(backbone); embed_dim=256, num_levels=3(/4)
+class DinoV3FeatureAdapter(nn.Module):        # __init__(backbone, num_prefix_tokens=1); embed_dim=384, num_levels=1
+    # both forward(x:(B,3,H,W)) -> MultiScaleFeatures
+```
+
+- **Ordering convention (single source of truth):** levels in the producer's list order
+  (coarse→fine for Mask2Former), tokens row-major (`W` fastest) within a level — exactly
+  `map.flatten(2).transpose(1, 2)`. `value` token order, `spatial_shapes` row order, and
+  `reference_grids` order all agree by construction; `__post_init__` enforces it (no separate index
+  array to drift). `build_reference_grids` stacks `(ref_x, ref_y)` — **x first**, matching F1's
+  `(x, y)` reference convention — and equals `get_reference_points` up to the level-repeat/batch axis.
+- **`reference_grids` are memory-token centers, not query reference points.** Deformable *query*
+  refs come from gaze/fixation coords (F4/F6). `reference_grids` is the memory geometry F6 uses to
+  position-encode the multi-level memory (replacing DINOv3's `pos_proj.forward_features()` patch
+  grid); stored compact `(S, 2)` (no batch/level axis) to match F2's internal base grid.
+- **Mask2Former adapter:** flatten→concat is the exact inverse of the pixel decoder's split→reshape
+  (`value` is element-for-element the transformer memory — round-trip identity). Tolerates the
+  4-level `return_stride4` output and **discards** `mask_features`. Native `D=256`, **no projection**
+  (the 256→`model_dim` `img_input_proj` is F6's job).
+- **DINOv3 adapter:** strips the CLS prefix **once** here (the sole `mem[:,1:,:]` in the codebase
+  after F4/F6). `backbone.model.patch_size` is read **once at init** — the only DINOv3-internal
+  attribute access at the boundary. A phantom-prefix guard raises `ValueError` when `H'·W' !=`
+  token count. Native `D=384`.
+- **Module semantics:** both adapters own the backbone as a submodule (keys `backbone.…`), add
+  **zero** params of their own, and compute geometry per forward (not registered buffers → dynamic
+  input sizes work). `.to()`/`.train()`/`.eval()`/`state_dict`/F1 recorder hooks all propagate;
+  F2's `train()` override keeps the frozen ResNet in eval through the submodule. Freezing is
+  entirely the wrapped backbone's.
+- **F1 consumability:** a bundle from either adapter feeds `DeformableAttention(embed_dim=D,
+  num_heads, num_points, n_levels=bundle.num_levels)` directly via `attn(query, ref, bundle.value,
+  bundle.spatial_shapes, bundle.level_start_index)`. Passing a 3-level bundle to an `n_levels=1`
+  attention raises F1's "spatial_shape has 3 levels but module has n_levels=1" — the contract is
+  enforced end-to-end. 40-test suite `tests/test_ms_features.py`.
+
+### Multiscale-capable decoders (F4 as-built) — F4 IMPLEMENTED
+
+`DeformableDecoder` (eye decoder) and `DeformableDoubleInputDecoder` (fixation decoder) in
+`src/model/blocks.py` (delivered `spec/2026-09-02-multiscale-capable-eye-and-fixation-decoders/`) are
+the decoder-side half of the migration. Both consume F1 at *N* levels and the F3 multi-scale memory,
+**retro-compatibly** — additive, and the single-scale path is byte-identical.
+
+**As-built API.**
+
+```python
+DeformableDecoder(..., num_points=4, n_levels=1, spatial_shape=(16,16), ...)
+  forward(src, mem, tgt_mask=None, reference_points=None,
+          spatial_shapes=None, level_start_index=None) -> (B, Nq, D)
+
+DeformableDoubleInputDecoder(..., spatial_shape=(16,16), num_points=4, n_levels=1, ...)
+  forward(src, mem1, mem2, tgt_mask=None, mem1_mask=None, mem2_mask=None,
+          reference_points=None, spatial_shapes=None, level_start_index=None) -> (B, Nq, D)
+```
+
+- **`n_levels` single-sourced.** The constructor arg (after `num_points`) is stored on the decoder and
+  passed straight to the inner F1 op — `cross_attn.n_levels == decoder.n_levels` (and likewise
+  `second_cross_attn.n_levels`). The double-input decoder's **first** cross-attention (a plain
+  `MultiHeadedAttention` over gaze memory `mem1`) is untouched — only the second (deformable) one is
+  level-aware.
+- **Polymorphic dispatch (the one selector).** `spatial_shapes is None` ⇒ **legacy single-scale**: the
+  image memory is CLS-prefixed and sliced `mem[:,1:,:]` (`value2 = mem2[:,1:,:]` in the double
+  decoder), the fixed `self.spatial_shape=(16,16)` tuple is used, `level_start_index=None`, and
+  `n_levels==1` is required (else `ValueError: "legacy single-scale path requires n_levels==1"`).
+  `spatial_shapes` supplied ⇒ **multi-scale**: the memory is the already-CLS-free F3 `value
+  (B,ΣHₗWₗ,D)`, passed through **unsliced**, with `spatial_shapes (L,2)` + `level_start_index (L,)`
+  forwarded to F1. **CLS is stripped exactly once, on exactly one branch** (`[:,1:,:]` appears only
+  under `spatial_shapes is None`). `reference_points (B,Nq,2)` pass through unchanged; F1 broadcasts
+  across levels (per-level `(B,Nq,L,2)` refs remain an F6/later concern).
+- **Byte-identical at `n_levels=1`.** `state_dict` keys/shapes are unchanged (the F1 op is
+  byte-identical at 1 level), pre-F4 checkpoints load with zero missing/unexpected keys, and the legacy
+  forward is `torch.equal` to pre-F4 in both norm modes — so the unmodified `MixerModel` (which never
+  passes `spatial_shapes`) trains identically until F6.
+- **Non-`norm_first` bug fixed.** `__cross_attention2`'s signature is now `(src, value,
+  reference_points=None, spatial_shapes=None, level_start_index=None)` — the bogus
+  `attn_mask`/`src_rope`/`mem2_rope` kwargs are gone; both branches call it identically, differing only
+  in pre- vs post-LayerNorm placement. (Recorder stages still fire on the `norm_first` path only, as
+  before — the non-`norm_first` branch remains record-free per the F4 plan.)
+- **No import cycle.** The decoders take **unpacked** tensors (`value`/`spatial_shapes`/
+  `level_start_index` — exactly F1's forward args), so `blocks.py` never imports `ms_features`; F6
+  unpacks the F3 bundle at the `MixerModel` call site.
+- **Cache & recorder carry-through.** `enable/disable_memory_kv_cache` / `clear_kv_cache` delegate to
+  the inner ops; at `n_levels>1` the second cross-attn's per-level value cache (F1) warms on the first
+  decode step and matches the cold result. Recorder tensors gain a level axis at `n_levels>1`
+  (squeezable singleton at 1). 34-test suite `tests/test_ms_decoders.py`.
+
 ### Contract changes vs. the current DINOv3 path
 
 | Aspect | DINOv3 (current) | Mask2Former (target) |
@@ -217,10 +325,12 @@ forward(x)  # (B,3,H,W), pipeline-normalized
 | Channel dim | 384 → `img_input_proj` → 512 | 256 (`conv_dim`) → `img_input_proj` → 512 |
 | Attr access | `image_encoder.model.patch_size`, `.rope_embed` | guarded behind backbone type (absent on ResNet50) |
 
-**Canonical multi-scale memory bundle (F3)** — flattened value `[B, ΣHₗWₗ, D]`, `spatial_shapes`,
-`level_start_index`, `reference_grids`; shared by the pixel decoder's internal attention, the eye
-decoder, and the fixation decoder. A DINOv3 wrapper also emits this bundle at `n_levels=1` so both
-backbones present one interface to `MixerModel`.
+**Canonical multi-scale memory bundle (F3, ✓ IMPLEMENTED)** — `MultiScaleFeatures`
+(`src/model/ms_features.py`): flattened value `[B, ΣHₗWₗ, D]`, `spatial_shapes`, `level_start_index`,
+`reference_grids`; shared by the pixel decoder's internal attention, the eye decoder, and the
+fixation decoder. `Mask2FormerFeatureAdapter` (3 levels) and `DinoV3FeatureAdapter` (1 level, CLS
+stripped once) both emit this bundle so both backbones present one interface to `MixerModel`. See
+§"Multi-scale feature contract (F3 as-built)".
 
 ### Resolution budget (A3)
 
@@ -235,11 +345,14 @@ option but not the default path.
 
 - **New** (F2, ✓ DONE): `src/model/ms_deform_backbone.py` (torchvision ResNet50 extractor + vendored,
   detectron2-free pixel decoder using F1 at `n_levels=3`; ImageNet weights via torchvision, no
-  custom weight loader) + `tests/test_ms_deform_backbone.py`. F3 adds the `MultiScaleFeatures`
-  bundle + backbone adapters.
+  custom weight loader) + `tests/test_ms_deform_backbone.py`.
+- **New** (F3, ✓ DONE): `src/model/ms_features.py` (`MultiScaleFeatures` bundle + geometry helpers
+  + `Mask2FormerFeatureAdapter` / `DinoV3FeatureAdapter`) + `tests/test_ms_features.py`. Additive —
+  modifies no existing file.
 - **Extended**: `src/model/blocks.py` (`DeformableAttention` done in F1; `DeformableDecoder`,
-  `DeformableDoubleInputDecoder` in F4), `src/model/mixer_model.py` (`encode`/`decode_fixation`),
-  `src/training/pipeline_builder.py` (backbone construction, `img_input_proj` 256→512).
+  `DeformableDoubleInputDecoder` done in F4 + `tests/test_ms_decoders.py`), `src/model/mixer_model.py`
+  (`encode`/`decode_fixation`) and `src/training/pipeline_builder.py` (backbone construction,
+  `img_input_proj` 256→512) — **F6, still pending**.
 - **New config group** (F6): `configs/model/image_encoder/` (selects `dinov3` vs `mask2former`;
   Mask2Former entry carries freeze flags, `return_stride4`, and the torchvision ImageNet weights id
   — no external checkpoint path).
@@ -253,6 +366,8 @@ option but not the default path.
 | `PathModel` | `src/model/path_model.py` | Gaze-only baseline. Simpler: single encoder stack → decoder stack → head. `set_phase()` is a no-op. |
 | `DinoV3Wrapper` | `src/model/dino_wrapper.py` | Wraps a locally cloned DINOv3 model. Returns per-patch tokens including a CLS prefix token. Loaded from a local `.pth` file, not from HuggingFace at runtime. |
 | `Mask2FormerBackbone` | `src/model/ms_deform_backbone.py` | **F2 multi-scale image backbone.** Torchvision ResNet50 (ImageNet, frozen + eval so BN stats freeze) → vendored detectron2-free `MSDeformAttnPixelDecoder` (fresh init, trainable) whose 6-layer transformer runs F1 `DeformableAttention` at `n_levels=3`. `forward(x)` returns 3 enhanced CLS-free maps `[B,256,Hₗ,Wₗ]` coarse→fine `[res5,res4,res3]` (+ optional stride-4 `res2_fpn` and `mask_features` when `return_stride4=True`). Additive — DINOv3 stays selectable. |
+| `MultiScaleFeatures` | `src/model/ms_features.py` | **F3 backbone-agnostic image-feature contract.** Dataclass carrying flattened multi-level memory `value [B,ΣHₗWₗ,D]` + geometry (`spatial_shapes`, `level_start_index`, `reference_grids`), with `__post_init__` validation, read-only props, and a float-only-casting `.to()`. The one interface every image-feature consumer (F1 op, F4 decoders, F6 `MixerModel`) reads. |
+| `Mask2FormerFeatureAdapter` / `DinoV3FeatureAdapter` | `src/model/ms_features.py` | **F3 producing adapters** (`nn.Module`, backbone held as submodule, zero own params). The Mask2Former one repackages the 3 coarse→fine maps into a bundle (round-trip identity; discards `mask_features`); the DINOv3 one strips CLS once and emits a 1-level bundle (`.model.patch_size` read once at init). Both build the bundle via `build_reference_grids` / `build_level_start_index`. |
 | `FreeViewInMemory` | `src/data/datasets.py` | **Primary dataset class.** Loads all scanpath data from the HDF5 file into RAM at startup. Applies the configured transform pipeline per `__getitem__`. Paired with `seq2seq_padded_collate_fn` for variable-length sequence batching. |
 | `DeduplicatedMemoryDataset` | `src/data/datasets.py` | Image dataset that avoids loading the same stimulus image multiple times. Used when `use_img_dataset=True`. |
 | `CoupledDataloader` | `src/data/datasets.py` | Synchronises iteration over the gaze dataset (`FreeViewInMemory`) and the image dataset (`DeduplicatedMemoryDataset`), yielding matched (gaze, image) batch pairs. |

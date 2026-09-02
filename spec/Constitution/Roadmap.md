@@ -33,7 +33,7 @@
 ## In Progress
 
 - **Spec-driven development workflow** — Constitution documents written; first sprint-level feature spec (EVE real-noise scanpath inference) delivered end-to-end under `spec/2026-07-27-eve-real-noise-scanpath-inference/`
-- **Multi-scale image backbone migration (Mask2Former)** — replacing the single-scale frozen DINOv3 image encoder with a vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** (from the Mask2Former clone at `../mask2former/`), and making the eye-decoder and fixation-decoder deformable cross-attentions **multi-scale**. Factored into six independently testable features **F1–F6** (see the dedicated Backlog subsection below and the TechStack "Multi-scale Image Backbone Migration" section for full contracts). **F1 and F2 are ✓ DONE.** F1 (`DeformableAttention`) is now N-level capable and byte-identical at `n_levels=1`; its as-built API and the multi-scale shape reference live in TechStack §"Deformable param layout (F1 as-built)". F2 (`Mask2FormerBackbone` in `src/model/ms_deform_backbone.py`) is the vendored, detectron2-free **torchvision ResNet50 (ImageNet, frozen) + freshly-initialized, trainable pixel decoder** consuming F1 at `n_levels=3`; it emits 3 CLS-free multi-scale maps `[B,256,Hₗ,Wₗ]`. **Next up: F3** (the `MultiScaleFeatures` bundle decoupling `MixerModel` from backbone specifics); F4 is parallelizable. The backbone is **ImageNet-pretrained ResNet50 frozen + trainable pixel decoder** — no external segmentation checkpoint is loaded. **DINOv3 remains selectable** — the new backbone is additive, gated by a config group, so the existing single-scale path and its checkpoints keep working throughout.
+- **Multi-scale image backbone migration (Mask2Former)** — replacing the single-scale frozen DINOv3 image encoder with a vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** (from the Mask2Former clone at `../mask2former/`), and making the eye-decoder and fixation-decoder deformable cross-attentions **multi-scale**. Factored into six independently testable features **F1–F6** (see the dedicated Backlog subsection below and the TechStack "Multi-scale Image Backbone Migration" section for full contracts). **F1, F2, F3, and F4 are ✓ DONE.** F1 (`DeformableAttention`) is now N-level capable and byte-identical at `n_levels=1`; its as-built API and the multi-scale shape reference live in TechStack §"Deformable param layout (F1 as-built)". F2 (`Mask2FormerBackbone` in `src/model/ms_deform_backbone.py`) is the vendored, detectron2-free **torchvision ResNet50 (ImageNet, frozen) + freshly-initialized, trainable pixel decoder** consuming F1 at `n_levels=3`; it emits 3 CLS-free multi-scale maps `[B,256,Hₗ,Wₗ]`. F3 (`src/model/ms_features.py`) is the `MultiScaleFeatures` bundle + two backbone adapters that decouple `MixerModel` from backbone specifics — it is the contract F4/F6 consume but touches neither yet (additive). F4 (multiscale-capable eye & fixation decoders) is now done; **next up: F6.** The backbone is **ImageNet-pretrained ResNet50 frozen + trainable pixel decoder** — no external segmentation checkpoint is loaded. **DINOv3 remains selectable** — the new backbone is additive, gated by a config group, so the existing single-scale path and its checkpoints keep working throughout.
 
 ---
 
@@ -112,17 +112,56 @@ F3 → F4 → F6** (F3 parallelizable with F2).
   loader were dropped in favor of ImageNet R50 + fresh decoder (user-directed, planning session), so
   there is no external checkpoint, no weight translation, and no checksum. **Next up: F3** (the
   `MultiScaleFeatures` bundle; F4 parallelizable).
-- **F3 — Multi-scale feature contract / backbone adapter** — a small bundle
-  `MultiScaleFeatures(value:[B,ΣHₗWₗ,D], spatial_shapes, level_start_index, reference_grids)` that
-  decouples `MixerModel` from backbone specifics. Kills the `mem[:,1:,:]` CLS assumption, the
-  single `patch_resolution` tuple, and `image_encoder.model.patch_size`/`.rope_embed` access.
-  Two producers: the F2 backbone (3 levels) and a DINOv3 wrapper (1 level, CLS stripped at the
-  boundary).
-- **F4 — Multiscale-capable eye & fixation decoders** — `DeformableDecoder`
-  (`src/model/blocks.py:870`) and `DeformableDoubleInputDecoder` (`:957`) consume the F3 bundle +
-  per-level reference points; retro-compatible (single level ⇒ current output). Swap inner op for
-  F1, take `spatial_shapes`/`level_start_index` instead of a fixed tuple, broadcast
-  `reference_points (B,Nq,2) → (B,Nq,n_levels,2)`.
+- ✓ **F3 — Multi-scale feature contract / backbone adapter** — DONE. New file
+  `src/model/ms_features.py`: the `MultiScaleFeatures` dataclass
+  (`value:[B,ΣHₗWₗ,D]` float, `spatial_shapes:(L,2)` int64, `level_start_index:(L,)` int64,
+  `reference_grids:(S,2)` float per-token `(x,y)` centers), two geometry helpers
+  (`build_level_start_index`, `build_reference_grids` — the latter byte-identical to
+  `MSDeformAttnTransformerEncoder.get_reference_points` up to the level-repeat/batch axis), and two
+  producing `nn.Module` adapters. `Mask2FormerFeatureAdapter` wraps the F2 backbone and repackages
+  its coarse→fine `[B,256,Hₗ,Wₗ]` maps via `m.flatten(2).transpose(1,2)` + concat (round-trip
+  identity with the pixel decoder's split→reshape; tolerates the 4-level `return_stride4` output and
+  **discards** `mask_features`). `DinoV3FeatureAdapter` wraps `DinoV3Wrapper`, strips the CLS prefix
+  **once** (`tokens[:, num_prefix_tokens:, :]`, `num_prefix_tokens=1` default), reads
+  `backbone.model.patch_size` **once at init** (the sole DINOv3-internal access after F4/F6), and
+  emits a 1-level bundle with a phantom-prefix guard. `__post_init__` raises `ValueError` on every
+  shape/dtype/consistency violation (no silent coercion); `.to(device,dtype)` casts only the float
+  tensors, index tensors stay int64. Adapters add **zero** params (backbone held as a submodule,
+  keys prefixed `backbone.`; geometry computed per forward, not buffered → dynamic sizes work);
+  `.eval()/.train()`, `state_dict`, and F1 recorder hooks propagate to the backbone. Bundle is
+  directly F1-consumable (`DeformableAttention(embed_dim=D, n_levels=bundle.num_levels)`).
+  **Modifies no existing file** (additive; DINOv3 stays selectable, F1's byte-identity intact).
+  40-test suite `tests/test_ms_features.py` (CPU-only, `imagenet_weights=None`, `FakeDino` stub — no
+  network). Spec: `spec/2026-09-02-multi-scale-feature-contract-backbone-adapter/`. F4 (decoders)
+  now DONE; **next up: F6** (MixerModel + PipelineBuilder + config).
+- ✓ **F4 — Multiscale-capable eye & fixation decoders** — DONE. `DeformableDecoder` and
+  `DeformableDoubleInputDecoder` (`src/model/blocks.py`) each gain an `n_levels: int = 1` constructor
+  arg (after `num_points`) that is single-sourced into the inner F1 op (`cross_attn` /
+  `second_cross_attn`); the first cross-attention (`MultiHeadedAttention` over the gaze memory) is
+  untouched. Both `forward`s are **polymorphic** on new `spatial_shapes=None`/`level_start_index=None`
+  kwargs: `spatial_shapes is None` selects the **legacy single-scale path** (CLS-prefixed memory
+  sliced `mem[:,1:,:]`, fixed `self.spatial_shape=(16,16)` tuple, requires `n_levels==1`, raises
+  otherwise); a supplied `spatial_shapes (L,2)` selects the **multi-scale path** (memory is the
+  already-CLS-free F3 `value (B,ΣHₗWₗ,D)`, passed through unsliced, `spatial_shapes`/
+  `level_start_index` forwarded to F1). CLS is stripped **once, on exactly one branch**;
+  `reference_points (B,Nq,2)` pass straight through and F1 broadcasts across levels. **Byte-identical
+  at `n_levels=1`**: `state_dict` keys/shapes unchanged, pre-F4 checkpoints load with zero
+  missing/unexpected keys, and the legacy forward is `torch.equal` to pre-F4 (both norm modes) — so
+  the unmodified `MixerModel` keeps training identically until F6. Fixes the flagged latent bug in
+  `DeformableDoubleInputDecoder`'s non-`norm_first` branch (previously forwarded
+  `attn_mask`/`src_rope`/`mem2_rope` kwargs `__cross_attention2` rejected and never stripped CLS):
+  `__cross_attention2`'s signature drops those kwargs and both branches now call it identically, so
+  they differ only in norm placement. Error paths surface F1's `ValueError`s unchanged
+  (level-count/value-length/ref-dim/`level_start_index` mismatches) plus the decoder's own "legacy
+  single-scale path requires n_levels==1". KV/memory cache and InferenceRecorder hooks (level axis at
+  `n_levels>1`, squeezable singleton at 1) carry through. **No import cycle** — decoders take unpacked
+  tensors, so `blocks.py` never imports `ms_features`; F6 unpacks the bundle at the call site.
+  **Modifies no other file** (additive; DINOv3 single-scale path unchanged). 34-test suite
+  `tests/test_ms_decoders.py` (+ two F1 decoder-integration tests updated for the new
+  `level_start_index` kwarg). Spec: `spec/2026-09-02-multiscale-capable-eye-and-fixation-decoders/`.
+  **Note:** validation.md Group 7 asks recorder stages to fire in *both* norm branches, but the plan
+  keeps the non-`norm_first` branch record-free (matching pre-F4, and the operative path is
+  `norm_first=True`); the suite asserts recording on the `norm_first` path only. **Next up: F6.**
 - **F6 — MixerModel + PipelineBuilder + config integration** — build the backbone from a new
   `configs/model/image_encoder/` group; `img_input_proj` 256→`model_dim`; `encode`/
   `decode_fixation` consume the F3 bundle with per-level positional encoding + a `level_embed`;

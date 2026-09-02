@@ -71,7 +71,9 @@ class LegacyDeformableAttention(nn.Module):
         nn.init.xavier_uniform_(self.value_proj.weight.data)
         nn.init.xavier_uniform_(self.output_proj.weight.data)
 
-    def forward(self, query, reference_points, value, spatial_shape):
+    def forward(self, query, reference_points, value, spatial_shape, level_start_index=None):
+        # level_start_index accepted for signature parity with the F4 decoders (which now
+        # forward it) but ignored — this single-scale reference has no level structure.
         bs, num_queries, _ = query.shape
         H, W = spatial_shape
         value = self.value_proj(value)

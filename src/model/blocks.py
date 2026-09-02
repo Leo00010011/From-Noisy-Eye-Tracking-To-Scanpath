@@ -910,6 +910,7 @@ class DeformableDecoder(nn.Module):
                       eps = 1e-5,
                       norm_first = False,
                       num_points = 4,
+                      n_levels = 1,
                       spatial_shape = (16, 16),
                       geometric_sigma = 0,
                       attn_dropout = 0.0,
@@ -918,6 +919,7 @@ class DeformableDecoder(nn.Module):
                       dtype = torch.float32):
         super().__init__()
         self.spatial_shape = spatial_shape
+        self.n_levels = n_levels
         self.model_dim = model_dim
         self.total_dim = total_dim
         self.n_heads = n_heads
@@ -940,6 +942,7 @@ class DeformableDecoder(nn.Module):
         self.cross_attn = DeformableAttention(embed_dim=model_dim,
                                             num_heads=n_heads,
                                             num_points=num_points,
+                                            n_levels=n_levels,
                                             geometric_sigma=geometric_sigma,
                                             attn_dropout= attn_dropout,
                                             normalize_grid_init= normalize_grid_init,
@@ -956,21 +959,34 @@ class DeformableDecoder(nn.Module):
     def __self_attention(self, x, attn_mask = None):
         return self.dropout1(self.self_attn(x, attn_mask=attn_mask))
 
-    def __cross_attention(self, src, mem, reference_points = None):
-        return self.dropout2(self.cross_attn(query=src, reference_points=reference_points, value=mem, spatial_shape=self.spatial_shape))
+    def __cross_attention(self, src, value, reference_points = None,
+                          spatial_shapes = None, level_start_index = None):
+        shape = spatial_shapes if spatial_shapes is not None else self.spatial_shape
+        return self.dropout2(self.cross_attn(query=src, reference_points=reference_points,
+                                             value=value, spatial_shape=shape,
+                                             level_start_index=level_start_index))
 
     def __feed_forward(self, x):
         return self.dropout4(self.linear2(self.dropout3(self.activation(self.linear1(x)))))
 
-    
-    def forward(self, src, mem, tgt_mask = None, reference_points = None):
+
+    def forward(self, src, mem, tgt_mask = None, reference_points = None,
+                spatial_shapes = None, level_start_index = None):
+        if spatial_shapes is None:                 # legacy single-scale (CLS-prefixed memory)
+            if self.n_levels != 1:
+                raise ValueError("legacy single-scale path requires n_levels==1")
+            value = mem[:, 1:, :]
+        else:                                      # F3 multi-scale bundle (CLS-free)
+            value = mem
         x = src
         if self.norm_first:
             temp = self.__self_attention(self.norm1(x), attn_mask=tgt_mask)
             if _module_recording_enabled(self):
                 record_module_value(self, "self_attention_res", temp)
             x = x + temp
-            temp = self.__cross_attention(self.norm2(x), mem[:,1:,:], reference_points=reference_points)
+            temp = self.__cross_attention(self.norm2(x), value, reference_points=reference_points,
+                                          spatial_shapes=spatial_shapes,
+                                          level_start_index=level_start_index)
             if _module_recording_enabled(self):
                 record_module_value(self, "cross_attention_res", temp)
             x = x + temp
@@ -980,9 +996,11 @@ class DeformableDecoder(nn.Module):
             x = x + temp
         else:
             x = self.norm1(x + self.__self_attention(x, attn_mask=tgt_mask))
-            x = self.norm2(x + self.__cross_attention(x, mem[:,1:,:], reference_points=reference_points))
+            x = self.norm2(x + self.__cross_attention(x, value, reference_points=reference_points,
+                                                      spatial_shapes=spatial_shapes,
+                                                      level_start_index=level_start_index))
             x = self.norm3(x + self.__feed_forward(x))
-        
+
         return x
         
 
@@ -999,6 +1017,7 @@ class DeformableDoubleInputDecoder(nn.Module):
                       use_kv_cache = False,
                       spatial_shape = (16, 16),
                       num_points = 4,
+                      n_levels = 1,
                       attn_dropout = 0.0,
                       normalize_grid_init = True,
                       device = 'cpu',
@@ -1014,6 +1033,7 @@ class DeformableDoubleInputDecoder(nn.Module):
         self.norm_first = norm_first
         self.use_kv_cache = use_kv_cache
         self.num_points = num_points
+        self.n_levels = n_levels
         self.spatial_shape = spatial_shape
         factory_kwargs = {'device': device, 'dtype': dtype}
         # sa
@@ -1041,6 +1061,7 @@ class DeformableDoubleInputDecoder(nn.Module):
         self.second_cross_attn = DeformableAttention(embed_dim=model_dim,
                                                     num_heads=n_heads,
                                                     num_points=num_points,
+                                                    n_levels=n_levels,
                                                     attn_dropout= attn_dropout,
                                                     normalize_grid_init= normalize_grid_init,
                                             **factory_kwargs)
@@ -1059,8 +1080,13 @@ class DeformableDoubleInputDecoder(nn.Module):
     def __cross_attention1(self, src, mem, attn_mask = None,src_rope = None, mem1_rope = None):
         return self.first_cross_attn_dropout(self.first_cross_attn(src, mem, attn_mask=attn_mask, q_rope=src_rope, k_rope=mem1_rope))
 
-    def __cross_attention2(self, src, mem, reference_points = None):
-        return self.second_cross_attn_dropout(self.second_cross_attn(query=src, reference_points=reference_points, value=mem, spatial_shape=self.spatial_shape))
+    def __cross_attention2(self, src, value, reference_points = None,
+                           spatial_shapes = None, level_start_index = None):
+        shape = spatial_shapes if spatial_shapes is not None else self.spatial_shape
+        return self.second_cross_attn_dropout(
+            self.second_cross_attn(query=src, reference_points=reference_points,
+                                   value=value, spatial_shape=shape,
+                                   level_start_index=level_start_index))
 
     def __feed_forward(self, x):
         return self.linear_down_dropout(self.linear_down(self.linear_up_dropout(self.activation(self.linear_up(x)))))
@@ -1100,7 +1126,15 @@ class DeformableDoubleInputDecoder(nn.Module):
                       tgt_mask = None,
                       mem1_mask = None,
                       mem2_mask = None,
-                      reference_points = None):
+                      reference_points = None,
+                      spatial_shapes = None,
+                      level_start_index = None):
+        if spatial_shapes is None:                 # legacy single-scale (CLS-prefixed image memory)
+            if self.n_levels != 1:
+                raise ValueError("legacy single-scale path requires n_levels==1")
+            value2 = mem2[:, 1:, :]
+        else:                                      # F3 multi-scale bundle (CLS-free)
+            value2 = mem2
         x = src
         if self.norm_first:
             temp = self.__self_attention(self.self_attn_norm(x), attn_mask=tgt_mask, src_rope= None)
@@ -1111,7 +1145,10 @@ class DeformableDoubleInputDecoder(nn.Module):
             if _module_recording_enabled(self):
                 record_module_value(self, "first_cross_res", temp)
             x = x + temp
-            temp = self.__cross_attention2(self.second_cross_attn_norm(x), mem2[:,1:,:], reference_points=reference_points)
+            temp = self.__cross_attention2(self.second_cross_attn_norm(x), value2,
+                                           reference_points=reference_points,
+                                           spatial_shapes=spatial_shapes,
+                                           level_start_index=level_start_index)
             if _module_recording_enabled(self):
                 record_module_value(self, "second_cross_res", temp)
             x = x + temp
@@ -1122,7 +1159,9 @@ class DeformableDoubleInputDecoder(nn.Module):
         else:
             x = self.self_attn_norm(x + self.__self_attention(x, attn_mask=tgt_mask, src_rope= None))
             x = self.first_cross_attn_norm(x + self.__cross_attention1(x, mem1, attn_mask=mem1_mask, src_rope= None, mem1_rope=None))
-            x = self.second_cross_attn_norm(x + self.__cross_attention2(x, mem2, attn_mask=mem2_mask, src_rope= None, mem2_rope= None))
+            x = self.second_cross_attn_norm(x + self.__cross_attention2(
+                    x, value2, reference_points=reference_points,
+                    spatial_shapes=spatial_shapes, level_start_index=level_start_index))
             x = self.linear_norm(x + self.__feed_forward(x))
-        
+
         return x
