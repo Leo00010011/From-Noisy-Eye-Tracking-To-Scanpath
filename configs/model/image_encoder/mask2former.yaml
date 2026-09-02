@@ -1,0 +1,16 @@
+type: "mask2former"
+enabled: True
+embed_dim: 256
+conv_dim: 256
+n_heads: 8
+n_points: 4
+transformer_enc_layers: 6
+transformer_dim_feedforward: 1024
+transformer_dropout: 0.0
+transformer_in_features: ["res3", "res4", "res5"]
+return_stride4: False
+mask_dim: 256
+freeze_backbone: True
+freeze_pixel_decoder: False
+imagenet_weights: "IMAGENET1K_V2"
+adapter_hidden_dims: []

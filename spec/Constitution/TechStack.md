@@ -314,6 +314,68 @@ DeformableDoubleInputDecoder(..., spatial_shape=(16,16), num_points=4, n_levels=
   decode step and matches the cold result. Recorder tensors gain a level axis at `n_levels>1`
   (squeezable singleton at 1). 34-test suite `tests/test_ms_decoders.py`.
 
+### MixerModel + config integration (F6 as-built) — F6 IMPLEMENTED
+
+F6 (`src/model/mixer_model.py`, `src/training/pipeline_builder.py`, `configs/model/image_encoder/`,
+delivered `spec/2026-09-02-mixermodel-pipelinebuilder-config-integration/`) is the join that makes the
+whole migration reachable from one config switch. It is **additive and dual-path**: DINOv3 keeps its
+exact legacy code and is byte-identical; only Mask2Former takes the bundle path.
+
+**Config group.** `configs/model/mixer_model.yaml` now starts with `defaults: [image_encoder: dinov3,
+_self_]` and no longer carries an inline `image_encoder:` mapping. `configs/model/image_encoder/dinov3.yaml`
+is the relocated block plus `type: "dinov3"` / `embed_dim: 384`; `mask2former.yaml` carries `type:
+"mask2former"`, `embed_dim: 256`, and the F2 flags (`conv_dim`, `n_heads`, `n_points`,
+`transformer_enc_layers`, `transformer_dim_feedforward`, `transformer_dropout`,
+`transformer_in_features`, `return_stride4`, `mask_dim`, `freeze_backbone`, `freeze_pixel_decoder`,
+`imagenet_weights`, `adapter_hidden_dims`). The default composed `model.image_encoder.*` is
+field-for-field identical to pre-F6 (so HP-search reproducibility holds at the composed level; the
+`tests/test_hp_search.py::test_default_configs_unmodified` git tripwire drops `mixer_model.yaml` for
+this reason).
+
+**`PipelineBuilder.build_model`.** Reads `image_encoder_type = self.config.model.image_encoder.get(
+'type','dinov3')` (the `'dinov3'` default keeps pre-F6 snapshots — which lack a `type` key — on the
+DINOv3 branch). `mask2former` → `Mask2FormerBackbone(...)` wrapped in `Mask2FormerFeatureAdapter`,
+`n_image_levels = adapter.num_levels`; `dinov3` → raw `DinoV3Wrapper`, `n_image_levels = 1`. Both new
+values pass to `MixerModel(..., image_encoder_type=, n_image_levels=)`.
+
+**`MixerModel.__init__`** gains `image_encoder_type="dinov3"` / `n_image_levels=1` (both default to
+single-scale DINOv3, so any direct construction is unchanged). `patch_resolution` is computed only on
+the DINOv3 path (`.model.patch_size`); on the m2f path `self.patch_resolution=None` and a nominal
+`patch_size=16` feeds the `shared_gaussian` encoders (only ever consumed by `forward_features()`,
+which the m2f path never calls). The deformable eye/fixation decoders are built at
+`n_levels=self.n_image_levels`. A zero-init `self.level_embed = nn.Parameter(torch.zeros(n_image_levels,
+model_dim))` is appended to `denoise_modules` **only** on the m2f path (Deformable-DETR style; neutral
+at init) — so the DINOv3 state_dict gains no new key. **FR8 guards** raise `ValueError` at construction
+on the m2f path for `use_rope=True`, `head_type∈{argmax_regressor,heatmap}`, or
+`input_encoder=="image_features_concat"` (all need a single square patch grid / DINOv3 internals).
+
+**`MixerModel.encode` / `decode_fixation`** are polymorphic on `self.image_encoder_type`:
+- **DINOv3** (verbatim, byte-identical): `image_src = image_encoder(img)` (CLS-prefixed) →
+  `img_input_proj` → `pos_proj.forward_features()` / `img_pos_proj.forward_features()` PE added to
+  `image_src[:, prefix:, :]` → eye/fixation decoders called with `spatial_shapes=None` ⇒ F4 legacy
+  dispatch. `self.image_spatial_shapes = self.image_level_start_index = None`.
+- **Mask2Former**: `bundle = image_encoder(img)` (`MultiScaleFeatures`) →
+  `img_input_proj(bundle.value)` (256→`model_dim`) → per-level PE `pos_enc(bundle.reference_grids
+  .unsqueeze(0))` (`pos_proj` for `shared_gaussian`, `img_pos_proj` for `shared_gaussian_base` — the
+  **same** basis the gaze tokens use, preserving the shared vocabulary) **plus**
+  `torch.repeat_interleave(level_embed, level_sizes)` → eye/fixation decoders fed
+  `spatial_shapes=bundle.spatial_shapes`, `level_start_index=bundle.level_start_index` (stored on the
+  model so `decode_fixation` reads the same geometry on every decode step). The
+  `final_fenh_norm_image` / `mixed_image_features` / `use_enh_img_features` tail applies to the
+  flattened CLS-free `image_src` unchanged.
+
+**Guarantees.** DINOv3 forward is `torch.equal` to pre-F6 and pre-F6 checkpoints load with zero
+missing/unexpected keys (`image_spatial_shapes`/`image_level_start_index` are plain attributes, not
+params/buffers; `level_embed` absent). On the m2f path the only object crossing the backbone→model
+boundary is a `MultiScaleFeatures` bundle (no `.backbone`/`.pixel_decoder`/`.feature_extractor` reach
+from `encode`/`decode_fixation`); the frozen ResNet50 receives no gradient and stays `eval()` through
+`model.train()`; the pixel decoder + `level_embed` train; `sampling_offsets` stay in the 10× LR group.
+At `img_size=256`, `S = 8²+16²+32² = 1344`, `spatial_shapes = [[8,8],[16,16],[32,32]]`,
+`level_start_index = [0,64,320]`; shapes are dynamic (non-square `256×192` → res5 `8×6`). 38-test suite
+`tests/test_f6_integration.py`. **The `DinoV3FeatureAdapter` (F3) is NOT wired by F6** — DINOv3's
+byte-identity requires the raw wrapper + legacy path; the adapter stays the tested contract for a
+future unification. **No HDF5 layout change** (F6 is model/config only).
+
 ### Contract changes vs. the current DINOv3 path
 
 | Aspect | DINOv3 (current) | Mask2Former (target) |
@@ -351,11 +413,11 @@ option but not the default path.
   modifies no existing file.
 - **Extended**: `src/model/blocks.py` (`DeformableAttention` done in F1; `DeformableDecoder`,
   `DeformableDoubleInputDecoder` done in F4 + `tests/test_ms_decoders.py`), `src/model/mixer_model.py`
-  (`encode`/`decode_fixation`) and `src/training/pipeline_builder.py` (backbone construction,
-  `img_input_proj` 256→512) — **F6, still pending**.
-- **New config group** (F6): `configs/model/image_encoder/` (selects `dinov3` vs `mask2former`;
-  Mask2Former entry carries freeze flags, `return_stride4`, and the torchvision ImageNet weights id
-  — no external checkpoint path).
+  (`__init__`/`encode`/`decode_fixation`) and `src/training/pipeline_builder.py` (backbone
+  construction, `img_input_proj` 256→512) — **F6, ✓ DONE** (+ `tests/test_f6_integration.py`).
+- **New config group** (F6, ✓ DONE): `configs/model/image_encoder/` (selects `dinov3` vs
+  `mask2former`; Mask2Former entry carries freeze flags, `return_stride4`, and the torchvision
+  ImageNet weights id — no external checkpoint path).
 
 ## Key Classes and Their Responsibilities
 

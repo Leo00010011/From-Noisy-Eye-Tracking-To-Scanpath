@@ -1,3 +1,7 @@
+defaults:
+  - image_encoder: dinov3
+  - _self_
+
 name: "MixerModel"
 input_dim: 3
 output_dim: 3
@@ -55,12 +59,3 @@ head_type: "linear"
 activation:  "gelu"
 pretrained_encoder_path: null
 device: "cuda"
-image_encoder:
-  enabled: True
-  repo_path: "C:\\Users\\ulloa\\OneDrive\\Desktop\\Practicas\\projectes\\dinov3"
-  name: "dinov3_vits16"
-  weights: "dinov3_vits16_weights.pth"
-  freeze: True
-  regularization: True
-  adapter_hidden_dims: []
-  image_dim: 256

@@ -33,7 +33,7 @@
 ## In Progress
 
 - **Spec-driven development workflow** — Constitution documents written; first sprint-level feature spec (EVE real-noise scanpath inference) delivered end-to-end under `spec/2026-07-27-eve-real-noise-scanpath-inference/`
-- **Multi-scale image backbone migration (Mask2Former)** — replacing the single-scale frozen DINOv3 image encoder with a vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** (from the Mask2Former clone at `../mask2former/`), and making the eye-decoder and fixation-decoder deformable cross-attentions **multi-scale**. Factored into six independently testable features **F1–F6** (see the dedicated Backlog subsection below and the TechStack "Multi-scale Image Backbone Migration" section for full contracts). **F1, F2, F3, and F4 are ✓ DONE.** F1 (`DeformableAttention`) is now N-level capable and byte-identical at `n_levels=1`; its as-built API and the multi-scale shape reference live in TechStack §"Deformable param layout (F1 as-built)". F2 (`Mask2FormerBackbone` in `src/model/ms_deform_backbone.py`) is the vendored, detectron2-free **torchvision ResNet50 (ImageNet, frozen) + freshly-initialized, trainable pixel decoder** consuming F1 at `n_levels=3`; it emits 3 CLS-free multi-scale maps `[B,256,Hₗ,Wₗ]`. F3 (`src/model/ms_features.py`) is the `MultiScaleFeatures` bundle + two backbone adapters that decouple `MixerModel` from backbone specifics — it is the contract F4/F6 consume but touches neither yet (additive). F4 (multiscale-capable eye & fixation decoders) is now done; **next up: F6.** The backbone is **ImageNet-pretrained ResNet50 frozen + trainable pixel decoder** — no external segmentation checkpoint is loaded. **DINOv3 remains selectable** — the new backbone is additive, gated by a config group, so the existing single-scale path and its checkpoints keep working throughout.
+- **Multi-scale image backbone migration (Mask2Former)** — replacing the single-scale frozen DINOv3 image encoder with a vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** (from the Mask2Former clone at `../mask2former/`), and making the eye-decoder and fixation-decoder deformable cross-attentions **multi-scale**. Factored into six independently testable features **F1–F6** (see the dedicated Backlog subsection below and the TechStack "Multi-scale Image Backbone Migration" section for full contracts). **F1, F2, F3, F4, and F6 are ✓ DONE — the migration is complete: the Mask2Former backbone is reachable end-to-end via `model/image_encoder=mask2former`.** F1 (`DeformableAttention`) is now N-level capable and byte-identical at `n_levels=1`; its as-built API and the multi-scale shape reference live in TechStack §"Deformable param layout (F1 as-built)". F2 (`Mask2FormerBackbone` in `src/model/ms_deform_backbone.py`) is the vendored, detectron2-free **torchvision ResNet50 (ImageNet, frozen) + freshly-initialized, trainable pixel decoder** consuming F1 at `n_levels=3`; it emits 3 CLS-free multi-scale maps `[B,256,Hₗ,Wₗ]`. F3 (`src/model/ms_features.py`) is the `MultiScaleFeatures` bundle + two backbone adapters that decouple `MixerModel` from backbone specifics. F4 (multiscale-capable eye & fixation decoders) consumes F1 at *N* levels. F6 (`MixerModel` + `PipelineBuilder` + the `configs/model/image_encoder/` group) constructs the F2 backbone from config, wraps it in the F3 adapter, feeds the bundle through the F4 decoders with per-level PE (shared `shared_gaussian` basis) + a `level_embed`, and guards every DINOv3-only access behind an explicit `image_encoder_type` — **DINOv3 stays byte-identical and old checkpoints load** (dual path, not unified). The backbone is **ImageNet-pretrained ResNet50 frozen + trainable pixel decoder** — no external segmentation checkpoint is loaded. **DINOv3 remains selectable** — the new backbone is additive, gated by a config group, so the existing single-scale path and its checkpoints keep working throughout. Remaining migration follow-ups are non-blocking (stride-4 4th level, path unification — see "Open items").
 
 ---
 
@@ -162,11 +162,35 @@ F3 → F4 → F6** (F3 parallelizable with F2).
   **Note:** validation.md Group 7 asks recorder stages to fire in *both* norm branches, but the plan
   keeps the non-`norm_first` branch record-free (matching pre-F4, and the operative path is
   `norm_first=True`); the suite asserts recording on the `norm_first` path only. **Next up: F6.**
-- **F6 — MixerModel + PipelineBuilder + config integration** — build the backbone from a new
-  `configs/model/image_encoder/` group; `img_input_proj` 256→`model_dim`; `encode`/
-  `decode_fixation` consume the F3 bundle with per-level positional encoding + a `level_embed`;
-  guard DINOv3-only attribute access behind backbone type. Retro-compat: a DINOv3-backbone run
-  trains identically and old single-scale checkpoints still load.
+- ✓ **F6 — MixerModel + PipelineBuilder + config integration** — DONE. New config group
+  `configs/model/image_encoder/` (`dinov3.yaml` = the relocated inline block + `type`/`embed_dim`;
+  `mask2former.yaml` = F2 backbone flags); `mixer_model.yaml` gains `defaults: [image_encoder:
+  dinov3, _self_]` and drops its inline `image_encoder:` mapping — the default composed
+  `model.image_encoder.*` is **field-for-field identical** to pre-F6. `PipelineBuilder.build_model`
+  branches on `image_encoder.get('type','dinov3')` (the default keeps pre-F6 snapshots loading):
+  `dinov3` → raw `DinoV3Wrapper` (`n_image_levels=1`); `mask2former` → `Mask2FormerBackbone` wrapped
+  in `Mask2FormerFeatureAdapter` (`n_image_levels=adapter.num_levels`, 3 or 4). `MixerModel` gains
+  `image_encoder_type="dinov3"` / `n_image_levels=1`; `patch_resolution` + the `use_rope`
+  `rope_embed` access are **DINOv3-guarded** (nominal `patch_size=16` feeds the `shared_gaussian`
+  encoders on the m2f path, only ever consumed by `forward_features()`); the deformable eye/fixation
+  decoders are built at `n_levels=n_image_levels`; a zero-init `level_embed (n_image_levels,
+  model_dim)` is added to `denoise_modules` **only** on the m2f path. **Dual path, not unified:**
+  DINOv3 keeps its exact legacy `encode`/`decode_fixation` (CLS-slice, `forward_features()` patch PE,
+  `spatial_shapes=None` ⇒ F4 legacy dispatch) so its forward is byte-identical and old checkpoints
+  load with zero missing/unexpected keys (no `level_embed`/`image_*` leak into the state_dict); the
+  F3 `DinoV3FeatureAdapter` is **not** wired (reserved for a future unification). The m2f path:
+  `bundle = image_encoder(img)` → `img_input_proj(bundle.value)` (256→`model_dim`) → per-level PE =
+  `pos_proj(reference_grids)` (**shared `shared_gaussian` basis**) + `repeat_interleave(level_embed,
+  level_sizes)` → eye/fixation decoders fed `spatial_shapes`/`level_start_index` (stored on the model
+  for `decode_fixation`). FR8 guards raise at construction on the m2f path for `use_rope`,
+  `head_type∈{argmax_regressor,heatmap}`, `input_encoder=="image_features_concat"` (all need a single
+  square patch grid / DINOv3 internals). Frozen ResNet50 gets no gradient and stays `eval()` through
+  `model.train()`; the pixel decoder + `level_embed` train; `sampling_offsets` stay in the 10× LR
+  group. 38-test suite `tests/test_f6_integration.py` (CPU-only, `imagenet_weights=None`, DINOv3 via
+  a deterministic stub). Spec: `spec/2026-09-02-mixermodel-pipelinebuilder-config-integration/`.
+  **The Mask2Former backbone is now reachable end-to-end from a single config switch
+  (`model/image_encoder=mask2former`).** Deferred (unchanged): wiring the stride-4 res2 map as a real
+  4th decoder level, and routing DINOv3 through the adapter to unify the two paths.
 - **Open items (non-blocking)** — the stride-4 (res2, 64²) map is produced behind F2's
   `return_stride4` flag, but wiring it as a real 4th decoder level (F4/F6) is deferred to the
   heatmap-regression iteration; how aggressively to share the `shared_gaussian` basis across scales;

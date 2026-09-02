@@ -19,6 +19,8 @@ from src.data.transforms import (ExtractRandomPeriod, Normalize, StandarizeTime,
 from src.model.path_model import PathModel
 from src.model.mixer_model import MixerModel
 from src.model.dino_wrapper import DinoV3Wrapper
+from src.model.ms_deform_backbone import Mask2FormerBackbone
+from src.model.ms_features import Mask2FormerFeatureAdapter
 from src.model.model_io import load_test_data
 from src.data.datasets import FreeViewImgDataset, CoupledDataloader, DeduplicatedMemoryDataset
 from src.training.inference_recorder import InferenceRecorder
@@ -462,16 +464,36 @@ class PipelineBuilder:
         if model_name == 'MixerModel':
             image_encoder = None
             image_dim = None
+            image_encoder_type = 'dinov3'
+            n_image_levels = 1
             if hasattr(self.config.model, 'image_encoder') and self.config.model.image_encoder.enabled:
-                image_encoder = DinoV3Wrapper(
-                    repo_path=self.config.model.image_encoder.repo_path,
-                    model_name=self.config.model.image_encoder.name,
-                    freeze=self.config.model.image_encoder.freeze,
-                    regularization=self.config.model.image_encoder.get('regularization', False),
-                    device=self.device,
-                    weights=self.config.model.image_encoder.weights
-                )
-                image_dim = self.config.model.image_encoder.image_dim
+                ie = self.config.model.image_encoder
+                image_encoder_type = ie.get('type', 'dinov3')          # default keeps pre-F6 snapshots working
+                if image_encoder_type == 'mask2former':
+                    backbone = Mask2FormerBackbone(
+                        conv_dim=ie.get('conv_dim', 256), n_heads=ie.get('n_heads', 8),
+                        n_points=ie.get('n_points', 4),
+                        transformer_enc_layers=ie.get('transformer_enc_layers', 6),
+                        transformer_dim_feedforward=ie.get('transformer_dim_feedforward', 1024),
+                        transformer_dropout=ie.get('transformer_dropout', 0.0),
+                        transformer_in_features=tuple(ie.get('transformer_in_features', ("res3", "res4", "res5"))),
+                        return_stride4=ie.get('return_stride4', False), mask_dim=ie.get('mask_dim', 256),
+                        freeze_backbone=ie.get('freeze_backbone', True),
+                        freeze_pixel_decoder=ie.get('freeze_pixel_decoder', False),
+                        imagenet_weights=ie.get('imagenet_weights', 'IMAGENET1K_V2'),
+                        device=self.device)
+                    image_encoder = Mask2FormerFeatureAdapter(backbone)
+                    n_image_levels = image_encoder.num_levels
+                else:
+                    image_encoder = DinoV3Wrapper(
+                        repo_path=ie.repo_path,
+                        model_name=ie.name,
+                        freeze=ie.freeze,
+                        regularization=ie.get('regularization', False),
+                        device=self.device,
+                        weights=ie.weights
+                    )
+                    image_dim = ie.image_dim
             if (hasattr(self.config.data, 'transforms') and 
                 hasattr(self.config.data.transforms, 'NormalizeCoords') 
                 and not hasattr(self.config.data.transforms.NormalizeCoords,'mode')
@@ -516,6 +538,8 @@ class PipelineBuilder:
                               device = self.device,
                               enh_features_dropout = self.config.model.get('enh_features_dropout', 0),
                               image_encoder = image_encoder,
+                              image_encoder_type = image_encoder_type,
+                              n_image_levels = n_image_levels,
                               n_feature_enhancer = self.config.model.n_feature_enhancer,
                               image_dim = image_dim,
                               src_word_dropout_prob = self.config.model.get('src_word_dropout_prob', 0),

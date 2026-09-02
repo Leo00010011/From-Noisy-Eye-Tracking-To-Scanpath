@@ -35,6 +35,8 @@ class MixerModel(nn.Module):
                        head_type = None,
                        mlp_head_hidden_dim = None,
                        image_encoder = None,
+                       image_encoder_type = "dinov3",
+                       n_image_levels = 1,
                        use_deformable_eye_decoder = False,
                        n_feature_enhancer = 1,
                        use_denoised_coordinates = False,
@@ -128,12 +130,31 @@ class MixerModel(nn.Module):
         self.geometric_sigma = geometric_sigma
         self.reg_head_output_dropout = reg_head_output_dropout
         self.use_deformable_fixation_decoder = use_deformable_fixation_decoder
+        self.image_encoder_type = image_encoder_type
+        self.n_image_levels = n_image_levels
+        self.image_spatial_shapes = None        # set per-encode()
+        self.image_level_start_index = None
+        self.patch_resolution = None
         if image_encoder is not None:
             img_embed_dim = image_encoder.embed_dim
-            patch_resolution = int((self.img_size / image_encoder.model.patch_size))
-            self.patch_resolution = (patch_resolution, patch_resolution)
-            print(self.patch_resolution)
-        
+            if image_encoder_type == 'dinov3':
+                pr = int(self.img_size / image_encoder.model.patch_size)
+                self.patch_resolution = (pr, pr)
+            # FR8 guards — the multi-scale path has no single square patch grid / DINOv3 internals.
+            if image_encoder_type == 'mask2former':
+                if use_rope:
+                    raise ValueError("use_rope is DINOv3-only in F6 (needs the patch grid / rope_embed); "
+                                     "set use_rope=False with the mask2former backbone.")
+                if head_type in ('argmax_regressor', 'heatmap'):
+                    raise ValueError(f"head_type='{head_type}' is DINOv3-only in F6 (needs a single square "
+                                     "patch grid); use linear/mlp/multi_mlp/start_head with mask2former.")
+                if input_encoder == 'image_features_concat':
+                    raise ValueError("input_encoder='image_features_concat' is DINOv3-only in F6 "
+                                     "(indexes a fixed patch grid).")
+        # Nominal patch size for the shared_gaussian encoders' `patch_size=` arg (only consumed by
+        # forward_features(), i.e. the DINOv3 path). On the mask2former path it is never used.
+        pos_enc_patch_size = self.patch_resolution[0] if self.patch_resolution is not None else 16
+
         # SPECIAL TOKENS
         if mixed_image_features:
             self.mix_enh_image_features = GatedFusion(model_dim, dropout_p = mixer_dropout, **factory_mode)
@@ -194,18 +215,18 @@ class MixerModel(nn.Module):
             self.fixation_modules.append(self.dec_input_proj)
             self.fixation_modules.append(self.mix_image_features)
         elif input_encoder == "shared_gaussian":
-            self.pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution[0] ,**factory_mode)
-            self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution[0] ,**factory_mode)
-            self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution[0] ,**factory_mode)
+            self.pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = pos_enc_patch_size ,**factory_mode)
+            self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = pos_enc_patch_size ,**factory_mode)
+            self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = pos_enc_patch_size ,**factory_mode)
             self.denoise_modules.append(self.pos_proj)
             self.denoise_modules.append(self.time_proj)
             self.fixation_modules.append(self.dur_proj)
         elif input_encoder == "shared_gaussian_base":
-            self.eye_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution[0] ,**factory_mode)
-            self.fix_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution[0] ,base = self.eye_pos_proj.B,**factory_mode)
-            self.img_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution[0] ,base = self.eye_pos_proj.B,**factory_mode)
-            self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution[0] ,**factory_mode)
-            self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = self.patch_resolution[0] ,**factory_mode)
+            self.eye_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = pos_enc_patch_size ,**factory_mode)
+            self.fix_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = pos_enc_patch_size ,base = self.eye_pos_proj.B,**factory_mode)
+            self.img_pos_proj = GaussianFourierPosEncoder(2, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = pos_enc_patch_size ,base = self.eye_pos_proj.B,**factory_mode)
+            self.time_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = pos_enc_patch_size ,**factory_mode)
+            self.dur_proj = GaussianFourierPosEncoder(1, num_freq_bands, pos_enc_hidden_dim, model_dim, pos_enc_sigma,input_encoder = input_encoder, patch_size = pos_enc_patch_size ,**factory_mode)
             self.denoise_modules.append(self.eye_pos_proj)
             self.denoise_modules.append(self.time_proj)
             self.fixation_modules.append(self.fix_pos_proj)
@@ -293,6 +314,7 @@ class MixerModel(nn.Module):
                                                 activation= activation,
                                                 norm_first= norm_first,
                                                 num_points = 4,
+                                                n_levels = self.n_image_levels,
                                                 spatial_shape = self.patch_resolution,
                                                 **factory_mode)
             else:
@@ -326,6 +348,7 @@ class MixerModel(nn.Module):
                                            norm_first= norm_first,
                                            use_kv_cache = use_kv_cache,
                                            num_points = 4,
+                                           n_levels = self.n_image_levels,
                                            spatial_shape = self.patch_resolution,
                                            **factory_mode)
         else:
@@ -470,6 +493,11 @@ class MixerModel(nn.Module):
         else:
             raise ValueError(f"Unsupported head_type: {head_type}")
         
+        # MULTI-SCALE LEVEL EMBEDDING (Mask2Former path only; keeps DINOv3 state_dict unchanged)
+        if image_encoder is not None and image_encoder_type == 'mask2former':
+            self.level_embed = nn.Parameter(torch.zeros(n_image_levels, model_dim, **factory_mode))
+            self.denoise_modules.append(self.level_embed)
+
         # DENOISE HEADS
         if self.add_denoise_head and (phases is not None and ('Denoise' in phases or 'Combined' in phases)):
             # self.denoise_head = ResidualRegressor(model_dim, hidden_dropout_p = self.denoise_head_hidden_dropout, output_dropout_p = self.denoise_head_output_dropout, **factory_mode)
@@ -679,19 +707,34 @@ class MixerModel(nn.Module):
         if self.norm_first:
             src = self.final_enc_norm(src)
             
-        # encoding images    
+        # encoding images
         if self.image_encoder is not None:
-            image_src = self.image_encoder(image_src)
-            image_src = self.img_input_proj(image_src)
-            if self.input_encoder == 'shared_gaussian':
-                # pos_enc [1,H*W,model_dim]
-                pos_enc = self.pos_proj.forward_features().unsqueeze(0)
-                prefix = image_src.size(1) - pos_enc.shape[1]
-                image_src[:,prefix:,:] = image_src[:,prefix:,:] + pos_enc
-            if self.input_encoder == 'shared_gaussian_base':
-                pos_enc = self.img_pos_proj.forward_features().unsqueeze(0)
-                prefix = image_src.size(1) - pos_enc.shape[1]
-                image_src[:,prefix:,:] = image_src[:,prefix:,:] + pos_enc
+            if self.image_encoder_type == 'dinov3':
+                # ---- LEGACY PATH (verbatim, byte-identical) ----
+                image_src = self.image_encoder(image_src)
+                image_src = self.img_input_proj(image_src)
+                if self.input_encoder == 'shared_gaussian':
+                    # pos_enc [1,H*W,model_dim]
+                    pos_enc = self.pos_proj.forward_features().unsqueeze(0)
+                    prefix = image_src.size(1) - pos_enc.shape[1]
+                    image_src[:,prefix:,:] = image_src[:,prefix:,:] + pos_enc
+                if self.input_encoder == 'shared_gaussian_base':
+                    pos_enc = self.img_pos_proj.forward_features().unsqueeze(0)
+                    prefix = image_src.size(1) - pos_enc.shape[1]
+                    image_src[:,prefix:,:] = image_src[:,prefix:,:] + pos_enc
+                self.image_spatial_shapes = None
+                self.image_level_start_index = None
+            else:
+                # ---- MULTI-SCALE PATH (Mask2Former via F3 bundle) ----
+                bundle = self.image_encoder(image_src)                 # MultiScaleFeatures
+                image_src = self.img_input_proj(bundle.value)          # (B, S, model_dim)
+                pos_enc_mod = self.pos_proj if self.input_encoder == 'shared_gaussian' else self.img_pos_proj
+                pe = pos_enc_mod(bundle.reference_grids.unsqueeze(0))   # (1, S, model_dim)
+                level_sizes = torch.tensor(bundle.level_sizes(), device=self.level_embed.device)
+                lvl = torch.repeat_interleave(self.level_embed, level_sizes, dim=0).unsqueeze(0)  # (1, S, model_dim)
+                image_src = image_src + pe + lvl
+                self.image_spatial_shapes = bundle.spatial_shapes
+                self.image_level_start_index = bundle.level_start_index
 
             # enhancing features
             if self.n_feature_enhancer > 0 and not (self.n_eye_decoder > 0):
@@ -730,7 +773,9 @@ class MixerModel(nn.Module):
                 
                 for mod in self.eye_decoder:
                     if self.use_deformable_eye_decoder:
-                        src = mod(src, image_src, src_mask, reference_points = src_coords)
+                        src = mod(src, image_src, src_mask, reference_points = src_coords,
+                                  spatial_shapes = self.image_spatial_shapes,
+                                  level_start_index = self.image_level_start_index)
                     else:
                         src = mod(src, image_src, src_mask, None)
                 if self.norm_first:
@@ -831,7 +876,9 @@ class MixerModel(nn.Module):
                     reference_points = start_point
                 else:
                     reference_points = torch.cat([start_point, tgt_coords], dim=1)
-                output = mod(output,src ,image_src , tgt_mask, mem1_mask = src_mask, reference_points = reference_points)
+                output = mod(output,src ,image_src , tgt_mask, mem1_mask = src_mask, reference_points = reference_points,
+                             spatial_shapes = self.image_spatial_shapes,
+                             level_start_index = self.image_level_start_index)
             else:
                 output = mod(output, image_src,src , tgt_mask, mem2_mask = src_mask, src_rope = tgt_rope, mem1_rope = image_rope, mem2_rope = src_rope)
 
