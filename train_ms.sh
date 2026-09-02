@@ -2,9 +2,9 @@
 #SBATCH --job-name=train_ms
 #SBATCH --output=logs/denoise_out_%j.log
 #SBATCH --error=logs/denoise_err_%j.log
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
-#SBATCH --time=16:00:00
+#SBATCH --time=24:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=leonardo.ulloa@rai.usc.gal
