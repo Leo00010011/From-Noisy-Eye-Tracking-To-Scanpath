@@ -41,6 +41,10 @@ conda activate scanpath
 echo "Moving to project"
 cd projects/From-Noisy-Eye-Tracking-To-Scanpath/
 
+echo "Exporting WANDB_API_KEY"
+
+export WANDB_API_KEY="$(cat ~/.wandb_api_key)"
+
 echo "STARTING TRAINING"
 python train.py exp=only_combined model/image_encoder=mask2former
 
