@@ -46,14 +46,20 @@ training:
     denoise_weight: 0
     decisive_metric: ${training.decisive_metric}
     epochs: 160
-
+  wandb:
+    enabled: true
+    project: "noisy-eye-scanpath"
+    entity: null
+    mode: "online"
+    group: "new model"
+    name: null        
 loss:
   complex_type: "combined"
   denoise_loss_type: "l1"
   fixation_loss_type: "separated_reg"
 scheduled_sampling:
-  warmup_epochs: 20
-  active_epochs: 50
+  warmup_epochs: 5
+  active_epochs: 45
   n_updates: -1
   min_prob: 0
   max_prob: 0.85
