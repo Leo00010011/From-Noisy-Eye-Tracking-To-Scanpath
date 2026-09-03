@@ -3,7 +3,7 @@ defaults:
   - _self_
 
 load:
-  batch_size: 52
+  batch_size: 32
   use_img_dataset: True
   num_workers: 2
   persistent_workers: True
