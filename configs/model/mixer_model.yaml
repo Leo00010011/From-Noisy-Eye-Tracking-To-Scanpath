@@ -5,11 +5,11 @@ defaults:
 name: "MixerModel"
 input_dim: 3
 output_dim: 3
-n_encoder: 4
-n_decoder: 4
+n_encoder: 2
+n_decoder: 3
 n_adapter: 0
 n_feature_enhancer: 0
-n_eye_decoder: 4
+n_eye_decoder: 3
 model_dim: 512
 total_dim: 512
 n_heads: 8

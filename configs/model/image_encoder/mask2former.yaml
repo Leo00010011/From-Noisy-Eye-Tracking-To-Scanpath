@@ -4,7 +4,7 @@ embed_dim: 256
 conv_dim: 256
 n_heads: 8
 n_points: 4
-transformer_enc_layers: 6
+transformer_enc_layers: 4
 transformer_dim_feedforward: 1024
 transformer_dropout: 0.0
 transformer_in_features: ["res3", "res4", "res5"]
