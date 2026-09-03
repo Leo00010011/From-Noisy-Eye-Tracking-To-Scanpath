@@ -118,7 +118,9 @@ def main(ckpt_path=CKPT_PATH, run_name=RUN_NAME, out_dir=OUT_DIR,
     b_records = run_perturbation_pass(model, test_dl, device, eps_ignore=eps_ignore)
 
     # ── Coverage checks (Data Architecture Integrity) ───────────────────────────
-    n_dataset = len(test_dl.path_dataset) if hasattr(test_dl, "path_dataset") else len(test_dl.dataset)
+    # CoupledDataloader iterates the test image Subset (== number of test samples); path_dataset
+    # is the FULL gaze dataset, so compare against the Subset the loader actually walks.
+    n_dataset = len(test_dl.dataset)
     if len(a_records) != n_dataset:
         print(f"  [WARN] Pass A wrote {len(a_records)} records but dataset has {n_dataset} samples")
     a_ids = [r["sample_idx"] for r in a_records]

@@ -410,6 +410,33 @@ def test_g7_eye_nan_padded(tmp_path):
         assert not np.isnan(dec).any()                           # dense
 
 
+def test_g7_variable_k1_padded(tmp_path):
+    # Fixation-decoder K1 differs across batches (variable max-fixation count) -> NaN-pad to K1_max.
+    n_dec, n_lvl, D = 2, 3, 8
+    rng = np.random.default_rng(4)
+    a = []
+    for i, K1 in enumerate((14, 15, 14)):
+        a.append({
+            "sample_idx": 20 + i, "src_len": 4, "stimulus_name": "", "pred_len": 2,
+            "dec_norms": {v: rng.random((n_dec, K1)).astype(np.float32) for v in FIX_NORM_KEYS},
+            "dec_inrange": rng.random((n_dec, n_lvl)).astype(np.float32),
+            "full": {v: rng.random((n_dec, K1, D)).astype(np.float16)
+                     for v in ("first_cross_res", "second_cross_res")},
+        })
+    p = tmp_path / "r.h5"
+    write_reliance_store(p, a, [], _support(eye_ok=False), _attrs())
+    with h5py.File(p, "r") as f:
+        g = f["/reliance"]
+        arr = g["dec_first_cross_res_norm"][:]           # (3, n_dec, 15)
+        assert arr.shape == (3, n_dec, 15)
+        assert not np.isnan(arr[0, :, :14]).any()        # row 0 K1=14 filled
+        assert np.isnan(arr[0, :, 14]).all()             # ...col 14 padded
+        assert not np.isnan(arr[1]).any()                # row 1 K1=15 fully filled
+        assert int(g.attrs["K1"]) == 15
+        full = g["dec_first_cross_res"][:]               # (3, n_dec, 15, D)
+        assert np.isnan(full[0, :, 14, :]).all()
+
+
 def test_g7_pass_a_only(tmp_path):
     a = _synthetic_pass_a()
     p = tmp_path / "r.h5"

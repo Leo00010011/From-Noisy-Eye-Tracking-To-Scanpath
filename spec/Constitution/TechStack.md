@@ -547,16 +547,17 @@ Spec: `spec/2026-09-03-image-reliance-diagnostic-suite/`.
 **`write_reliance_store`** — `outputs/image_reliance/{run_name}_reliance.h5`, single group
 `/reliance`, mode `"w"`. Both passes write keyed by `sample_idx`; Pass B is aligned to Pass A **by
 `sample_idx` dict lookup** (never row position). `N` = test samples, `K1` = fixation-decoder query
-length (`pred.size(1)+1`), `n_dec`/`n_eye` = decoder depths, `n_lvl` = `n_image_levels` (3 for
-mask2former@256), `T_max` = max valid gaze length, `D` = model_dim. Datasets are skipped (and the attr
-flag set `False`) when a stream is unavailable.
+length (`pred.size(1)+1`) — **batch-dependent** (variable max fixation count), so `dec_*` arrays are
+NaN-padded to the global `K1_max` (the `K1` group attr records that max), `n_dec`/`n_eye` = decoder
+depths, `n_lvl` = `n_image_levels` (3 for mask2former@256), `T_max` = max valid gaze length, `D` =
+model_dim. Datasets are skipped (and the attr flag set `False`) when a stream is unavailable.
 
 | Dataset | Shape | dtype | Notes |
 |---|---|---|---|
 | `sample_idx` | `(N,)` | int32 | primary key (CocoFreeView dataset index) |
 | `stimulus_name` | `(N,)` | vlen utf8 | `""` when the image dataset exposes no path |
 | `pred_len` / `src_len` | `(N,)` | int32 | first `sigmoid(eos)>0.5` step / valid gaze length |
-| `dec_{self_attention,first_cross,second_cross,ffn}_res_norm` | `(N,n_dec,K1)` | float32 | fixation decoder; `first_cross`=gaze, `second_cross`=image |
+| `dec_{self_attention,first_cross,second_cross,ffn}_res_norm` | `(N,n_dec,K1)` | float32 | fixation decoder, NaN-padded to `K1_max`; `first_cross`=gaze, `second_cross`=image |
 | `eye_{self_attention,cross_attention,ffn}_res_norm` | `(N,n_eye,T_max)` | float32 | eye decoder, NaN-padded per `src_len`; `cross_attention`=image |
 | `dec_inrange` / `eye_inrange` | `(N,n_dec,n_lvl)` / `(N,n_eye,n_lvl)` | float32 | sampling-in-range fraction, `[0,1]` |
 | `dec_first_cross_res` / `dec_second_cross_res` | `(N,n_dec,K1,D)` | float16 | optional full residuals (`SAVE_FULL_RESIDUALS`) |

@@ -420,13 +420,16 @@ def write_reliance_store(path, pass_a_records, pass_b_records, support, attrs):
 
         K1 = model_dim = n_lvl = None
 
-        # ── Pass A: fixation-decoder residual norms — (N, n_dec, K1), dense.
+        # ── Pass A: fixation-decoder residual norms — (N, n_dec, K1_max), NaN-padded.
+        # K1 (= pred.size(1)+1) is the fixation-decoder query length, which depends on each
+        # batch's max fixation count, so it varies across batches — pad to the global max.
         if fix_ok:
-            K1 = int(pass_a_records[0]["dec_norms"][FIX_NORM_KEYS[0]].shape[1])
+            K1 = max(int(r["dec_norms"][FIX_NORM_KEYS[0]].shape[1]) for r in pass_a_records)
             for v in FIX_NORM_KEYS:
                 arr = np.full((N, n_dec, K1), np.nan, np.float32)
                 for i, r in enumerate(pass_a_records):
-                    arr[i] = r["dec_norms"][v]
+                    k = r["dec_norms"][v].shape[1]
+                    arr[i, :, :k] = r["dec_norms"][v]
                 g.create_dataset(f"dec_{v}_norm", data=arr)
 
         # ── Pass A: eye-decoder residual norms — (N, n_eye, T_max), NaN-padded per src_len.
@@ -455,7 +458,8 @@ def write_reliance_store(path, pass_a_records, pass_b_records, support, attrs):
             for v in ("first_cross_res", "second_cross_res"):
                 arr = np.full((N, n_dec, K1, model_dim), np.nan, np.float16)
                 for i, r in enumerate(pass_a_records):
-                    arr[i] = r["full"][v]
+                    k = r["full"][v].shape[1]
+                    arr[i, :, :k, :] = r["full"][v]
                 g.create_dataset(f"dec_{v}", data=arr)
 
         # ── Pass B: perturbation columns, aligned by sample_idx.
@@ -495,7 +499,7 @@ def write_reliance_store(path, pass_a_records, pass_b_records, support, attrs):
             "eye_cross": "image",
         })
         if K1 is not None:
-            merged.setdefault("K1", K1)
+            merged["K1"] = K1          # the padded K1_max actually written (batch-dependent)
         if model_dim is not None:
             merged.setdefault("model_dim", model_dim)
         # Drop any None-valued attrs (h5py cannot store None).
@@ -536,8 +540,11 @@ def write_summary(path, pass_a_records, pass_b_records, support, attrs):
     if fix_ok and pass_a_records:
         fix_layers = []
         for l in range(n_dec):
-            first = np.concatenate([r["dec_norms"]["first_cross_res"][l] for r in pass_a_records])
-            second = np.concatenate([r["dec_norms"]["second_cross_res"][l] for r in pass_a_records])
+            # Aggregate over active decode steps only (0..pred_len; position 0 = start token).
+            first = np.concatenate([r["dec_norms"]["first_cross_res"][l][:int(r["pred_len"]) + 1]
+                                    for r in pass_a_records])
+            second = np.concatenate([r["dec_norms"]["second_cross_res"][l][:int(r["pred_len"]) + 1]
+                                     for r in pass_a_records])
             ratio = second / np.clip(first, 1e-9, None)
             fix_layers.append({
                 "layer": l,
