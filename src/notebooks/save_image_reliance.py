@@ -33,7 +33,7 @@ os.chdir(PROJECT_ROOT)
 sys.path.insert(0, PROJECT_ROOT)
 print("Project root:", PROJECT_ROOT)
 
-from src.model.model_io import load_pipeline, load_test_data, load_model
+from src.model.model_io import load_pipeline, load_test_data
 from src.training.inference_recorder import InferenceRecorder
 from src.eval.image_reliance import (
     run_recording_pass,
@@ -56,6 +56,34 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # ── Load ──────────────────────────────────────────────────────────────────────
 
+def _load_checkpoint_model(pipe, ckpt_path):
+    """Build THIS checkpoint's model and load its weights.
+
+    Mirrors ``model_io.load_model`` (strip the ``_orig_mod.`` prefix, ``strict=False``) with two
+    robustness fixes for runs whose config has ``training.pretrained_model`` set:
+      * that field makes ``build_model`` rebuild the architecture from the *referenced* run's
+        config (and return a ``(model, splits)`` tuple) — wrong architecture + a tuple
+        ``model_io.load_model`` crashes on. We null the field first so ``build_model`` constructs
+        this run's own architecture (the field only seeds weights at train time; we load the final
+        weights below anyway), and unpack defensively.
+    """
+    if pipe.config.training.get("pretrained_model", None) is not None:
+        from omegaconf import open_dict
+        with open_dict(pipe.config):
+            pipe.config.training.pretrained_model = None
+    built = pipe.build_model()
+    model = built[0] if isinstance(built, tuple) else built
+    ckpt = torch.load(os.path.join(ckpt_path, "model.pth"), map_location="cpu")
+    state = {k.removeprefix("_orig_mod."): v for k, v in ckpt["model_state_dict"].items()}
+    missing, unexpected = model.load_state_dict(state, strict=False)
+    print(f"Info: {len(missing)} missing keys and {len(unexpected)} unexpected keys.")
+    if missing:
+        print(f"  Missing (first 5): {missing[:5]}")
+    if unexpected:
+        print(f"  Unexpected (first 5): {unexpected[:5]}")
+    return model
+
+
 def main(ckpt_path=CKPT_PATH, run_name=RUN_NAME, out_dir=OUT_DIR,
          save_full=SAVE_FULL_RESIDUALS, eps_ignore=EPS_IGNORE, device=DEVICE):
     os.makedirs(out_dir, exist_ok=True)
@@ -64,7 +92,7 @@ def main(ckpt_path=CKPT_PATH, run_name=RUN_NAME, out_dir=OUT_DIR,
     pipe = load_pipeline(ckpt_path)                    # FR1
     pipe.load_dataset()
     _, _, test_dl = load_test_data(pipe, ckpt_path, return_dataloaders=True)   # test loader only
-    model = load_model(pipe, ckpt_path)
+    model = _load_checkpoint_model(pipe, ckpt_path)
     model.set_phase("Fixation")
     model.to(device)
     model.eval()
