@@ -2,6 +2,28 @@
 
 ## Done
 
+- ✓ **Image-reliance diagnostic suite** — additive, diagnosis-only measurement of *"does the
+  Mask2Former-backbone `MixerModel` actually use the image?"* (the `train_ms.sh` run tied DINOv3
+  on accuracy, so the dual-path design lets us test whether the image path is inert). New module
+  `src/eval/image_reliance.py` holds pure, unit-tested primitives — `sampling_in_range_fraction`
+  (fraction of deformable sampling locations inside `[0,1]`), `residual_norms` /
+  `extract_residuals` / `extract_sampling_locations` (harvest the already-recorded
+  `first_cross_res`/`second_cross_res`/`cross_attention_res`/`sampling_locations` from the
+  `norm_first`+deformable hooks), `shuffle_images_in_batch` (cyclic-roll derangement),
+  `per_sample_reg_error` (mirrors `eval_reg` per row) — plus two pass drivers: **Pass A**
+  (`run_recording_pass`, recorder ON) captures cross-attention residual norms + in-range fractions
+  for the eye and fixation decoders via the predict-then-clean-forward pattern (model's own
+  predictions as `tgt`); **Pass B** (`run_perturbation_pass`, recorder OFF) recomputes per-sample
+  regression error with images shuffled within each batch (gaze untouched). Writers
+  `write_reliance_store` (per-sample HDF5, group `/reliance`, mode `"w"`, Pass B aligned to Pass A
+  **by `sample_idx`**) and `write_summary` (aggregated JSON + printed table with the three headline
+  scalars: image/gaze residual ratio, perturbation delta, per-level in-range fraction, each with an
+  interpretation string). Thin driver `src/notebooks/save_image_reliance.py` loads a checkpoint via
+  `model_io.load_pipeline`/`load_test_data`/`load_model` on the CocoFreeView **test** split. **No
+  model code touched** — `blocks.py`/`mixer_model.py`/`inference_recorder.py` unchanged; no training
+  HDF5 layout change. 30-test suite `tests/test_image_reliance.py` (CPU-only, synthetic + stub
+  recorder + one tiny real `MixerModel` for the module-name assertion). Spec:
+  `spec/2026-09-03-image-reliance-diagnostic-suite/`.
 - ✓ **Optuna + W&B hyperparameter search** — standalone driver `scripts/hp_search.py` tunes the `MixerModel` on a reduced-budget, from-scratch **Combined** phase (`configs/exp/hp_search.yaml`, `E=40` with schedule invariants: `scheduler.warmup+stable+decay == E`, `scheduled_sampling.warmup+active <= E`). Each Optuna trial Hydra-`compose`s the config with 15 sampled hyperparameters (`weight_decay`, `n_encoder`/`n_decoder`/`n_eye_decoder`, the 9 mixer dropouts >0, `cls_weight`, `dur_weight` — bounds in `configs/hp_search.yaml`), trains via `train(builder, trial=...)`, and reports the best `reg_error_val` (`MetricsStorage.best_metric_value`) as the minimise objective. `TPESampler(seed)` + SQLite storage (`load_if_exists=True`) make the study reproducible and resumable; `MedianPruner` prunes weak trials via `trial.report()` at each validation; `study.optimize(..., catch=(Exception,))` keeps the study alive past a FAILED trial (e.g. CUDA OOM). One W&B run per trial (grouped by study) logs per-epoch `train/*` and per-validation `val/*` curves; the driver owns `wandb.init`/`finish`, `train()` only logs to the active run (and `finish()`es on the prune path). Per-trial artifacts (`metrics.json`, `model.pth`, `split.pth`, `config.yaml`) under `outputs/hp_search/<study>/trial_<n>/`; study-level `trials.csv` + `best_params.yaml`. `train()` is backward-compatible (`trial=None`, `training.wandb` absent → inert via `.get`); `python train.py` behaviour is byte-for-byte unchanged. 43-test suite `tests/test_hp_search.py`; `optuna`/`wandb` added to `requirements.txt`. Spec: `spec/2026-07-30-optuna-wandb-hyperparameter-search/`
 - ✓ **EVE real-noise scanpath inference** — `EyeNetGazeCache` projects EyeNet's per-frame normalized gaze predictions (`predictions.csv`) into a screen-space, `exp_key`-keyed HDF5 cache via `EveBundle.project_normalized_gaze` (left/right eye intercepts averaged in pixel space → 89.6 px / 2.32 DVA median error vs ray-derived ground truth). `EveRealNoiseDataset` / `EveRealNoiseImgDataset` feed a trained `MixerModel` autoregressively over real degraded gaze; `RealNoiseInferenceStore` persists predicted scanpaths keyed by `exp_key`. Inference-only — no `clean_x`, no accuracy metrics, `PipelineBuilder` untouched. Filtering is on `eyenet_split` (the operative partition; EVE's split is metadata only). New files under `src/data/eve_real_noise*.py`, `configs/data/eve_real.yaml`, `scripts/build_eyenet_gaze_cache.py`, `src/notebooks/save_predictions_eve_real.py`; 52-test suite `tests/test_eve_real_noise.py`. All validation.md reference numbers reproduced on the production bundle. Spec: `spec/2026-07-27-eve-real-noise-scanpath-inference/`
 - **Spec-driven workflow bootstrapped** — Mission, TechStack, and Roadmap documents in place under `spec/Constitution/`

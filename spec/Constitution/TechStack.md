@@ -453,6 +453,7 @@ option but not the default path.
 | `EveRealNoiseImgDataset` | `src/data/eve_real_noise.py` | Stimulus dataset paired with `EveRealNoiseDataset` via the identical `_accepted_rows` filter, so index `i` refers to the same `exp_key` in both. Dedups by `stimulus_name`, squashes 1920×1080 → 256². |
 | `RealNoiseInferenceStore` | `src/data/eve_real_noise_store.py` | Keyed HDF5 writer/reader for model outputs (`save` uses mode `"w"`, unlike the cache's append mode). Stores predicted scanpaths, EOS logits, inverted `src_px`, `frame_indices`, optional `denoise_px`. See HDF5 layout below. |
 | `eval_metrics.py` | `src/eval/` | `eval_reg` (Euclidean coord error + duration MAE on masked positions), `eval_denoise` (MSE on denoised coords), `accuracy` / `precision` / `recall` for end-of-sequence head. |
+| `image_reliance.py` | `src/eval/` | **Image-reliance diagnostic suite** (diagnosis-only). Pure primitives (`sampling_in_range_fraction`, `residual_norms`, `extract_residuals`/`extract_sampling_locations`, `shuffle_images_in_batch`, `per_sample_reg_error`) + two pass drivers (`run_recording_pass` residuals+in-range recorder-on; `run_perturbation_pass` image-shuffle recorder-off) + writers (`write_reliance_store` HDF5, `write_summary` JSON). Reuses the already-recorded `blocks.py` hooks; touches no model code. See the "Image-Reliance Diagnostic Suite" section. |
 | `eval_utils.py` | `src/eval/` | Offline evaluation utilities: running inference on a split and aggregating metrics. |
 | `vis_scanpath.py` | `src/eval/` | Plotting predicted vs. ground-truth scanpaths overlaid on the stimulus image. |
 
@@ -513,6 +514,68 @@ Group attrs: `timestamp_source` (`"synthesized_30hz"` — center-camera timestam
 | `denoise_px` | `(N, T, 2)` | float32 | present only if the checkpoint has a denoise head |
 
 Group attrs: `run_name`, `checkpoint_path`, `img_size`, `max_fixations`, `gaze_cache_path`, `bundle_dir`, `created_at`, `has_denoise`, `eos_threshold`. All coordinates are in 1920×1080 screen pixels (recovered via `invert_transforms`, never hand-multiplied).
+
+## Image-Reliance Diagnostic Suite (diagnosis-only path)
+
+An additive, `PipelineBuilder`-reusing suite that answers *"does the Mask2Former-backbone
+`MixerModel` actually use the image?"* on the CocoFreeView **test** split. It records and reports —
+it never modifies the model, retrains, or fixes anything. All tensors it needs are **already**
+recorded by the existing `norm_first`+deformable hooks in `blocks.py` (`first_cross_res`,
+`second_cross_res`, `cross_attention_res`, `sampling_locations`), so **no model code is touched**.
+Spec: `spec/2026-09-03-image-reliance-diagnostic-suite/`.
+
+- **`src/eval/image_reliance.py`** — pure, unit-tested primitives + two pass drivers:
+  `probe_recording_support(model)` (which residual streams are capturable — `norm_first` +
+  deformable required); `extract_residuals` / `residual_norms` (per-layer, per-decode-step L2
+  norms); `extract_sampling_locations(recorder, module_prefix, attn_attr, n_layers)` (the deformable
+  op's `sampling_locations (B,Nq,H,L,P,2)` from `decoder.{l}.second_cross_attn` /
+  `eye_decoder.{l}.cross_attn`); `sampling_in_range_fraction(sampling_locations, query_mask=None,
+  n_levels=None)` → `(B, n_levels)` (mean of `0<=x<=1 & 0<=y<=1` over query/head/point; raises
+  `ValueError` on last-dim≠2, non-6-D, or level-axis≠`n_levels`); `shuffle_images_in_batch`
+  (cyclic-roll-by-1 derangement, `B>=2`); `per_sample_reg_error(pred, tgt, tgt_mask)` (mirrors
+  `eval_reg` reduced per row — mean over samples equals `eval_reg` at equal per-row valid counts);
+  `run_recording_pass` (**Pass A**, recorder ON — predict autoregressively recorder-off, then one
+  clean causal forward feeding the model's own predictions back as `tgt` with recorder on, harvest
+  residual norms + in-range fractions); `run_perturbation_pass` (**Pass B**, recorder OFF — per-sample
+  regression error with the true image vs. the image tensor shuffled within the batch, gaze/masks/tgt
+  identical); `write_reliance_store` / `write_summary`.
+- **`src/notebooks/save_image_reliance.py`** — thin driver (config block → both passes → HDF5 +
+  JSON), modelled on `save_activations_eve_real.py`. Loads via `model_io.load_pipeline` /
+  `load_test_data(return_dataloaders=True)` (test loader only) / `load_model`; warns (not errors) if
+  `image_encoder.type != "mask2former"`.
+
+**`write_reliance_store`** — `outputs/image_reliance/{run_name}_reliance.h5`, single group
+`/reliance`, mode `"w"`. Both passes write keyed by `sample_idx`; Pass B is aligned to Pass A **by
+`sample_idx` dict lookup** (never row position). `N` = test samples, `K1` = fixation-decoder query
+length (`pred.size(1)+1`), `n_dec`/`n_eye` = decoder depths, `n_lvl` = `n_image_levels` (3 for
+mask2former@256), `T_max` = max valid gaze length, `D` = model_dim. Datasets are skipped (and the attr
+flag set `False`) when a stream is unavailable.
+
+| Dataset | Shape | dtype | Notes |
+|---|---|---|---|
+| `sample_idx` | `(N,)` | int32 | primary key (CocoFreeView dataset index) |
+| `stimulus_name` | `(N,)` | vlen utf8 | `""` when the image dataset exposes no path |
+| `pred_len` / `src_len` | `(N,)` | int32 | first `sigmoid(eos)>0.5` step / valid gaze length |
+| `dec_{self_attention,first_cross,second_cross,ffn}_res_norm` | `(N,n_dec,K1)` | float32 | fixation decoder; `first_cross`=gaze, `second_cross`=image |
+| `eye_{self_attention,cross_attention,ffn}_res_norm` | `(N,n_eye,T_max)` | float32 | eye decoder, NaN-padded per `src_len`; `cross_attention`=image |
+| `dec_inrange` / `eye_inrange` | `(N,n_dec,n_lvl)` / `(N,n_eye,n_lvl)` | float32 | sampling-in-range fraction, `[0,1]` |
+| `dec_first_cross_res` / `dec_second_cross_res` | `(N,n_dec,K1,D)` | float16 | optional full residuals (`SAVE_FULL_RESIDUALS`) |
+| `reg_error_clean` / `reg_error_shuffled` | `(N,)` | float32 | Pass B; `NaN` if unshuffleable (trailing B=1) |
+| `dur_error_clean` / `dur_error_shuffled` | `(N,)` | float32 | Pass B duration error |
+| `perm_index` | `(N,)` | int32 | source image sample; `-1` if unshuffleable |
+
+Group attrs: `run_name`, `checkpoint_path`, `img_size`, `image_encoder_type`, `n_image_levels`,
+`spatial_shapes` (flattened), `level_start_index`, `K1`, `model_dim`, `n_decoder`, `n_eye_decoder`,
+`target_mode` (`"pred"`), `split` (`"test"`), `eps_ignore`, `created_at`, `fix_residuals_saved`,
+`eye_residuals_saved`, `full_residuals_saved`, `inrange_saved`, and the decode legend
+(`fix_first_cross="gaze"`, `fix_second_cross="image"`, `eye_cross="image"`).
+
+**`write_summary`** — `outputs/image_reliance/{run_name}_summary.json` + printed table: (1)
+per-fixation-layer `||second_cross_res|| / ||first_cross_res||` (image/gaze) ratio + absolute means,
+per-eye-layer image-cross mean and its ratio to self; (2) mean clean vs. shuffled reg error, abs/rel
+delta, fraction of samples changing `< eps_ignore`; (3) per-level mean in-range fraction (eye +
+fixation). Each block carries a one-line interpretation string. Returns the dict (for tests).
+30-test suite `tests/test_image_reliance.py`.
 
 ## Hyperparameter Search (Optuna + W&B)
 
