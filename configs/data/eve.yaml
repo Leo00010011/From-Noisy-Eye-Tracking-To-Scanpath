@@ -28,7 +28,7 @@ load:
   persistent_workers: true
   prefetch_factor: 2
   pin_memory: true
-  img_size: 256
+  img_size: 512
   log: true
 
 transforms:

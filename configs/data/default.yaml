@@ -11,7 +11,7 @@ load:
   downsample_int: 33
   pin_memory: True
   use_cached_img_dataset: True
-  img_size: 256
+  img_size: 512
   coord_height: 320
   coord_width: 512
   log: True
