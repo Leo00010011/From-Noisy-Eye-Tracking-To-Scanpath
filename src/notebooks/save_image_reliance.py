@@ -45,10 +45,11 @@ from src.eval.image_reliance import (
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-CKPT_PATH = os.path.join("outputs","2026-09-02","19-45-06")   # <-- checkpoint run directory
+#CKPT_PATH = os.path.join("outputs","2026-09-02","19-45-06")   # <-- checkpoint run directory
+CKPT_PATH = os.path.join("outputs","2026-09-03","16-08-35")   # <-- checkpoint run directory
 
 RUN_NAME = "mask2former_ms"
-OUT_DIR = os.path.join("outputs", "image_reliance")
+OUT_DIR = os.path.join("outputs", "image_relianceL")
 SAVE_FULL_RESIDUALS = True     # also persist full fixation cross residuals (float16) for offline PCA
 EPS_IGNORE = 1e-3              # normalised-units threshold: |shuffled - clean| < eps ⇒ "unchanged"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
