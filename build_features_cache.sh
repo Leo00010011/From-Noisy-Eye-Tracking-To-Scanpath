@@ -16,6 +16,7 @@ echo "Running on node: $SLURM_NODELIST"
 
 echo "Moving to home"
 cd /mnt/beegfs/home/leonardo.ulloa
+HOME_DIR="$(pwd)"
 
 echo "Mounting image "
 sudo mount_image.py my_env.ext4 --rw
@@ -23,6 +24,12 @@ sudo mount_image.py my_env.ext4 --rw
 # Use single quotes for the definition to be safe
 SOURCE_DATA='projects/From-Noisy-Eye-Tracking-To-Scanpath/data/Coco FreeView'
 DEST_DATA="$LOCAL_SCRATCH/data/Coco FreeView"
+
+# The --out path below is made absolute with $HOME_DIR on purpose: this script cd's into the
+# project dir before running python, so a path relative to $SOURCE_DATA would resolve to a
+# DOUBLED projects/From-.../projects/From-.../data/... directory (the HDF5 writer makedirs
+# it silently, so the build still "succeeds" in the wrong place). train_ms.sh reads
+# "$HOME_DIR/$SOURCE_DATA/image_features_${IMG_SIZE}.h5" - keep the two in sync.
 
 # Create the directory
 mkdir -p "$DEST_DATA"
@@ -67,7 +74,7 @@ python scripts/build_image_feature_cache.py \
     --batch-size "$BATCH_SIZE" \
     --device cuda \
     --data-root "$DEST_DATA" \
-    --out "$SOURCE_DATA/image_features_${IMG_SIZE}.h5" \
+    --out "$HOME_DIR/$SOURCE_DATA/image_features_${IMG_SIZE}.h5" \
     $MASK_FLAG
 
 echo "Finished features cache build at: $(date)"
