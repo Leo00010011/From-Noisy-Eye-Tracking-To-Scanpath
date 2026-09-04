@@ -45,7 +45,15 @@ echo "Exporting WANDB_API_KEY"
 
 export WANDB_API_KEY="$(cat ~/.wandb_api_key)"
 
-echo "STARTING TRAINING"
-python train.py exp=only_combined model/image_encoder=mask2former
+echo "STARTING TRAINING (precomputed frozen Mask2Former features, img_size=512)"
+# Train off the cached frozen features (image_features_512.h5) instead of the live backbone.
+#   - model/image_encoder=mask2former_precomputed : precomputed=True, spatial_shapes for 512
+#   - data.load.use_precomputed_features=True      : FR12 requires features on both sides
+#   - feature_cache_path -> the scratch copy rsync'd above (fast NVMe reads; ~24 GB streamed/epoch)
+# img_size is already 512 in configs/data/default.yaml, matching the cache attrs.
+python train.py exp=only_combined \
+    model/image_encoder=mask2former_precomputed \
+    +data.load.use_precomputed_features=True \
+    +data.load.feature_cache_path="$DEST_DATA/image_features_512.h5"
 
 echo "Finished debug at: $(date)"

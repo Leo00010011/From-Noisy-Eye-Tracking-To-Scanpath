@@ -2,7 +2,8 @@ type: "mask2former"
 enabled: True
 precomputed: True
 embed_dim: 256
+# img_size=512 => coarse->fine [res5, res4, res3] = [16^2, 32^2, 64^2], S = 5376.
 num_levels: 3
-spatial_shapes: [[8, 8], [16, 16], [32, 32]]
-feature_cache_path: "data/Coco FreeView/image_features_256.h5"
+spatial_shapes: [[16, 16], [32, 32], [64, 64]]
+feature_cache_path: "data/Coco FreeView/image_features_512.h5"
 adapter_hidden_dims: []
