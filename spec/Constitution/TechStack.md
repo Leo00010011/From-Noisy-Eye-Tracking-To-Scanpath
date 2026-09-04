@@ -429,6 +429,10 @@ option but not the default path.
 | `DinoV3Wrapper` | `src/model/dino_wrapper.py` | Wraps a locally cloned DINOv3 model. Returns per-patch tokens including a CLS prefix token. Loaded from a local `.pth` file, not from HuggingFace at runtime. |
 | `Mask2FormerBackbone` | `src/model/ms_deform_backbone.py` | **F2 multi-scale image backbone.** Torchvision ResNet50 (ImageNet, frozen + eval so BN stats freeze) → vendored detectron2-free `MSDeformAttnPixelDecoder` (fresh init, trainable) whose 6-layer transformer runs F1 `DeformableAttention` at `n_levels=3`. `forward(x)` returns 3 enhanced CLS-free maps `[B,256,Hₗ,Wₗ]` coarse→fine `[res5,res4,res3]` (+ optional stride-4 `res2_fpn` and `mask_features` when `return_stride4=True`). Additive — DINOv3 stays selectable. |
 | `MultiScaleFeatures` | `src/model/ms_features.py` | **F3 backbone-agnostic image-feature contract.** Dataclass carrying flattened multi-level memory `value [B,ΣHₗWₗ,D]` + geometry (`spatial_shapes`, `level_start_index`, `reference_grids`), with `__post_init__` validation, read-only props, and a float-only-casting `.to()`. The one interface every image-feature consumer (F1 op, F4 decoders, F6 `MixerModel`) reads. |
+| `PrecomputedFeatureAdapter` | `src/model/ms_features.py` | **Frozen-features stand-in for a backbone.** Zero-parameter `nn.Module` that reconstructs a `MultiScaleFeatures` bundle from a cached `ms_value` batch `(B,S,256)` + fixed geometry (`spatial_shapes`/`level_start_index`/`reference_grids` held as non-persistent buffers). Installed as `MixerModel.image_encoder` on the precomputed path so `MixerModel` needs zero edits. Its forward output is `torch.equal` to `Mask2FormerFeatureAdapter`'s on the same image. |
+| `ImageFeatureCache` | `src/data/image_feature_cache.py` | Keyed HDF5 writer/reader (group `/features`, mode `"w"`) for precomputed frozen Mask2Former features: `ms_value (U,S,256)` + `mask_features (U,256,H4,W4)` + `image_path (U,)`, chunked per-image. `write` is a static method; the read side exposes `.ms_value(u)`/`.mask_features(u)`/`.image_path`/`.attrs` with a per-worker lazy file handle. |
+| `PrecomputedFeatureDataset` | `src/data/image_feature_cache.py` | Drop-in for `DeduplicatedMemoryDataset` under `CoupledDataloader` that serves cached features instead of images. Rebuilds the first-seen unique index (identical to `DeduplicatedMemoryDataset.build_index`) and **verifies** `image_path[u]` against the cache unconditionally (order invariant not bypassable). `__getitem__ -> (feature (S,256) f32, idx, unique_idx)`. |
+| `remap_detectron2_resnet50` / `load_pretrained_mask2former` | `src/model/m2f_pretrained.py` | Pretrained-weight loaders that populate the F2 `Mask2FormerBackbone` from the two detectron2-format `.pkl`s (COCO-tuned R50 + pixel decoder). Pure key remaps over `torch.load`ed dicts; `load_pretrained_mask2former` raises if any ResNet50 / core pixel-decoder *parameter* is unloaded, tolerating `fc.*`, BN `num_batches_tracked`, and the optional stride-4 FPN keys. |
 | `Mask2FormerFeatureAdapter` / `DinoV3FeatureAdapter` | `src/model/ms_features.py` | **F3 producing adapters** (`nn.Module`, backbone held as submodule, zero own params). The Mask2Former one repackages the 3 coarse→fine maps into a bundle (round-trip identity; discards `mask_features`); the DINOv3 one strips CLS once and emits a 1-level bundle (`.model.patch_size` read once at init). Both build the bundle via `build_reference_grids` / `build_level_start_index`. |
 | `FreeViewInMemory` | `src/data/datasets.py` | **Primary dataset class.** Loads all scanpath data from the HDF5 file into RAM at startup. Applies the configured transform pipeline per `__getitem__`. Paired with `seq2seq_padded_collate_fn` for variable-length sequence batching. |
 | `DeduplicatedMemoryDataset` | `src/data/datasets.py` | Image dataset that avoids loading the same stimulus image multiple times. Used when `use_img_dataset=True`. |
@@ -676,6 +680,103 @@ Validation runs every `training.val_interval` epochs. Metrics computed on the va
 **Before computing pixel-space metrics**, invert the `Normalize` transforms using their `.inverse()` methods. The model outputs and ground truth are in `[0,1]` normalised space; multiply by `(image_W, image_H)` to recover pixels.
 
 Offline batch evaluation uses `src/notebooks/eval_batch.py` and `src/notebooks/generate_review_notebooks.py`.
+
+## Precomputed (Frozen) Image Features (training-input path)
+
+An additive path that replaces the *live* Mask2Former backbone forward with a **disk read** of
+features computed once by a **pretrained-and-frozen** backbone. It targets the Mask2Former path only;
+online DINOv3 and online Mask2Former stay byte-identical and selectable. Spec:
+`spec/2026-09-04-use-pretrained-features/`.
+
+### Pretrained weight loaders (`src/model/m2f_pretrained.py`)
+
+Populate the F2 `Mask2FormerBackbone` from two detectron2-format checkpoints in `pretrained_models/`
+(both are plain `OrderedDict`s of tensors under a `torch.load`; no detectron2/fvcore/CUDA op in the
+import graph):
+
+- `M2F_R50.pkl` (265 keys) — COCO-panoptic-tuned ResNet50 in detectron2 naming. It is numerically a
+  torchvision-style R50 (stride on the 3×3 conv, RGB, ImageNet norm), so `remap_detectron2_resnet50`
+  only renames keys — `stem.conv1.weight→conv1.weight`, `stem.conv1.norm.*→bn1.*`,
+  `stages.res{2,3,4,5}→layer{1,2,3,4}`, `conv{i}.norm.*→bn{i}.*`, `shortcut.weight→downsample.0.weight`,
+  `shortcut.norm.*→downsample.1.*` — passing values through unchanged and dropping (with a printed
+  warning) any unrecognized key.
+- `M2F_R50_MSDeformAttnPixelDecoder.pkl` (117 keys) — keys already 1:1 with the vendored
+  `MSDeformAttnPixelDecoder` (`input_proj.*`, `transformer.level_embed`,
+  `transformer.encoder.layers.{i}.self_attn.{sampling_offsets,attention_weights,value_proj,output_proj}`
+  = `(192,256)`/`(96,256)`/`(256,256)`/`(256,256)` at `n_levels=3`, `.norm1/.linear1/.linear2/.norm2`,
+  plus `mask_features.*` and the detectron2 FPN convs `adapter_1.*`/`layer_1.*`). `remap_pixel_decoder`
+  just prepends `pixel_decoder.`.
+
+`load_pretrained_mask2former(backbone, r50_path, pixel_decoder_path) -> LoadReport` loads both with
+`load_state_dict(strict=False)` and **raises `RuntimeError`** if any ResNet50 or core pixel-decoder
+*parameter* is left unloaded. The guard is intersected with `named_parameters()`, so BatchNorm
+`num_batches_tracked` buffers (absent from detectron2 `FrozenBatchNorm2d`) and torchvision `fc.*`
+(dropped by `create_feature_extractor`) do **not** false-trigger; the vendored backbone's fresh-init
+stride-4 FPN convs (`lateral_res2`/`output_res2`) legitimately land in `missing`, and the pkl's
+differently-named `adapter_1`/`layer_1` land in `unexpected` — both tolerated. On the real pkls: 265
+ResNet + 117 pixel-decoder loaded, 6 missing / 6 unexpected (the FPN naming split), features
+pretrained≠random.
+
+### Precompute driver (`scripts/build_image_feature_cache.py`)
+
+argparse CLI (`--img-size`, `--batch-size`, `--r50`, `--pixel-decoder`, `--out`, `--device`). Builds
+the backbone with `return_stride4=True, transformer_enc_layers=6, transformer_dim_feedforward=1024,
+freeze_backbone=True, freeze_pixel_decoder=True`, loads both pkls, and in `torch.inference_mode()` runs
+once over every **unique** stimulus image — same filter as training
+(`FreeViewInMemory.data_store['filtered_idx']` on a filtered `CocoFreeView`), enumerated in **first-seen
+order** (byte-identical to `DeduplicatedMemoryDataset.build_index`). Reads the uint8 unique-image bank
+`all_images_{img_size}.pth` if present (row `u` == unique id `u`), else decodes from disk;
+preprocesses with `PipelineBuilder.make_transform` (RGB ImageNet norm). For each unique image it stores
+`ms_value = cat([m.flatten(2).transpose(1,2) for m in (res5,res4,res3)], 1)` (the exact online
+deformable memory, `res2_fpn` discarded) and the stride-4 `mask_features`.
+
+### HDF5 layout — `data/Coco FreeView/image_features_{img_size}.h5`
+
+`ImageFeatureCache` (`src/data/image_feature_cache.py`), single group `/features`, mode `"w"`,
+chunked per-image. At `img_size=256`: `U=4317` unique images, `S=1344`, `H4=W4=64`.
+
+| Dataset | Shape | dtype | Notes |
+|---|---|---|---|
+| `ms_value` | `(U, S, 256)` | float32 | 3-level deformable memory `[res5,res4,res3]` coarse→fine, row-major within a level; chunks `(1,S,256)` |
+| `mask_features` | `(U, 256, H4, W4)` | float32 | stride-4 map, heatmap-reserved, **unconsumed** by the model; chunks `(1,256,H4,W4)` |
+| `image_path` | `(U,)` | vlen utf8 | unique image path, first-seen order — the keying invariant |
+
+Group attrs: `img_size`, `S`, `spatial_shapes` (flattened `[8,8,16,16,32,32]`), `level_start_index`
+(`[0,64,320]`), `embed_dim` (256), `num_levels` (3), `mask_dim` (256), `mask_feature_shape` (`[64,64]`),
+`normalization` (`"imagenet_rgb"`), `r50_checkpoint`, `pixel_decoder_checkpoint`, `imagenet_weights`,
+`transformer_enc_layers` (6), `num_unique`, `created_at`. **Size:** ~24 GB at `img_size=256`
+(`mask_features` is ~18 GB of that; `ms_value` alone ≈5.9 GB) — the spec's "~9 GB" prose understates it,
+its own byte formula gives ~24 GB. Drop `mask_features` or store it float16 if disk is tight.
+
+### Model / dataset / builder wiring
+
+- **`PrecomputedFeatureAdapter`** (`src/model/ms_features.py`) — zero-parameter `nn.Module` reconstructing
+  a `MultiScaleFeatures` bundle from a cached `ms_value` batch + fixed geometry (non-persistent buffers,
+  so no new state_dict key and `.to(device)` still moves them). Installed as `MixerModel.image_encoder`;
+  because it satisfies the exact F3 bundle contract, **`MixerModel` (and `ms_deform_backbone.py`) need
+  zero edits** — the `self.image_encoder(image_src)` seam returns a bundle whether it runs a backbone or
+  replays a tensor. `img_input_proj`, the positional encoders, `level_embed`, and the deformable
+  eye/fixation decoders keep training on top of the frozen features.
+- **`PrecomputedFeatureDataset`** (`src/data/image_feature_cache.py`) — drop-in for
+  `DeduplicatedMemoryDataset` under `CoupledDataloader`. Rebuilds the first-seen unique index and
+  verifies `image_path[u]` against the rebuilt path **unconditionally** (the order invariant is not
+  bypassable — a mismatch raises `ValueError`). `__getitem__ -> (feature (S,256) f32, idx, unique_idx)`;
+  `preload=True` loads `ms_value` fully into RAM.
+- **Config + `PipelineBuilder`.** New `configs/model/image_encoder/mask2former_precomputed.yaml`
+  (`type: "mask2former"`, `precomputed: True`, `embed_dim: 256`, `num_levels: 3`,
+  `spatial_shapes: [[8,8],[16,16],[32,32]]`, `feature_cache_path`, **no** backbone-construction flags).
+  `build_model` builds the stub (no `Mask2FormerBackbone`) when `image_encoder.precomputed` is truthy;
+  `load_dataset`/`build_dataloader` swap in `PrecomputedFeatureDataset` when
+  `data.load.use_precomputed_features` is set. `_validate_feature_cache` enforces FR12: cache
+  `img_size`/`spatial_shapes`/`embed_dim` must match the config, and `precomputed` ⇔
+  `use_precomputed_features` (features on both sides or neither) — else `ValueError`; a missing cache
+  raises `FileNotFoundError` naming the precompute script.
+
+### Out of scope (deferred, unchanged)
+
+`mask_features` is cached but **not** wired into a heatmap head or a 4th deformable level; no
+fine-tuning/unfreezing of the backbone; no DINOv3 feature cache. Reviving external pixel-decoder weights
+as an ablation would reuse `load_pretrained_mask2former`.
 
 ## Important Nuances / Gotchas
 

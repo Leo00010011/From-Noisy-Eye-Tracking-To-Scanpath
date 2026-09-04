@@ -23,6 +23,7 @@ from src.model.ms_deform_backbone import Mask2FormerBackbone
 from src.model.ms_features import Mask2FormerFeatureAdapter
 from src.model.model_io import load_test_data
 from src.data.datasets import FreeViewImgDataset, CoupledDataloader, DeduplicatedMemoryDataset
+from src.data.image_feature_cache import ImageFeatureCache, PrecomputedFeatureDataset
 from src.training.inference_recorder import InferenceRecorder
 from omegaconf import OmegaConf
 
@@ -265,19 +266,42 @@ class PipelineBuilder:
         else:
             self.PathDataset.transforms = transforms
 
-        if hasattr(self.load_config, 'use_img_dataset') and self.load_config.use_img_dataset:
+        use_precomputed = getattr(self.load_config, 'use_precomputed_features', False)
+        # FR12: features must be enabled on both sides or neither.
+        if use_precomputed:
+            ie = getattr(self.config.model, 'image_encoder', None)
+            if ie is None or not ie.get('precomputed', False):
+                raise ValueError(
+                    "data.load.use_precomputed_features=True requires "
+                    "model.image_encoder.precomputed=True (features on both sides or neither).")
+        use_img = (hasattr(self.load_config, 'use_img_dataset') and self.load_config.use_img_dataset) \
+            or use_precomputed
+        if use_img:
             if self.data is None:
                 self.data = CocoFreeView(data_path=data_path)
                 self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
 
-            transform = PipelineBuilder.make_transform(resize_size=self.load_config.img_size)
-            if self.img_dataset is None:
-                self.img_dataset = DeduplicatedMemoryDataset(
-                    self.data, resize_size=self.load_config.img_size, transform=transform,
-                )
+            if use_precomputed:
+                cache_path = self.load_config.get('feature_cache_path', None) \
+                    or self.config.model.image_encoder.get('feature_cache_path', None)
+                if cache_path is None:
+                    raise ValueError(
+                        "feature_cache_path must be set (data.load or model.image_encoder) "
+                        "when use_precomputed_features=True.")
+                self._validate_feature_cache(cache_path)
+                if not isinstance(self.img_dataset, PrecomputedFeatureDataset):
+                    self.img_dataset = PrecomputedFeatureDataset(
+                        self.data, cache_path=cache_path,
+                        preload=self.load_config.get('preload_features', False))
             else:
-                self.img_dataset.resize_size = self.load_config.img_size
-                self.img_dataset.runtime_transform = transform
+                transform = PipelineBuilder.make_transform(resize_size=self.load_config.img_size)
+                if self.img_dataset is None:
+                    self.img_dataset = DeduplicatedMemoryDataset(
+                        self.data, resize_size=self.load_config.img_size, transform=transform,
+                    )
+                else:
+                    self.img_dataset.resize_size = self.load_config.img_size
+                    self.img_dataset.runtime_transform = transform
 
     def log_split(self,train_subjects,val_subjects,test_subjects,train_stimuli,
                   val_stimuli,test_stimuli,train_idx,val_idx,test_idx,stimuli):
@@ -397,7 +421,8 @@ class PipelineBuilder:
             )
             return train_dl, val_dl, test_dl
 
-        if hasattr(dataloader_config, 'use_img_dataset') and dataloader_config.use_img_dataset:
+        if (hasattr(dataloader_config, 'use_img_dataset') and dataloader_config.use_img_dataset) \
+                or getattr(dataloader_config, 'use_precomputed_features', False):
             train_set = Subset(self.img_dataset, train_idx)
             val_set = Subset(self.img_dataset, val_idx)
             test_set = Subset(self.img_dataset, test_idx)
@@ -443,6 +468,33 @@ class PipelineBuilder:
             test_dataloader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=0, collate_fn= seq2seq_padded_collate_fn)
             return train_dataloader, val_dataloader, test_dataloader
     
+    def _validate_feature_cache(self, cache_path):
+        """FR12: the cache attrs must agree with the requested image_encoder config
+        (no silent shape coercion). Also raises FileNotFoundError (via ImageFeatureCache) with
+        a hint to run the precompute script when the cache is absent."""
+        cache = ImageFeatureCache(cache_path)
+        ie = self.config.model.image_encoder
+        exp_embed = int(ie.get('embed_dim', 256))
+        if int(cache.attrs.get('embed_dim', exp_embed)) != exp_embed:
+            raise ValueError(
+                f"feature cache embed_dim {cache.attrs.get('embed_dim')} != config "
+                f"embed_dim {exp_embed} ({cache_path}).")
+        exp_shapes = ie.get('spatial_shapes', [[8, 8], [16, 16], [32, 32]])
+        if OmegaConf.is_config(exp_shapes):
+            exp_shapes = OmegaConf.to_container(exp_shapes, resolve=True)
+        exp_flat = [int(v) for row in exp_shapes for v in row]
+        if 'spatial_shapes' in cache.attrs:
+            cache_flat = [int(v) for v in np.asarray(cache.attrs['spatial_shapes']).flatten()]
+            if cache_flat != exp_flat:
+                raise ValueError(
+                    f"feature cache spatial_shapes {cache_flat} != config {exp_flat} "
+                    f"({cache_path}).")
+        exp_img = int(getattr(self.load_config, 'img_size', 0) or 0)
+        if exp_img and 'img_size' in cache.attrs and int(cache.attrs['img_size']) != exp_img:
+            raise ValueError(
+                f"feature cache img_size {cache.attrs['img_size']} != config img_size "
+                f"{exp_img} ({cache_path}).")
+
     def clear_dataframe(self):
         del self.data
         self.data = None
@@ -469,7 +521,24 @@ class PipelineBuilder:
             if hasattr(self.config.model, 'image_encoder') and self.config.model.image_encoder.enabled:
                 ie = self.config.model.image_encoder
                 image_encoder_type = ie.get('type', 'dinov3')          # default keeps pre-F6 snapshots working
-                if image_encoder_type == 'mask2former':
+                if image_encoder_type == 'mask2former' and ie.get('precomputed', False):
+                    # Precomputed (frozen) features: a zero-parameter stand-in for the backbone.
+                    # No Mask2FormerBackbone / ResNet50 is constructed.
+                    from src.model.ms_features import PrecomputedFeatureAdapter
+                    spatial_shapes = ie.get('spatial_shapes', [[8, 8], [16, 16], [32, 32]])
+                    if hasattr(spatial_shapes, 'items') or hasattr(spatial_shapes, '__iter__'):
+                        spatial_shapes = OmegaConf.to_container(spatial_shapes, resolve=True) \
+                            if OmegaConf.is_config(spatial_shapes) else list(spatial_shapes)
+                    image_encoder = PrecomputedFeatureAdapter(
+                        spatial_shapes=spatial_shapes, embed_dim=ie.get('embed_dim', 256))
+                    n_image_levels = image_encoder.num_levels
+                    # FR12: precomputed features on the model side require them on the data side.
+                    use_precomputed = getattr(self.load_config, 'use_precomputed_features', False)
+                    if not use_precomputed:
+                        raise ValueError(
+                            "image_encoder.precomputed=True requires data.load.use_precomputed_features=True "
+                            "(features must be precomputed on both sides or neither).")
+                elif image_encoder_type == 'mask2former':
                     backbone = Mask2FormerBackbone(
                         conv_dim=ie.get('conv_dim', 256), n_heads=ie.get('n_heads', 8),
                         n_points=ie.get('n_points', 4),

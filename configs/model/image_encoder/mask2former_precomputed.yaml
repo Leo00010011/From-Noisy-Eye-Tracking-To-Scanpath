@@ -1,0 +1,8 @@
+type: "mask2former"
+enabled: True
+precomputed: True
+embed_dim: 256
+num_levels: 3
+spatial_shapes: [[8, 8], [16, 16], [32, 32]]
+feature_cache_path: "data/Coco FreeView/image_features_256.h5"
+adapter_hidden_dims: []

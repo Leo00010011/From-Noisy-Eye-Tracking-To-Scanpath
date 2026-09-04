@@ -2,6 +2,40 @@
 
 ## Done
 
+- ✓ **Use pretrained (frozen) image features** — precompute the Mask2Former image features once
+  with a **pretrained-and-frozen** backbone and cache them to disk, then feed the cache to
+  `MixerModel` in place of the live backbone forward (frozen-features recipe: the online m2f path
+  re-ran ResNet50 + a 6-layer pixel decoder every step and overfit). New loader
+  `src/model/m2f_pretrained.py` populates the F2 `Mask2FormerBackbone` from the two detectron2-format
+  checkpoints in `pretrained_models/`: `remap_detectron2_resnet50` (COCO-tuned R50 `stem`/`stages.resN`/
+  `.norm.`/`shortcut` → torchvision `conv1`/`bn1`/`layerN`/`downsample`, values unchanged),
+  `remap_pixel_decoder` (prefix `pixel_decoder.` — the pkl keys are already 1:1 with the vendored
+  decoder), and `load_pretrained_mask2former` (→ `LoadReport`; **raises** if any ResNet50 or core
+  pixel-decoder *parameter* is unloaded — guarding on `named_parameters()` so BN `num_batches_tracked`
+  buffers, absent from detectron2 `FrozenBatchNorm2d`, don't false-trigger; tolerates `fc.*` and the
+  optional stride-4 FPN keys). Precompute driver `scripts/build_image_feature_cache.py` builds the
+  backbone (`return_stride4=True`, `transformer_enc_layers=6`, everything frozen), loads both pkls, runs
+  once over every **unique** stimulus (first-seen order, same filter as training), and writes
+  `data/Coco FreeView/image_features_{img_size}.h5` (group `/features`, mode `"w"`): `ms_value (U,S,256)`
+  (flattened `[res5,res4,res3]` coarse→fine — the exact online deformable memory) + `mask_features
+  (U,256,64,64)` (stride-4, heatmap-reserved, unconsumed) + `image_path (U,)` (the keying invariant),
+  chunked per-image. Model side: zero-parameter `PrecomputedFeatureAdapter` (`src/model/ms_features.py`)
+  reconstructs a `MultiScaleFeatures` bundle from a cached `ms_value` batch + fixed geometry (non-persistent
+  buffers), installed as `MixerModel.image_encoder` — **`MixerModel` and `ms_deform_backbone.py` need
+  ZERO edits** (the `self.image_encoder(image_src)` seam already returns a bundle). Data side:
+  `ImageFeatureCache` + `PrecomputedFeatureDataset` (`src/data/image_feature_cache.py`) drop in for
+  `DeduplicatedMemoryDataset` under `CoupledDataloader`, verifying `image_path[u]` against the rebuilt
+  first-seen path **unconditionally** (order invariant not bypassable). New config group
+  `configs/model/image_encoder/mask2former_precomputed.yaml` (`precomputed: True`, no backbone flags);
+  `PipelineBuilder` gains three additive branches (`build_model` stub install, `load_dataset`/
+  `build_dataloader` feature-dataset swap) + a `_validate_feature_cache` FR12 check (precomputed on both
+  sides or neither). Additive/dual-path: online DINOv3 and online Mask2Former stay byte-identical and
+  selectable. 31-test suite `tests/test_image_feature_cache.py` (all pass; Groups 1–2 run against the
+  real pkls). Data-validity confirmed on the real data: **U=4317** unique images, S=1344,
+  `spatial_shapes=[[8,8],[16,16],[32,32]]`, features finite/non-constant, pretrained≠random. **Note:**
+  the full cache is ~24 GB with `mask_features` (float32; `ms_value` alone ≈5.9 GB) — validation.md's
+  "~9 GB" prose understates it; its own byte formula gives ~24 GB. The full CPU precompute write is left
+  to a GPU run. Spec: `spec/2026-09-04-use-pretrained-features/`.
 - ✓ **Image-reliance diagnostic suite** — additive, diagnosis-only measurement of *"does the
   Mask2Former-backbone `MixerModel` actually use the image?"* (the `train_ms.sh` run tied DINOv3
   on accuracy, so the dual-path design lets us test whether the image path is inert). New module

@@ -206,3 +206,37 @@ class DinoV3FeatureAdapter(nn.Module):
             level_start_index=build_level_start_index(spatial_shapes),   # [0]
             reference_grids=build_reference_grids(spatial_shapes, value.device, value.dtype),
         )
+
+
+# ---------------------------------------------------------------------------
+# Step 5 — PrecomputedFeatureAdapter (replays a cached ms_value; no backbone).
+# ---------------------------------------------------------------------------
+class PrecomputedFeatureAdapter(nn.Module):
+    """Zero-parameter stand-in for a backbone: wraps a cached ``ms_value`` batch into a
+    :class:`MultiScaleFeatures` bundle using fixed geometry.
+
+    Installed as ``MixerModel.image_encoder`` on the precomputed path so ``MixerModel.encode``
+    is unchanged — ``self.image_encoder(value)`` returns the same bundle contract whether it
+    runs a backbone or replays a cached tensor. The geometry (``level_start_index``,
+    ``reference_grids``) is pre-built from ``spatial_shapes`` and registered as **non-persistent
+    buffers** (pure geometry, reconstructed at build → no new state_dict key on old checkpoints,
+    but ``.to(device)`` still moves them).
+    """
+
+    def __init__(self, spatial_shapes, embed_dim: int = 256):
+        super().__init__()
+        ss = torch.as_tensor(spatial_shapes, dtype=torch.int64)
+        self.embed_dim = embed_dim
+        self.num_levels = ss.shape[0]
+        self.register_buffer("spatial_shapes", ss, persistent=False)
+        self.register_buffer("level_start_index", build_level_start_index(ss), persistent=False)
+        self.register_buffer(
+            "reference_grids", build_reference_grids(ss, dtype=torch.float32), persistent=False)
+
+    def forward(self, value) -> MultiScaleFeatures:
+        return MultiScaleFeatures(
+            value=value,                                          # (B, S, embed_dim)
+            spatial_shapes=self.spatial_shapes.to(value.device),
+            level_start_index=self.level_start_index.to(value.device),
+            reference_grids=self.reference_grids.to(device=value.device, dtype=value.dtype),
+        )
