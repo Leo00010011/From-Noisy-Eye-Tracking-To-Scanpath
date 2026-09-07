@@ -629,6 +629,7 @@ class PipelineBuilder:
                               geometric_sigma = self.config.model.get('geometric_sigma', 0),
                               decoder_attn_dropout = self.config.model.get('decoder_attn_dropout', 0),
                               eye_decoder_attn_dropout = self.config.model.get('eye_decoder_attn_dropout', 0),
+                              gaze_droppath_p = self.config.model.get('gaze_droppath_p', 0),
                               normalize_grid_init = self.config.model.get('normalize_grid_init', True),
                               pred_dur_pdf= self.config.model.get('pred_dur_pdf', False),
                               adapter_hidden_dims = self.config.model.image_encoder.get('adapter_hidden_dims', self.config.model.get('mlp_head_hidden_dim', None)))

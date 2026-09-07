@@ -31,6 +31,11 @@ geometric_sigma: 0
 # dropout (`decoder_dropout` / `eye_decoder_dropout`) applied to the block's output.
 decoder_attn_dropout: 0
 eye_decoder_attn_dropout: 0
+# Stochastic depth (DropPath) on the fixation decoder's gaze (first cross-attention, mem1)
+# residual branch. On a fraction `gaze_droppath_p` of samples the whole gaze contribution is
+# dropped, forcing the decoder to solve from the image and pushing it to use image features.
+# 0 => identity / no-op (byte-identical, old checkpoints load). Try ~0.1-0.3.
+gaze_droppath_p: 0.2
 # False => raw unit-circle star pattern for the initial sampling offsets (pre-4295f5b behaviour).
 normalize_grid_init: True
 eye_encoder_dropout: 0.1

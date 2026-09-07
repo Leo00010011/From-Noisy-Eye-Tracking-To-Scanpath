@@ -1005,6 +1005,40 @@ class DeformableDecoder(nn.Module):
         
 
     
+def drop_path(x, drop_prob: float = 0.0, training: bool = False):
+    """Per-sample stochastic depth (DropPath).
+
+    Zeroes the *entire* input for a random subset of the batch with probability
+    ``drop_prob`` and rescales the survivors by ``1/(1-drop_prob)``. Applied to a
+    residual *branch* (the sublayer's additive contribution), it removes that
+    branch on a fraction of samples while the skip connection is untouched — so
+    the rest of the network must solve those samples without it. Identity when
+    ``drop_prob == 0`` or in eval mode, so it is neutral by default.
+    """
+    if drop_prob == 0.0 or not training:
+        return x
+    keep_prob = 1.0 - drop_prob
+    # broadcast per-sample: (B, 1, ..., 1)
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    random_tensor.floor_()  # binarize to {0, 1}
+    return x.div(keep_prob) * random_tensor
+
+
+class DropPath(nn.Module):
+    """Stochastic-depth wrapper around :func:`drop_path` (adds no parameters)."""
+
+    def __init__(self, drop_prob: float = 0.0):
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x):
+        return drop_path(x, self.drop_prob, self.training)
+
+    def extra_repr(self):
+        return f"drop_prob={self.drop_prob}"
+
+
 class DeformableDoubleInputDecoder(nn.Module):
     def __init__(self, model_dim = 1024,
                       total_dim = 1024,
@@ -1020,6 +1054,7 @@ class DeformableDoubleInputDecoder(nn.Module):
                       n_levels = 1,
                       attn_dropout = 0.0,
                       normalize_grid_init = True,
+                      gaze_droppath_p = 0.0,
                       device = 'cpu',
                       dtype = torch.float32):
         super().__init__()
@@ -1057,6 +1092,11 @@ class DeformableDoubleInputDecoder(nn.Module):
                                             **factory_kwargs)
         self.first_cross_attn_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
         self.first_cross_attn_dropout = nn.Dropout(dropout_p)
+        # Stochastic depth on the gaze (mem1) contribution: on drop steps the
+        # decoder gets no gaze and must solve from the image, forcing image
+        # reliance. Neutral (identity, no params) at gaze_droppath_p == 0.
+        self.gaze_droppath_p = gaze_droppath_p
+        self.gaze_drop_path = DropPath(gaze_droppath_p)
         # ca2
         self.second_cross_attn = DeformableAttention(embed_dim=model_dim,
                                                     num_heads=n_heads,
@@ -1144,7 +1184,7 @@ class DeformableDoubleInputDecoder(nn.Module):
             temp = self.__cross_attention1(self.first_cross_attn_norm(x), mem1, attn_mask=mem1_mask, src_rope=None, mem1_rope=None)
             if _module_recording_enabled(self):
                 record_module_value(self, "first_cross_res", temp)
-            x = x + temp
+            x = x + self.gaze_drop_path(temp)
             temp = self.__cross_attention2(self.second_cross_attn_norm(x), value2,
                                            reference_points=reference_points,
                                            spatial_shapes=spatial_shapes,
@@ -1158,7 +1198,7 @@ class DeformableDoubleInputDecoder(nn.Module):
             x = x + temp
         else:
             x = self.self_attn_norm(x + self.__self_attention(x, attn_mask=tgt_mask, src_rope= None))
-            x = self.first_cross_attn_norm(x + self.__cross_attention1(x, mem1, attn_mask=mem1_mask, src_rope= None, mem1_rope=None))
+            x = self.first_cross_attn_norm(x + self.gaze_drop_path(self.__cross_attention1(x, mem1, attn_mask=mem1_mask, src_rope= None, mem1_rope=None)))
             x = self.second_cross_attn_norm(x + self.__cross_attention2(
                     x, value2, reference_points=reference_points,
                     spatial_shapes=spatial_shapes, level_start_index=level_start_index))
