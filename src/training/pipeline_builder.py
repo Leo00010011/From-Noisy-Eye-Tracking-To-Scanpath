@@ -266,6 +266,15 @@ class PipelineBuilder:
         else:
             self.PathDataset.transforms = transforms
 
+        # FR9: disjoint split strategies dereference self.data in make_splits. Build the
+        # CocoFreeView metadata (no image tensors) even on the gaze-only path so make_splits
+        # cannot crash with AttributeError on a None self.data when no split is reused.
+        split_name = getattr(getattr(self.config.data, 'split_strategy', None), 'name', None)
+        needs_metadata = split_name in ('disjoint', 'stimuly_disjoint')
+        if needs_metadata and self.data is None:
+            self.data = CocoFreeView(data_path=data_path)
+            self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
+
         use_precomputed = getattr(self.load_config, 'use_precomputed_features', False)
         # FR12: features must be enabled on both sides or neither.
         if use_precomputed:
@@ -663,6 +672,10 @@ class PipelineBuilder:
                               device = self.device)
         else:
             raise ValueError(f"Model name {model_name} not supported.")
+        reuse_split_from = self.config.training.get('reuse_split_from', None)
+        if reuse_split_from is not None and splits is None:
+            print(f"Reusing split from {reuse_split_from}")
+            splits = load_test_data(self, reuse_split_from, return_dataloaders=False)
         return model, splits
 
     def resolve_pretrained_encoder_path(self):

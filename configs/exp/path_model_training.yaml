@@ -1,0 +1,36 @@
+# @package _global_
+defaults:
+  - override /model: path_model
+
+training:
+  decisive_metric: "reg_error_val"
+  pretrained_model: null
+  use_scheduled_sampling: true
+  Phases: ["Fixation"]
+  # Point this at a MixerModel run directory containing split.pth for an apples-to-apples
+  # comparison; leave null to fall back to a freshly generated split (FR9 guard applies).
+  reuse_split_from: null
+  Fixation:
+    name: "Fixation"
+    denoise_weight: 0
+    decisive_metric: "reg_error_val"
+    epochs: 100
+
+model:
+  pretrained_encoder_path: null
+
+# Drop the combined (denoise) loss: fall through to the separated_reg loss group.
+loss:
+  complex_type: null
+
+data:
+  load:
+    use_img_dataset: False
+
+# warmup + active <= Fixation.epochs
+scheduled_sampling:
+  warmup_epochs: 0
+  active_epochs: 60
+  n_updates: -1
+  min_prob: 0
+  max_prob: 0.85

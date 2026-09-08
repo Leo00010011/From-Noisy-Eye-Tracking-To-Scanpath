@@ -46,6 +46,9 @@ class PathModel(nn.Module):
         self.input_encoder = input_encoder
         self.src_dropout = src_dropout
         self.tgt_dropout = tgt_dropout
+        # scheduled-sampling seams (parity with MixerModel)
+        self.phase = None
+        self.scheduled_sampling = None
         # special token
         self.start_token = nn.Parameter(torch.randn(1,1,model_dim,**factory_mode))
         if src_dropout > 0:
@@ -155,7 +158,16 @@ class PathModel(nn.Module):
             summ += f"    MultiMLP Head Hidden Dimension: {resolved_dims}\n"
         return summ
     def set_phase(self, phase):
-        return
+        # PathModel has a single parameter group; record the phase for forward's dispatch
+        # but do no requires_grad toggling (no phase-specific submodule freezing).
+        self.phase = phase
+
+    def set_scheduled_sampling(self, scheduled_sampling):
+        self.scheduled_sampling = scheduled_sampling
+        self.scheduled_sampling.set_model(self)
+
+    def decode_denoise(self, **kwargs):
+        return {}
 
     def set_inference_recorder(self, recorder):
         self.inference_recorder = recorder
@@ -233,8 +245,18 @@ class PathModel(nn.Module):
             cls_out = self.end_head(output)
             return {'coord': coord_out, 'dur': dur_out, 'cls': cls_out}
 
-    def forward(self, **kwargs):
-        self.encode(**kwargs)
+    def forward(self, skip_denoise=False, **kwargs):
+        if (self.scheduled_sampling is not None
+                and not kwargs.get('pass_sampler', False)
+                and self.scheduled_sampling.get_current_ratio() > 0):
+            return self.scheduled_sampling(**kwargs)
+        if not kwargs.get('pass_sampler', False):
+            self.encode(**kwargs)
+        if self.phase == 'Fixation':
+            return self.decode_fixation(**kwargs)
+        elif self.phase == 'Combined':
+            denoise_output = {} if skip_denoise else self.decode_denoise(**kwargs)
+            return {**denoise_output, **self.decode_fixation(**kwargs)}
         return self.decode_fixation(**kwargs)
        
     

@@ -2,6 +2,38 @@
 
 ## Done
 
+- ✓ **Revive PathModel training (with scheduled sampling)** — `PathModel` is trainable
+  end-to-end through the pipeline again, so it can serve as the gaze-only ablation baseline the
+  image-reliance diagnostic (image-shuffle degrades MixerModel reg error only ~4%) needs a
+  reference for. Four scheduled-sampling seams added to `src/model/path_model.py`, mirroring
+  `MixerModel`: `self.phase`/`self.scheduled_sampling` attrs (FR1); `set_scheduled_sampling`
+  (stores sampler + `set_model(self)`, FR2) — this is the exact method `pipeline.py:62` called
+  unconditionally, the original `AttributeError`; `set_phase` now records `self.phase` with **no**
+  `requires_grad` toggling (single param group, FR3); a no-op `decode_denoise` → `{}` (FR4); and a
+  sampler-aware `forward(skip_denoise=False, **kwargs)` (FR5) that routes to
+  `self.scheduled_sampling(**kwargs)` when the sampler is set, `pass_sampler` is falsy, and
+  `get_current_ratio() > 0` — so training free-runs and `validate()` (eval ⇒ ratio 1) runs fully
+  autoregressive instead of teacher-forcing/leaking ground truth. **`src/training/training_utils.py`
+  is untouched** — the existing `ScheduledSampling.__call__` contract (`encode` once with
+  `pass_sampler=True`, `decode_denoise` only on `Combined`, `enable_memory_kv_cache` behind
+  `hasattr` — absent on PathModel) is met as-is. `PipelineBuilder.build_model` gains a model-agnostic
+  `training.reuse_split_from` block (before `return model, splits`): loads a saved `split.pth` via
+  `load_test_data` so PathModel trains/evaluates on the **identical** split as a reference
+  `MixerModel` run (FR8, no-op unless set and `splits is None`). `load_dataset` gains an FR9 guard —
+  builds `CocoFreeView` metadata (no image tensors) for `disjoint`/`stimuly_disjoint` strategies even
+  when `use_img_dataset=False`, so gaze-only `make_splits` can't `AttributeError` on a `None`
+  `self.data`. Configs: `configs/model/path_model.yaml` made self-consistent with the
+  `separated_reg`+`multi_mlp` objective (`head_type: multi_mlp`, `mlp_head_hidden_dim: [256,128]`,
+  `max_pos_enc: 90` to fit downsample_int=33 gaze length ~79); new experiment
+  `configs/exp/path_model_training.yaml` (`@package _global_`, `override /model: path_model`,
+  `Phases: ["Fixation"]`, scheduled sampling on, `loss.complex_type: null` ⇒ `separated_reg`,
+  `data.load.use_img_dataset: False`, `reuse_split_from: null`). **Additive / dual-path:**
+  `MixerModel`, `ScheduledSampling`, and their state-dicts are byte-identical (FR12); `train.py` on
+  `model=mixer_model` unchanged (F6 suite still 38/38 green). Run with
+  `python train.py exp=path_model_training [+training.reuse_split_from=outputs/<date>/<time>]`.
+  20-test CPU suite `tests/test_path_model_training.py` (all pass) + a real-data sanity script
+  confirming gaze-only DataLoader (no `image_src`, `src (B,T,3)`/`tgt (B,N,3)`), FR9 `make_splits`,
+  and a well-formed train/eval forward. Spec: `spec/2026-09-08-revive-path-model-training/`.
 - ✓ **Use pretrained (frozen) image features** — precompute the Mask2Former image features once
   with a **pretrained-and-frozen** backbone and cache them to disk, then feed the cache to
   `MixerModel` in place of the live backbone forward (frozen-features recipe: the online m2f path
