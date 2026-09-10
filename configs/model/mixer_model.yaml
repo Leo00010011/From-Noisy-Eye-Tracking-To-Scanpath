@@ -35,7 +35,7 @@ eye_decoder_attn_dropout: 0
 # residual branch. On a fraction `gaze_droppath_p` of samples the whole gaze contribution is
 # dropped, forcing the decoder to solve from the image and pushing it to use image features.
 # 0 => identity / no-op (byte-identical, old checkpoints load). Try ~0.1-0.3.
-gaze_droppath_p: 0.2
+gaze_droppath_p: 0
 # Sigmoid gated fusion on the fixation decoder's IMAGE (second cross-attention, mem2) residual:
 # instead of x = x + image_ca, use gate = sigmoid(W[image_ca, x]); x = image_ca*gate + x*(1-gate).
 # A learned per-channel mix so the small image contribution isn't swamped by a fixed add.
