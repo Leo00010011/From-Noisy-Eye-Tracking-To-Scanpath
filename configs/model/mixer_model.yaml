@@ -36,6 +36,12 @@ eye_decoder_attn_dropout: 0
 # dropped, forcing the decoder to solve from the image and pushing it to use image features.
 # 0 => identity / no-op (byte-identical, old checkpoints load). Try ~0.1-0.3.
 gaze_droppath_p: 0.2
+# Sigmoid gated fusion on the fixation decoder's IMAGE (second cross-attention, mem2) residual:
+# instead of x = x + image_ca, use gate = sigmoid(W[image_ca, x]); x = image_ca*gate + x*(1-gate).
+# A learned per-channel mix so the small image contribution isn't swamped by a fixed add.
+# False => plain additive residual (byte-identical, no new params, old checkpoints load).
+# Enable per-run: `python train.py ... model.image_gated_fusion=True`.
+image_gated_fusion: False
 # False => raw unit-circle star pattern for the initial sampling offsets (pre-4295f5b behaviour).
 normalize_grid_init: True
 eye_encoder_dropout: 0.1

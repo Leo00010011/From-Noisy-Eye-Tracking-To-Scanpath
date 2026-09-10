@@ -67,6 +67,7 @@ class MixerModel(nn.Module):
                        decoder_attn_dropout = 0,
                        eye_decoder_attn_dropout = 0,
                        gaze_droppath_p = 0,
+                       image_gated_fusion = False,
                        normalize_grid_init = True,
                        n_adapter = 0,
                        pred_dur_pdf = 0,
@@ -128,6 +129,7 @@ class MixerModel(nn.Module):
         self.decoder_attn_dropout = decoder_attn_dropout
         self.eye_decoder_attn_dropout = eye_decoder_attn_dropout
         self.gaze_droppath_p = gaze_droppath_p
+        self.image_gated_fusion = image_gated_fusion
         self.normalize_grid_init = normalize_grid_init
         self.geometric_sigma = geometric_sigma
         self.reg_head_output_dropout = reg_head_output_dropout
@@ -353,6 +355,7 @@ class MixerModel(nn.Module):
                                            n_levels = self.n_image_levels,
                                            spatial_shape = self.patch_resolution,
                                            gaze_droppath_p = self.gaze_droppath_p,
+                                           image_gated_fusion = self.image_gated_fusion,
                                            **factory_mode)
         else:
             decoder_layer = DoubleInputDecoder(model_dim = model_dim,

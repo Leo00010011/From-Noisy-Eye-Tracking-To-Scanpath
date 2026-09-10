@@ -1055,6 +1055,7 @@ class DeformableDoubleInputDecoder(nn.Module):
                       attn_dropout = 0.0,
                       normalize_grid_init = True,
                       gaze_droppath_p = 0.0,
+                      image_gated_fusion = False,
                       device = 'cpu',
                       dtype = torch.float32):
         super().__init__()
@@ -1107,6 +1108,16 @@ class DeformableDoubleInputDecoder(nn.Module):
                                             **factory_kwargs)
         self.second_cross_attn_norm = nn.LayerNorm(model_dim, eps = eps, **factory_kwargs)
         self.second_cross_attn_dropout = nn.Dropout(dropout_p)
+        # Sigmoid gated fusion of the image (mem2) cross-attention output with the
+        # running decoder state, replacing the plain additive residual on the
+        # deformable image path: gate = sigmoid(W[img, dec]); x = img*gate + dec*(1-gate).
+        # Lets the model learn per-channel how much image context to admit instead of
+        # a fixed add whose small image contribution gets swamped. Built (and thus
+        # present in the state_dict) ONLY when enabled, so the default path stays
+        # byte-identical and pre-existing checkpoints load unchanged.
+        self.image_gated_fusion = image_gated_fusion
+        if image_gated_fusion:
+            self.image_gate = GatedFusion(model_dim, dropout_p=0.0, **factory_kwargs)
         # ff
         self.linear_up = nn.Linear(model_dim, ff_dim, **factory_kwargs)
         self.linear_up_dropout = nn.Dropout(dropout_p)
@@ -1191,7 +1202,10 @@ class DeformableDoubleInputDecoder(nn.Module):
                                            level_start_index=level_start_index)
             if _module_recording_enabled(self):
                 record_module_value(self, "second_cross_res", temp)
-            x = x + temp
+            if self.image_gated_fusion:
+                x = self.image_gate(temp, x)          # img*gate + dec*(1-gate)
+            else:
+                x = x + temp
             temp = self.__feed_forward(self.linear_norm(x))
             if _module_recording_enabled(self):
                 record_module_value(self, "ffn_res", temp)
@@ -1199,9 +1213,13 @@ class DeformableDoubleInputDecoder(nn.Module):
         else:
             x = self.self_attn_norm(x + self.__self_attention(x, attn_mask=tgt_mask, src_rope= None))
             x = self.first_cross_attn_norm(x + self.gaze_drop_path(self.__cross_attention1(x, mem1, attn_mask=mem1_mask, src_rope= None, mem1_rope=None)))
-            x = self.second_cross_attn_norm(x + self.__cross_attention2(
+            temp = self.__cross_attention2(
                     x, value2, reference_points=reference_points,
-                    spatial_shapes=spatial_shapes, level_start_index=level_start_index))
+                    spatial_shapes=spatial_shapes, level_start_index=level_start_index)
+            if self.image_gated_fusion:
+                x = self.second_cross_attn_norm(self.image_gate(temp, x))
+            else:
+                x = self.second_cross_attn_norm(x + temp)
             x = self.linear_norm(x + self.__feed_forward(x))
 
         return x
