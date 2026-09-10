@@ -41,7 +41,7 @@ gaze_droppath_p: 0
 # A learned per-channel mix so the small image contribution isn't swamped by a fixed add.
 # False => plain additive residual (byte-identical, no new params, old checkpoints load).
 # Enable per-run: `python train.py ... model.image_gated_fusion=True`.
-image_gated_fusion: False
+image_gated_fusion: True
 # False => raw unit-circle star pattern for the initial sampling offsets (pre-4295f5b behaviour).
 normalize_grid_init: True
 eye_encoder_dropout: 0.1
