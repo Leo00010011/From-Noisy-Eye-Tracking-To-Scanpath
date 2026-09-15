@@ -678,7 +678,12 @@ class PipelineBuilder:
                     self.data = CocoFreeView(data_path=os.path.join('data', 'Coco FreeView'))
                     self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
                 cache = ScanpathCentroidCache(cache_path, self.data)
-                model.set_alignment_centroids(cache.centroids, cache.centroid_mask)
+                # max_value = [W, H] from the cache attrs -> anisotropic pixel-space align metric.
+                pixel_scale = cache.attrs.get('max_value', None)
+                if pixel_scale is not None:
+                    pixel_scale = [float(v) for v in np.asarray(pixel_scale).ravel()]
+                model.set_alignment_centroids(cache.centroids, cache.centroid_mask,
+                                              pixel_scale=pixel_scale)
         elif model_name == 'PathModel':
             model = PathModel(input_dim = self.config.model.input_dim,
                               output_dim = self.config.model.output_dim,

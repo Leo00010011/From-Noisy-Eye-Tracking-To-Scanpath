@@ -477,6 +477,31 @@ def test_4_3_eval_align_matches_geometry():
     assert eval_align(pred, tc, cents, torch.tensor([[False]])) == 0.0
 
 
+def test_4_4_eval_align_pixel_scale():
+    tc = torch.tensor([[[0.5, 0.6]]])
+    cents = torch.tensor([[[0.8, 0.2]]])
+    mask = torch.tensor([[True]])
+    pred = torch.tensor([[[0.0, 0.0]]])
+    # target = (0.3, -0.4); px offset = (0.3*512, -0.4*320) = (153.6, -128.0)
+    val = eval_align(pred, tc, cents, mask, pixel_scale=[512.0, 320.0])
+    assert val == pytest.approx(float(np.hypot(153.6, 128.0)), abs=1e-3)
+    # scale is anisotropic: swapping W/H changes the value (asymmetric offset)
+    val_swapped = eval_align(pred, tc, cents, mask, pixel_scale=[320.0, 512.0])
+    assert abs(val - val_swapped) > 1.0
+
+
+def test_4_5_set_alignment_pixel_scale():
+    m = make_model(image_adaptation=True)
+    cents = torch.rand(3, 2, 2)
+    mask = torch.ones(3, 2, dtype=torch.bool)
+    m.set_alignment_centroids(cents, mask, pixel_scale=[512.0, 320.0])
+    assert torch.equal(m.align_pixel_scale, torch.tensor([512.0, 320.0]))
+    # default (no scale) leaves it None
+    m2 = make_model(image_adaptation=True)
+    m2.set_alignment_centroids(cents, mask)
+    assert m2.align_pixel_scale is None
+
+
 # ===========================================================================
 # Group 5 — MixerModel construction & gating
 # ===========================================================================
@@ -711,6 +736,21 @@ def test_8_1_three_phase_metrics():
     loader2 = _FakeLoader([reg_batch(), reg_batch()])
     validate(m, comb, loader2, epoch=1, device="cpu", metrics=metrics, log=False)
     assert len(metrics["reg_error_val"]) == 1
+
+
+def test_8_4_validate_reports_pixel_align_error():
+    from src.training.training_utils import MetricsStorage, validate
+    m = make_model(image_adaptation=True)
+    cents = torch.rand(4, 3, 2)
+    mask = torch.ones(4, 3, dtype=torch.bool)
+    m.set_alignment_centroids(cents, mask, pixel_scale=[512.0, 320.0])
+    m.set_phase("ImageAdaptation")
+    metrics = MetricsStorage(decisive_metric="align_error_val").metrics
+    loader = _FakeLoader([ia_batch(B=2), ia_batch(B=2)])
+    validate(m, AlignmentLoss(), loader, epoch=0, device="cpu", metrics=metrics, log=False)
+    assert len(metrics["align_error_px_val"]) == 1
+    # pixel error is larger than the normalized error (axes scaled by 512 / 320)
+    assert metrics["align_error_px_val"][-1] > metrics["align_error_val"][-1]
 
 
 def test_8_2_align_loss_decreases():

@@ -49,8 +49,11 @@ def train(builder:PipelineBuilder, trial=None):
             to_update_in_epoch.append(scheduler)
         loss_fn = builder.build_loss_fn()
         first_time = True
-        metrics_storage = MetricsStorage(filepath=builder.config.training.metric_file, 
+        metrics_storage = MetricsStorage(filepath=builder.config.training.metric_file,
                                          decisive_metric=builder.config.training.decisive_metric)
+        # Anisotropic [W, H] scale for the train-side pixel alignment metric (align_error_px);
+        # None on non-adaptation runs, so the metric is simply absent.
+        metrics_storage.align_pixel_scale = getattr(model, 'align_pixel_scale', None)
         
         weights_scheduler = builder.build_weights_scheduler(loss_fn)
         if weights_scheduler is not None:
@@ -170,7 +173,8 @@ def train(builder:PipelineBuilder, trial=None):
                     if wandb_enabled and wb.run is not None:
                         log = {"epoch": global_epoch}
                         for key in ("reg_error_val", "duration_error_val", "accuracy",
-                                    "precision_pos", "recall_pos"):
+                                    "precision_pos", "recall_pos",
+                                    "align_error_val", "align_error_px_val"):
                             seq = metrics_storage.metrics.get(key, [])
                             if seq:
                                 log[f"val/{key}"] = seq[-1]

@@ -640,8 +640,12 @@ stimulus's attentional landmarks before the encoder/decoder train. Spec:
   `coord_func=l1` default) is dispatched by `CombinedLossFunction` **iff** `"align" in output`
   (byte-identical otherwise, FR15) — so only the `ImageAdaptation` phase takes the align branch;
   it **does not read `tgt`**. `eval_align` / `nearest_centroid_offsets` live in `eval_metrics.py`;
-  `MetricsStorage` gains `align_error_val`, appended by `validate` only when `> 0`. 46-test CPU
-  suite `tests/test_image_adaptation.py`. `scikit-learn` added to `requirements.txt`.
+  `MetricsStorage` gains `align_error_val` (normalized) and `align_error_px_val` (anisotropic
+  pixel distance — each axis scaled by `[W,H]=[512,320]` from the cache's `max_value`, threaded via
+  `set_alignment_centroids(..., pixel_scale=)` → `model.align_pixel_scale`), appended by `validate`
+  only when `> 0`; `train/align_error` + `train/align_error_px` and both val metrics are logged to
+  W&B. 49-test CPU suite `tests/test_image_adaptation.py`. `scikit-learn` added to
+  `requirements.txt`.
 
 ## Hyperparameter Search (Optuna + W&B)
 

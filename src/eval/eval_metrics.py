@@ -73,14 +73,22 @@ def nearest_centroid_offsets(token_centers, image_centroids, centroid_mask):
         return nearest - c                                         # (B, S, 2)
 
 
-def eval_align(align_out, token_centers, image_centroids, centroid_mask):
-    """Mean ``‖pred - target‖₂`` over valid tokens/rows, in normalized units (FR16).
+def eval_align(align_out, token_centers, image_centroids, centroid_mask, pixel_scale=None):
+    """Mean ``‖pred - target‖₂`` over valid tokens/rows (FR16).
 
-    Rows whose image has no centroid are dropped; returns ``0.0`` when no row is valid (so
-    ``validate``'s ``> 0`` guard never appends spuriously)."""
+    In normalized units by default. When ``pixel_scale`` is given (a length-2 ``[W, H]`` tensor /
+    sequence), each axis of the ``(pred - target)`` offset is scaled by its corresponding image
+    dimension **before** the norm — the anisotropic conversion to pixels (x·W, y·H). Rows whose
+    image has no centroid are dropped; returns ``0.0`` when no row is valid (so ``validate``'s
+    ``> 0`` guard never appends spuriously)."""
     row = centroid_mask.any(dim=1)                                 # (B,)
     if not bool(row.any()):
         return 0.0
     target = nearest_centroid_offsets(token_centers, image_centroids, centroid_mask)
+    diff = align_out - target                                      # (B, S, 2), normalized
+    if pixel_scale is not None:
+        if not torch.is_tensor(pixel_scale):
+            pixel_scale = torch.as_tensor(pixel_scale)
+        diff = diff * pixel_scale.to(device=diff.device, dtype=diff.dtype)
     r = row.view(-1, 1, 1).expand_as(align_out)
-    return float((align_out[r] - target[r]).view(-1, 2).norm(dim=-1).mean().item())
+    return float(diff[r].view(-1, 2).norm(dim=-1).mean().item())

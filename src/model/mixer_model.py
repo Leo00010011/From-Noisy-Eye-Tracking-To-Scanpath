@@ -544,6 +544,7 @@ class MixerModel(nn.Module):
             self.register_buffer("align_centroid_mask",
                                  torch.zeros(0, 0, dtype=torch.bool, device=device),
                                  persistent=False)
+            self.align_pixel_scale = None
             self._centroids_ready = False
 
         # DENOISE HEADS
@@ -699,12 +700,20 @@ class MixerModel(nn.Module):
             self._set_group(self.fixation_modules, f_flag)
             self._set_group(self.adapter_modules, a_flag)
 
-    def set_alignment_centroids(self, centroids, mask):
+    def set_alignment_centroids(self, centroids, mask, pixel_scale=None):
         """Install per-image centroid targets as non-persistent buffers (FR9). Called by
-        ``PipelineBuilder`` after construction; ``decode_align`` raises until this runs."""
+        ``PipelineBuilder`` after construction; ``decode_align`` raises until this runs.
+
+        ``pixel_scale`` (optional ``[W, H]`` from the cache's ``max_value``) is stored for the
+        anisotropic pixel-space alignment metric; ``None`` leaves the metric normalized-only."""
         dev = self.factory_mode["device"]
         self.align_centroids = centroids.to(device=dev, dtype=self.factory_mode["dtype"])
         self.align_centroid_mask = mask.to(device=dev)
+        if pixel_scale is not None:
+            self.align_pixel_scale = torch.as_tensor(
+                list(pixel_scale), device=dev, dtype=self.factory_mode["dtype"])
+        else:
+            self.align_pixel_scale = None
         self._centroids_ready = True
 
     def decode_align(self, image_idx=None, **kwargs):

@@ -20,7 +20,8 @@ class MetricsStorage:
             'precision_neg': [],
             'recall_neg': [],
             'denoise_error_val': [],
-            'align_error_val': []
+            'align_error_val': [],
+            'align_error_px_val': []
         }
         self.loss_info = {}
         self.num_batches = 0
@@ -28,6 +29,9 @@ class MetricsStorage:
         print('Decisive Metric: ', decisive_metric)
         self.decisive_metric = decisive_metric
         self.best_metric_value = np.inf
+        # Anisotropic [W, H] scale for the pixel-space alignment metric; set by pipeline.py from
+        # the centroid cache's max_value. None -> pixel metric skipped (normalized only).
+        self.align_pixel_scale = None
     
     def init_epoch(self):
         self.loss_info = {}
@@ -53,6 +57,11 @@ class MetricsStorage:
             results_dict['align_error'] = eval_align(
                 output['align'], output['token_centers'],
                 output['image_centroids'], output['centroid_mask'])
+            if self.align_pixel_scale is not None:
+                results_dict['align_error_px'] = eval_align(
+                    output['align'], output['token_centers'],
+                    output['image_centroids'], output['centroid_mask'],
+                    pixel_scale=self.align_pixel_scale)
 
         for key, value in results_dict.items():
             if key not in self.loss_info:
@@ -95,6 +104,8 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
     with torch.no_grad():
         denoise_coord_error_acum = 0
         align_coord_error_acum = 0
+        align_px_error_acum = 0
+        align_pixel_scale = getattr(model, 'align_pixel_scale', None)
         acc_acum = 0
         pre_pos_acum = 0
         rec_pos_acum = 0
@@ -137,6 +148,11 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
                 align_coord_error_acum += eval_align(
                     output['align'], output['token_centers'],
                     output['image_centroids'], output['centroid_mask'])
+                if align_pixel_scale is not None:
+                    align_px_error_acum += eval_align(
+                        output['align'], output['token_centers'],
+                        output['image_centroids'], output['centroid_mask'],
+                        pixel_scale=align_pixel_scale)
             input, output = invert_transforms(input, output, val_dataloader, remove_outliers = True)
             if 'reg' in output:
                 reg_out = output['reg']
@@ -180,6 +196,8 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
             metrics['denoise_error_val'].append(denoise_coord_error_acum / cnt)
         if align_coord_error_acum > 0:
             metrics['align_error_val'].append(align_coord_error_acum / cnt)
+        if align_px_error_acum > 0:
+            metrics['align_error_px_val'].append(align_px_error_acum / cnt)
         if log:
             print(f'>>>>>>> Validation results at epoch {metrics["epoch"][-1]}:')
             for key, value in info.items():
@@ -196,6 +214,8 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
                 print('denoise_error_val: ',metrics['denoise_error_val'][-1])
             if align_coord_error_acum > 0:
                 print('align_error_val: ',metrics['align_error_val'][-1])
+            if align_px_error_acum > 0:
+                print('align_error_px_val: ',metrics['align_error_px_val'][-1])
 
             print('<<<<<<<<<<<<<<<<<<')
     model.train()
