@@ -8,7 +8,8 @@ from src.training.training_utils import DenoiseDropoutScheduler
 from src.training.weights_scheduler import WeightsScheduler
 from src.training.training_utils import ScheduledSampling, WarmupStableDecayScheduler
 from src.model.loss_functions import (EntireRegLossFunction, SeparatedRegLossFunction, CombinedLossFunction,
-                                       DenoiseRegLoss, PenaltyReducedFocalLoss,EndBinaryCrossEntropy, EndSoftMax, MLPLogNormalDistribution)
+                                       DenoiseRegLoss, PenaltyReducedFocalLoss,EndBinaryCrossEntropy, EndSoftMax, MLPLogNormalDistribution,
+                                       AlignmentLoss)
 from torch.utils.data import DataLoader, random_split, Subset
 from  torchvision.transforms import v2
 import numpy as np
@@ -24,6 +25,7 @@ from src.model.ms_features import Mask2FormerFeatureAdapter
 from src.model.model_io import load_test_data
 from src.data.datasets import FreeViewImgDataset, CoupledDataloader, DeduplicatedMemoryDataset
 from src.data.image_feature_cache import ImageFeatureCache, PrecomputedFeatureDataset
+from src.data.scanpath_centroids import ScanpathCentroidCache
 from src.training.inference_recorder import InferenceRecorder
 from omegaconf import OmegaConf
 
@@ -580,6 +582,9 @@ class PipelineBuilder:
             else:
                 input_encoder = self.config.model.get('input_encoder', 'linear')
 
+            # Image-feature adaptation config sub-tree (default off; read via .get so pre-existing
+            # snapshots without the key build unchanged).
+            ia_cfg = self.config.model.get('image_adaptation', {}) or {}
 
             model = MixerModel(input_dim = self.config.model.input_dim,
                               output_dim = self.config.model.output_dim,
@@ -642,6 +647,9 @@ class PipelineBuilder:
                               image_gated_fusion = self.config.model.get('image_gated_fusion', False),
                               normalize_grid_init = self.config.model.get('normalize_grid_init', True),
                               pred_dur_pdf= self.config.model.get('pred_dur_pdf', False),
+                              image_adaptation = bool(ia_cfg.get('enabled', False)),
+                              align_head_hidden_dim = ia_cfg.get('align_head_hidden_dim', None),
+                              align_head_output_dropout = ia_cfg.get('align_head_output_dropout', 0),
                               adapter_hidden_dims = self.config.model.image_encoder.get('adapter_hidden_dims', self.config.model.get('mlp_head_hidden_dim', None)))
         
             pretrained_encoder_path = self.resolve_pretrained_encoder_path()
@@ -651,6 +659,26 @@ class PipelineBuilder:
                 # the path is of the form folder/model.pth, but the load test data method only receive the folder/
                 folder_path = str(Path(pretrained_encoder_path).parent)
                 splits = load_test_data(self, folder_path, return_dataloaders= False)
+
+            # Load per-image centroid targets and install them on the model (FR18). Runs after
+            # load_dataset() (pipeline.py order), so self.data is the same CocoFreeView the
+            # splits/features use — reused so the keying invariant (FR3) is checked against the
+            # identical first-seen order.
+            if ia_cfg.get('enabled', False):
+                cache_path = ia_cfg.get('centroid_cache_path', None)
+                if cache_path is None:
+                    raise ValueError(
+                        "model.image_adaptation.enabled=True requires "
+                        "model.image_adaptation.centroid_cache_path.")
+                if not os.path.exists(cache_path):
+                    raise FileNotFoundError(
+                        f"centroid cache {cache_path} not found; run "
+                        f"scripts/build_scanpath_centroid_cache.py to build it.")
+                if self.data is None:
+                    self.data = CocoFreeView(data_path=os.path.join('data', 'Coco FreeView'))
+                    self.data.filter_by_idx(self.PathDataset.data_store['filtered_idx'])
+                cache = ScanpathCentroidCache(cache_path, self.data)
+                model.set_alignment_centroids(cache.centroids, cache.centroid_mask)
         elif model_name == 'PathModel':
             model = PathModel(input_dim = self.config.model.input_dim,
                               output_dim = self.config.model.output_dim,
@@ -788,9 +816,15 @@ class PipelineBuilder:
                                          dur_func = STR_TO_LOSS_FUNC[self.config.loss.dur_func],
                                          dur_weight = self.config.loss.dur_weight)
         elif loss_type == 'combined':
+            ia_cfg = self.config.model.get('image_adaptation', {}) or {}
+            align_loss = None
+            if ia_cfg.get('enabled', False):
+                align_loss = AlignmentLoss(
+                    coord_func = STR_TO_LOSS_FUNC[self.config.loss.get('align_loss_type', 'l1')])
             loss_fn = CombinedLossFunction(denoise_loss = DenoiseRegLoss(STR_TO_LOSS_FUNC[self.config.loss.denoise_loss_type]),
                                          fixation_loss = self.build_loss_fn(primary_loss = self.config.loss.fixation_loss_type),
-                                         denoise_weight = 0)
+                                         denoise_weight = 0,
+                                         align_loss = align_loss)
         elif loss_type == 'focal_loss':
             loss_fn = PenaltyReducedFocalLoss(alpha = self.config.loss.alpha,
                                          beta = self.config.loss.beta,

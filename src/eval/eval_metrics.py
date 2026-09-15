@@ -49,3 +49,38 @@ def eval_denoise(denoise, clean_x):
     denoise_error = torch.sqrt(torch.sum(diff**2, dim=-1))
     denoise_error = denoise_error.sum().item() / denoise_error.numel()
     return denoise_error
+
+
+def nearest_centroid_offsets(token_centers, image_centroids, centroid_mask):
+    """Per-token offset to its nearest **valid** fixation centroid (the alignment target).
+
+    Args:
+        token_centers:   ``(1, S, 2)`` or ``(B, S, 2)`` — per-token anchors (reference grids).
+        image_centroids: ``(B, C, 2)`` — per-image centroids (already gathered per batch row).
+        centroid_mask:   ``(B, C)`` bool — True where the centroid is real (not padding).
+
+    Returns ``(B, S, 2)`` offsets ``nearest_centroid - token_center``, computed under
+    ``torch.no_grad`` (image-intrinsic target; no gradient flows through it).
+    """
+    with torch.no_grad():
+        B = image_centroids.size(0)
+        c = token_centers.expand(B, -1, -1) if token_centers.size(0) != B else token_centers
+        d = torch.cdist(c, image_centroids)                        # (B, S, C)
+        d = d.masked_fill(~centroid_mask.unsqueeze(1), float("inf"))
+        nn_idx = d.argmin(dim=-1)                                  # (B, S)
+        nearest = torch.gather(image_centroids, 1,
+                               nn_idx.unsqueeze(-1).expand(-1, -1, 2))
+        return nearest - c                                         # (B, S, 2)
+
+
+def eval_align(align_out, token_centers, image_centroids, centroid_mask):
+    """Mean ``‖pred - target‖₂`` over valid tokens/rows, in normalized units (FR16).
+
+    Rows whose image has no centroid are dropped; returns ``0.0`` when no row is valid (so
+    ``validate``'s ``> 0`` guard never appends spuriously)."""
+    row = centroid_mask.any(dim=1)                                 # (B,)
+    if not bool(row.any()):
+        return 0.0
+    target = nearest_centroid_offsets(token_centers, image_centroids, centroid_mask)
+    r = row.view(-1, 1, 1).expand_as(align_out)
+    return float((align_out[r] - target[r]).view(-1, 2).norm(dim=-1).mean().item())

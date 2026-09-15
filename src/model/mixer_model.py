@@ -74,6 +74,9 @@ class MixerModel(nn.Module):
                        n_eye_decoder = 0,
                        use_kv_cache = False,
                        add_denoise_head = True,
+                       image_adaptation = False,
+                       align_head_hidden_dim = None,
+                       align_head_output_dropout = 0,
                        dtype = torch.float32,
                        device = 'cpu'):
         super().__init__()
@@ -117,6 +120,11 @@ class MixerModel(nn.Module):
         self.denoise_head_output_dropout = denoise_head_output_dropout
         self.denoise_modules = []
         self.fixation_modules = []
+        # Image-feature adaptation (scanpath-centroid alignment) — dual-path, default off.
+        self.image_adaptation = bool(image_adaptation)
+        self.adapter_modules = []
+        self.image_adapter_features = None       # set per-encode() on the mask2former path
+        self.image_reference_grids = None
         self.use_denoised_coordinates = use_denoised_coordinates
         self.n_eye_decoder = n_eye_decoder
         self.scheduled_sampling = None
@@ -155,6 +163,14 @@ class MixerModel(nn.Module):
                 if input_encoder == 'image_features_concat':
                     raise ValueError("input_encoder='image_features_concat' is DINOv3-only in F6 "
                                      "(indexes a fixed patch grid).")
+        # FR5 — image-feature adaptation is precomputed-Mask2Former-path-only.
+        if self.image_adaptation and not (
+                image_encoder is not None and image_encoder_type == 'mask2former'):
+            raise ValueError(
+                "image_adaptation=True requires image_encoder is not None and "
+                "image_encoder_type == 'mask2former' (the precomputed Mask2Former path); "
+                f"got image_encoder={'None' if image_encoder is None else 'set'}, "
+                f"image_encoder_type={image_encoder_type!r}.")
         # Nominal patch size for the shared_gaussian encoders' `patch_size=` arg (only consumed by
         # forward_features(), i.e. the DINOv3 path). On the mask2former path it is never used.
         pos_enc_patch_size = self.patch_resolution[0] if self.patch_resolution is not None else 16
@@ -248,9 +264,15 @@ class MixerModel(nn.Module):
                                            self.adapter_hidden_dims,
                                            model_dim,
                                            output_dropout_p = image_features_dropout,
-                                           
+
                                            **factory_mode)
-            self.denoise_modules.append(self.img_input_proj)
+            # FR7 — when adaptation is active, img_input_proj is the shared trunk of a separate
+            # adapter parameter group (trained in ImageAdaptation, frozen in Combined); otherwise
+            # it stays in denoise_modules exactly as before.
+            if self.image_adaptation:
+                self.adapter_modules.append(self.img_input_proj)
+            else:
+                self.denoise_modules.append(self.img_input_proj)
             if use_rope:
                 self.rope_pos = RopePositionEmbedding(embed_dim = self.model_dim,
                                                       num_heads = self.n_heads,
@@ -504,6 +526,26 @@ class MixerModel(nn.Module):
             self.level_embed = nn.Parameter(torch.zeros(n_image_levels, model_dim, **factory_mode))
             self.denoise_modules.append(self.level_embed)
 
+        # IMAGE-FEATURE ADAPTATION HEAD (scanpath-centroid alignment; active path only, FR8/FR9).
+        # align_head maps each shared-trunk token feature -> a 2-D offset in normalized [0,1]
+        # units. Centroids arrive post-construction via set_alignment_centroids() as
+        # NON-PERSISTENT buffers, so the off-model state_dict is byte-identical (FR6) and the
+        # active model's state_dict gains only align_head.* (FR9). The empty buffers below make
+        # .to(device) and decode_align's attribute access well-defined before centroids are set.
+        if self.image_adaptation:
+            self.align_head = MLP(model_dim,
+                                  align_head_hidden_dim,
+                                  2,
+                                  output_dropout_p = align_head_output_dropout,
+                                  **factory_mode)
+            self.adapter_modules.append(self.align_head)
+            self.register_buffer("align_centroids",
+                                 torch.zeros(0, 0, 2, **factory_mode), persistent=False)
+            self.register_buffer("align_centroid_mask",
+                                 torch.zeros(0, 0, dtype=torch.bool, device=device),
+                                 persistent=False)
+            self._centroids_ready = False
+
         # DENOISE HEADS
         if self.add_denoise_head and (phases is not None and ('Denoise' in phases or 'Combined' in phases)):
             # self.denoise_head = ResidualRegressor(model_dim, hidden_dropout_p = self.denoise_head_hidden_dropout, output_dropout_p = self.denoise_head_output_dropout, **factory_mode)
@@ -635,23 +677,50 @@ class MixerModel(nn.Module):
             raise ValueError(f"Unsupported input_encoder: {self.input_encoder}")
         return summ
     
+    def _set_group(self, modules, flag):
+        for mod in modules:
+            mod.requires_grad_(flag)
+
     def set_phase(self, phase):
+        # Explicit requires_grad for all three groups (D=denoise, F=fixation, A=adapter) every
+        # call (FR13). With adaptation off, adapter_modules is empty ⇒ the A column is a no-op,
+        # so Denoise/Fixation/Combined reproduce the pre-change layout exactly (FR6/FR20).
         self.phase = phase
-        if phase == 'Denoise':
-            for mod in self.fixation_modules:
-                mod.requires_grad_(False)
-            for mod in self.denoise_modules:
-                mod.requires_grad_(True)
-        elif phase == 'Fixation':
-            for mod in self.denoise_modules:
-                mod.requires_grad_(False)
-            for mod in self.fixation_modules:
-                mod.requires_grad_(True)
-        elif phase == 'Combined':
-            for mod in self.denoise_modules:
-                mod.requires_grad_(True)
-            for mod in self.fixation_modules:
-                mod.requires_grad_(True)
+        table = {
+            'Denoise':         (True,  False, False),
+            'Fixation':        (False, True,  False),
+            'Combined':        (True,  True,  False),
+            'ImageAdaptation': (False, False, True),
+            'FullFinetune':    (True,  True,  True),
+        }
+        if phase in table:
+            d_flag, f_flag, a_flag = table[phase]
+            self._set_group(self.denoise_modules, d_flag)
+            self._set_group(self.fixation_modules, f_flag)
+            self._set_group(self.adapter_modules, a_flag)
+
+    def set_alignment_centroids(self, centroids, mask):
+        """Install per-image centroid targets as non-persistent buffers (FR9). Called by
+        ``PipelineBuilder`` after construction; ``decode_align`` raises until this runs."""
+        dev = self.factory_mode["device"]
+        self.align_centroids = centroids.to(device=dev, dtype=self.factory_mode["dtype"])
+        self.align_centroid_mask = mask.to(device=dev)
+        self._centroids_ready = True
+
+    def decode_align(self, image_idx=None, **kwargs):
+        """Alignment forward (ImageAdaptation phase, FR11): per-token predicted offset + the
+        image-intrinsic target inputs (gathered per batch row by ``image_idx``)."""
+        if self.image_adapter_features is None:
+            raise RuntimeError("decode_align requires the mask2former image path "
+                               "(image_adapter_features is None).")
+        if not getattr(self, "_centroids_ready", False):
+            raise RuntimeError("alignment centroids not set; call set_alignment_centroids().")
+        image_idx = image_idx.to(self.align_centroids.device).long()
+        offsets = self.align_head(self.image_adapter_features)          # (B, S, 2)
+        return {"align": offsets,
+                "token_centers": self.image_reference_grids.unsqueeze(0),   # (1, S, 2)
+                "image_centroids": self.align_centroids[image_idx],         # (B, C, 2)
+                "centroid_mask": self.align_centroid_mask[image_idx]}       # (B, C) bool
 
     def set_inference_recorder(self, recorder):
         self.inference_recorder = recorder
@@ -730,10 +799,18 @@ class MixerModel(nn.Module):
                     image_src[:,prefix:,:] = image_src[:,prefix:,:] + pos_enc
                 self.image_spatial_shapes = None
                 self.image_level_start_index = None
+                # DINOv3 / non-multiscale path never feeds the alignment head.
+                self.image_adapter_features = None
+                self.image_reference_grids = None
             else:
                 # ---- MULTI-SCALE PATH (Mask2Former via F3 bundle) ----
                 bundle = self.image_encoder(image_src)                 # MultiScaleFeatures
                 image_src = self.img_input_proj(bundle.value)          # (B, S, model_dim)
+                # FR10 — snapshot the pre-PE trunk output (the cross-attn memory) and the per-token
+                # anchors for decode_align. These are the exact features the deformable
+                # cross-attentions consume, so the alignment loss shapes them directly.
+                self.image_adapter_features = image_src
+                self.image_reference_grids = bundle.reference_grids
                 pos_enc_mod = self.pos_proj if self.input_encoder == 'shared_gaussian' else self.img_pos_proj
                 pe = pos_enc_mod(bundle.reference_grids.unsqueeze(0))   # (1, S, model_dim)
                 level_sizes = torch.tensor(bundle.level_sizes(), device=self.level_embed.device)
@@ -945,6 +1022,12 @@ class MixerModel(nn.Module):
         elif self.phase == 'Fixation':
             return self.decode_fixation(**kwargs)
         elif self.phase == 'Combined':
+            denoise_output = {} if skip_denoise else self.decode_denoise(**kwargs)
+            fixation_output = self.decode_fixation(**kwargs)
+            return {**denoise_output, **fixation_output}
+        elif self.phase == 'ImageAdaptation':
+            return self.decode_align(**kwargs)
+        elif self.phase == 'FullFinetune':
             denoise_output = {} if skip_denoise else self.decode_denoise(**kwargs)
             fixation_output = self.decode_fixation(**kwargs)
             return {**denoise_output, **fixation_output}

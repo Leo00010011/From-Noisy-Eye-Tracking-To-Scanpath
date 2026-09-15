@@ -1,0 +1,47 @@
+# @package _global_
+# Image-Feature Adaptation via Scanpath-Centroid Alignment Pretraining.
+# Three ordered phases in one run on the precomputed frozen Mask2Former path:
+#   1. ImageAdaptation — adapter trunk + align head only (centroid-alignment loss)
+#   2. Combined        — encoder + decoder + heads, adapter frozen (fixation loss)
+#   3. FullFinetune    — whole model incl. adapter, pixel decoder stays frozen (fixation loss)
+defaults:
+  - override /model/image_encoder: mask2former_precomputed
+
+training:
+  decisive_metric: "reg_error_val"
+  pretrained_model: null
+  use_scheduled_sampling: false
+  Phases: ["ImageAdaptation", "Combined", "FullFinetune"]
+  ImageAdaptation:
+    name: "ImageAdaptation"
+    denoise_weight: 0
+    decisive_metric: "align_error_val"
+    epochs: 40
+  Combined:
+    name: "Combined"
+    denoise_weight: 0
+    decisive_metric: ${training.decisive_metric}
+    epochs: 80
+  FullFinetune:
+    name: "FullFinetune"
+    denoise_weight: 0
+    decisive_metric: ${training.decisive_metric}
+    epochs: 120
+
+model:
+  pretrained_encoder_path: null
+  add_denoise_head: False
+  image_adaptation:
+    enabled: True
+    centroid_cache_path: "data/Coco FreeView/scanpath_centroids.h5"
+    align_head_hidden_dim: [256, 128]
+    align_head_output_dropout: 0
+
+loss:
+  complex_type: "combined"
+  fixation_loss_type: "separated_reg"
+  align_loss_type: "l1"
+
+data:
+  load:
+    use_precomputed_features: True

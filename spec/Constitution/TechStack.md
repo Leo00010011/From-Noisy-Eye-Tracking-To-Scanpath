@@ -458,6 +458,8 @@ option but not the default path.
 | `RealNoiseInferenceStore` | `src/data/eve_real_noise_store.py` | Keyed HDF5 writer/reader for model outputs (`save` uses mode `"w"`, unlike the cache's append mode). Stores predicted scanpaths, EOS logits, inverted `src_px`, `frame_indices`, optional `denoise_px`. See HDF5 layout below. |
 | `eval_metrics.py` | `src/eval/` | `eval_reg` (Euclidean coord error + duration MAE on masked positions), `eval_denoise` (MSE on denoised coords), `accuracy` / `precision` / `recall` for end-of-sequence head. |
 | `image_reliance.py` | `src/eval/` | **Image-reliance diagnostic suite** (diagnosis-only). Pure primitives (`sampling_in_range_fraction`, `residual_norms`, `extract_residuals`/`extract_sampling_locations`, `shuffle_images_in_batch`, `per_sample_reg_error`) + two pass drivers (`run_recording_pass` residuals+in-range recorder-on; `run_perturbation_pass` image-shuffle recorder-off) + writers (`write_reliance_store` HDF5, `write_summary` JSON). Reuses the already-recorded `blocks.py` hooks; touches no model code. See the "Image-Reliance Diagnostic Suite" section. |
+| `ScanpathCentroidCache` | `src/data/scanpath_centroids.py` | **Image-intrinsic attentional-landmark cache.** `build` aggregates every scanpath's `dest_res` fixations per unique stimulus, Mean-Shift clusters at `bandwidth_dva / ptoa` px (DBSCAN alternative), normalizes centroids to `[0,1]` by `max_value=[W,H]`, and returns NaN-padded `centroids (U,C_max,2)` + `mask (U,C_max)` + first-seen `order`. `write`/`__init__` persist/read one HDF5 file (group `/centroids`, mode `"w"`); the read side re-verifies the first-seen order against the cache **unconditionally** (FR3). See the "Image-Feature Adaptation" section. |
+| `AlignmentLoss` | `src/model/loss_functions.py` | **Nearest-centroid image-feature adaptation loss.** Regresses `output["align"]` toward each token's offset to its nearest **valid** centroid (`token_centers`↔`image_centroids` under `torch.no_grad`, `masked_fill(inf)`+`argmin`); rows with no centroid dropped, all-empty → differentiable zero. **Does not read `tgt`** (image-intrinsic target). Dispatched by `CombinedLossFunction` on the `"align"` output key. |
 | `eval_utils.py` | `src/eval/` | Offline evaluation utilities: running inference on a split and aggregating metrics. |
 | `vis_scanpath.py` | `src/eval/` | Plotting predicted vs. ground-truth scanpaths overlaid on the stimulus image. |
 
@@ -581,6 +583,65 @@ per-eye-layer image-cross mean and its ratio to self; (2) mean clean vs. shuffle
 delta, fraction of samples changing `< eps_ignore`; (3) per-level mean in-range fraction (eye +
 fixation). Each block carries a one-line interpretation string. Returns the dict (for tests).
 30-test suite `tests/test_image_reliance.py`.
+
+## Image-Feature Adaptation (scanpath-centroid alignment pretraining)
+
+An additive, **precomputed-Mask2Former-path-only** pretraining stage (gated by
+`model.image_adaptation.enabled`, default **off**) that pre-shapes the image trunk toward the
+stimulus's attentional landmarks before the encoder/decoder train. Spec:
+`spec/2026-09-14-image-feature-adaptation-alignment/`.
+
+- **Target = image-intrinsic centroids, not per-scanpath.** For each unique stimulus, every
+  scanpath's fixations are aggregated into one `dest_res=(320,512)` px cloud and **Mean-Shift
+  clustered** at `bandwidth = bandwidth_dva / CocoFreeView.ptoa` (`1.0 / (1/16) = 16 px`, isotropic
+  there; DBSCAN alternative uses per-label means, `eps=(dbscan_eps_dva or bandwidth_dva)/ptoa`).
+  Cluster centers → centroids, normalized to `[0,1]` by the **same** `max_value=[W,H]=[512,320]`
+  that `Normalize(key='y', mode='coords')` applies (FR19), so centroids, `reference_grids`, and
+  `tgt` share one frame. Clustering both de-noises the cloud and makes the target independent of
+  any single scanpath (the well-posedness fix).
+- **`ScanpathCentroidCache`** (`src/data/scanpath_centroids.py`, driver
+  `scripts/build_scanpath_centroid_cache.py`) — separate additive HDF5, **no frozen-feature layout
+  change**. Single group `/centroids`, mode `"w"`, keyed by image in the **same first-seen unique
+  order** as `PrecomputedFeatureDataset` (verified unconditionally on read, FR3):
+
+  | Dataset | Shape | dtype | Notes |
+  |---|---|---|---|
+  | `centroids` | `(U, C_max, 2)` | float32 | normalized `[0,1]` `(x,y)`; NaN-padded past `n_centroids[u]` (read back as `0`) |
+  | `centroid_mask` | `(U, C_max)` | bool | True = real centroid (authoritative) |
+  | `image_path` | `(U,)` | vlen utf8 | unique image path, first-seen order — keying invariant |
+
+  Group attrs: `bandwidth_dva`, `ptoa`, `dest_res` (`[H,W]`), `max_value` (`[W,H]`), `algorithm`,
+  `C_max`, `num_unique`, `created_at`. Optional `--split-restrict train` builds each image's cloud
+  from train-split scanpaths only (leak-free under `random` split; `disjoint`/`stimuly_disjoint`
+  are already leak-free, FR21).
+- **Model side** (`MixerModel`, dual-path): new ctor args `image_adaptation`,
+  `align_head_hidden_dim`, `align_head_output_dropout`; on the active mask2former path
+  `img_input_proj` moves to a new `self.adapter_modules` group (out of `denoise_modules`) and shares
+  its `model_dim` trunk with `self.align_head = MLP(model_dim, hidden, 2)`. `encode` snapshots
+  `self.image_adapter_features` (the pre-PE cross-attn memory) and `self.image_reference_grids`
+  (per-token anchors, FR10). Centroids install post-construction via
+  `set_alignment_centroids(centroids, mask)` as **non-persistent** buffers
+  (`align_centroids`/`align_centroid_mask`), so the state_dict gains **only** `align_head.*` (FR6/9).
+  `decode_align(**kwargs)` reads `image_idx` (the batch's `(B,)` unique-image ids from
+  `CoupledDataloader`) and returns `{"align" (B,S,2), "token_centers" (1,S,2),
+  "image_centroids" (B,C_max,2), "centroid_mask" (B,C_max)}`; raises if the image path or centroids
+  are absent. FR5 raises at construction unless `image_encoder is not None and image_encoder_type ==
+  "mask2former"`. **Reference points to the deformable ops are unchanged** — this is an
+  auxiliary-loss signal only.
+- **Phases & routing.** `set_phase` is an explicit three-group table (D=denoise, F=fixation,
+  A=adapter; FR13): `Denoise`(T,F,F) `Fixation`(F,T,F) `Combined`(T,T,F) `ImageAdaptation`(F,F,T)
+  `FullFinetune`(T,T,T). With adaptation off `adapter_modules` is empty ⇒ the A column is a no-op
+  and the first three rows reproduce the pre-change layout exactly. `forward` routes
+  `ImageAdaptation`→`encode`+`decode_align` and `FullFinetune`→the `Combined` branch. The 3-phase
+  run (`ImageAdaptation` → `Combined` (adapter frozen) → `FullFinetune` (whole model, pixel decoder
+  stays frozen)) is driven by `configs/exp/image_adaptation_training.yaml`
+  (`use_scheduled_sampling: false`, over `model/image_encoder=mask2former_precomputed`).
+- **Loss & metric (single loss per run).** `AlignmentLoss` (nearest-centroid regression,
+  `coord_func=l1` default) is dispatched by `CombinedLossFunction` **iff** `"align" in output`
+  (byte-identical otherwise, FR15) — so only the `ImageAdaptation` phase takes the align branch;
+  it **does not read `tgt`**. `eval_align` / `nearest_centroid_offsets` live in `eval_metrics.py`;
+  `MetricsStorage` gains `align_error_val`, appended by `validate` only when `> 0`. 46-test CPU
+  suite `tests/test_image_adaptation.py`. `scikit-learn` added to `requirements.txt`.
 
 ## Hyperparameter Search (Optuna + W&B)
 

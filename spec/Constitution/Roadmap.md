@@ -2,6 +2,42 @@
 
 ## Done
 
+- ✓ **Image-feature adaptation via scanpath-centroid alignment pretraining** — a
+  Deformable-DETR-style image-feature adaptation stage on the **precomputed frozen Mask2Former**
+  path that pre-shapes `img_input_proj` (the only trainable image-side module) toward the
+  stimulus's attentional landmarks *before* the encoder/decoder train. The target is
+  **image-intrinsic, not per-scanpath** (the well-posedness fix): every scanpath's fixations for a
+  stimulus are aggregated into one cloud and **Mean-Shift clustered at 1-DVA bandwidth**
+  (`bandwidth = bandwidth_dva / CocoFreeView.ptoa = 16 px` in the `dest_res=(320,512)` space), and
+  each image-feature token regresses toward the offset to its **nearest cluster centroid**.
+  Centroids are precomputed once per unique image and cached, keyed by the **same first-seen unique
+  order** as the frozen-feature cache (so the batch's `image_idx` gathers the right centroids and
+  features for a row). New `ScanpathCentroidCache` + driver
+  `scripts/build_scanpath_centroid_cache.py` (`src/data/scanpath_centroids.py`; separate additive
+  `scanpath_centroids.h5`, group `/centroids`, **no frozen-feature layout change**); `MeanShift`
+  default (`DBSCAN` alternative), optional `--split-restrict train` for leak-free `random`-split
+  builds (FR21). Model side (additive/dual-path, gated by `model.image_adaptation.enabled`, default
+  **off**): `MixerModel` gains `image_adaptation`/`align_head_hidden_dim`/`align_head_output_dropout`;
+  when active `img_input_proj` moves to a new `adapter_modules` group and shares its trunk with a
+  new `align_head` (MLP → 2), centroids arrive as **non-persistent** buffers via
+  `set_alignment_centroids` (state_dict gains only `align_head.*`), `encode` snapshots the pre-PE
+  trunk features + `reference_grids`, and `decode_align` returns the per-token offset + the
+  image-intrinsic target inputs (gathered by `image_idx`). Two new phases —
+  **`ImageAdaptation`** (adapter+head only) and **`FullFinetune`** (whole model, pixel decoder stays
+  frozen) — wired through an explicit three-group `set_phase` table (D/F/A), the `forward` router,
+  and `build_phases`. New `AlignmentLoss` (nearest-centroid, **does not read `tgt`**) dispatched by
+  `CombinedLossFunction` on the `output["align"]` key (byte-identical without it); `eval_align` +
+  `nearest_centroid_offsets` in `eval_metrics.py`; `align_error_val` metric in `MetricsStorage` /
+  `validate`. New exp `configs/exp/image_adaptation_training.yaml` (`Phases:
+  ["ImageAdaptation","Combined","FullFinetune"]`, `use_scheduled_sampling: false`, over
+  `model/image_encoder=mask2former_precomputed`); `scikit-learn` added to `requirements.txt`.
+  **Off/absent ⇒ MixerModel byte-identical, `mixer_model.yaml` untouched, old checkpoints load
+  clean** (FR6/FR20). 46-test CPU suite `tests/test_image_adaptation.py` (all pass; synthetic
+  centroids + `PrecomputedFeatureAdapter`, no network/real caches). Data-validity checks (DV1–DV7:
+  centroid counts, well-posedness variance gain, bandwidth sanity, frame consistency, downstream
+  `reg_error_val` effect, image-reliance cross-check) require the real CocoFreeView data + a built
+  cache + a training run and are left to a GPU/data run. Spec:
+  `spec/2026-09-14-image-feature-adaptation-alignment/`.
 - ✓ **Revive PathModel training (with scheduled sampling)** — `PathModel` is trainable
   end-to-end through the pipeline again, so it can serve as the gaze-only ablation baseline the
   image-reliance diagnostic (image-shuffle degrades MixerModel reg error only ~4%) needs a

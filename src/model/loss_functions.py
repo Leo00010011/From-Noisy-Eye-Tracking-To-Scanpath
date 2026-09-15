@@ -3,6 +3,8 @@ import torch.nn.functional as F
 import torch.nn as nn
 import math
 
+from src.eval.eval_metrics import nearest_centroid_offsets
+
 epsilon = 1e-7
 
 def create_weights(fixation_len, attn_mask, device):
@@ -215,16 +217,52 @@ class DenoiseRegLoss(torch.nn.Module):
         info = {'denoise_loss': float(loss.item())}
         return loss, info
     
+class AlignmentLoss(torch.nn.Module):
+    """Nearest-centroid image-feature adaptation loss (image-intrinsic target).
+
+    Each image-feature token regresses its predicted 2-D offset ``output["align"]`` toward the
+    offset to its nearest **valid** fixation centroid of the stimulus. The target comes only from
+    ``output["image_centroids"]`` / ``output["token_centers"]`` — it **does not read** ``tgt``
+    (the well-posedness fix): identical images get identical targets regardless of subject.
+    """
+
+    def __init__(self, coord_func=torch.nn.functional.l1_loss):
+        super().__init__()
+        self.coord_func = coord_func
+
+    def set_denoise_weight(self, denoise_weight: float):
+        return
+
+    def summary(self):
+        n = getattr(self.coord_func, "__name__", type(self.coord_func).__name__)
+        print(f"AlignmentLoss: coord_func={n}")
+
+    def forward(self, input, output):
+        pred = output["align"]                       # (B, S, 2)
+        centers = output["token_centers"]            # (1, S, 2)
+        cents = output["image_centroids"]            # (B, C, 2)
+        cmask = output["centroid_mask"]              # (B, C) bool
+        row = cmask.any(dim=1)                       # (B,)
+        if not bool(row.any()):
+            # Differentiable zero — no valid centroid anywhere in the batch.
+            return pred.sum() * 0.0, {"align_loss": 0.0}
+        target = nearest_centroid_offsets(centers, cents, cmask)   # no_grad inside
+        r = row.view(-1, 1, 1).expand_as(pred)
+        loss = self.coord_func(pred[r], target[r])
+        return loss, {"align_loss": float(loss.item())}
+
+
 class CombinedLossFunction(torch.nn.Module):
-    def __init__(self, denoise_loss, fixation_loss, denoise_weight = 0):
+    def __init__(self, denoise_loss, fixation_loss, denoise_weight = 0, align_loss = None):
         super().__init__()
         self.denoise_loss = denoise_loss
         self.fixation_loss = fixation_loss
         self.denoise_weight = denoise_weight
-        
+        self.align_loss = align_loss
+
     def set_denoise_weight(self, denoise_weight: float):
         self.denoise_weight = denoise_weight
-    
+
     def summary(self):
         print(f"CombinedLossFunction: denoise_weight={self.denoise_weight}")
         print("  Denoise Loss:")
@@ -237,8 +275,18 @@ class CombinedLossFunction(torch.nn.Module):
             self.fixation_loss.summary()
         else:
             print(f"    {self.fixation_loss}")
+        if self.align_loss is not None:
+            print("  Alignment Loss:")
+            if hasattr(self.align_loss, 'summary'):
+                self.align_loss.summary()
+            else:
+                print(f"    {self.align_loss}")
 
     def forward(self, input, output):
+        # ImageAdaptation phase emits an "align" key; dispatch to the alignment term and return.
+        # Byte-identical for any output without "align" (FR15).
+        if "align" in output:
+            return self.align_loss(input, output)
         denoise_loss = 0
         fixation_loss = 0
         info = {}

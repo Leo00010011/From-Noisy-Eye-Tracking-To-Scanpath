@@ -3,7 +3,7 @@ from torch.optim.lr_scheduler import _LRScheduler
 import math
 import numpy as np
 import json
-from src.eval.eval_metrics import create_cls_targets, accuracy, precision, recall, eval_reg, eval_denoise
+from src.eval.eval_metrics import create_cls_targets, accuracy, precision, recall, eval_reg, eval_denoise, eval_align
 from src.eval.eval_utils import invert_transforms, concat_reg
 
 
@@ -19,7 +19,8 @@ class MetricsStorage:
             'recall_pos': [],
             'precision_neg': [],
             'recall_neg': [],
-            'denoise_error_val': []
+            'denoise_error_val': [],
+            'align_error_val': []
         }
         self.loss_info = {}
         self.num_batches = 0
@@ -47,7 +48,12 @@ class MetricsStorage:
             clean_x = input['clean_x']
             coord_error = eval_denoise(denoise_out, clean_x)
             results_dict['denoise_error'] = coord_error
-        
+
+        if 'align' in output:
+            results_dict['align_error'] = eval_align(
+                output['align'], output['token_centers'],
+                output['image_centroids'], output['centroid_mask'])
+
         for key, value in results_dict.items():
             if key not in self.loss_info:
                 self.loss_info[key] = value
@@ -88,6 +94,7 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
     model.eval()
     with torch.no_grad():
         denoise_coord_error_acum = 0
+        align_coord_error_acum = 0
         acc_acum = 0
         pre_pos_acum = 0
         rec_pos_acum = 0
@@ -126,6 +133,10 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
                     loss_info[key] = value
                 else:
                     loss_info[key] += value
+            if 'align' in output:
+                align_coord_error_acum += eval_align(
+                    output['align'], output['token_centers'],
+                    output['image_centroids'], output['centroid_mask'])
             input, output = invert_transforms(input, output, val_dataloader, remove_outliers = True)
             if 'reg' in output:
                 reg_out = output['reg']
@@ -167,6 +178,8 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
             metrics['recall_neg'].append(rec_neg_acum / cnt)
         if denoise_coord_error_acum > 0:
             metrics['denoise_error_val'].append(denoise_coord_error_acum / cnt)
+        if align_coord_error_acum > 0:
+            metrics['align_error_val'].append(align_coord_error_acum / cnt)
         if log:
             print(f'>>>>>>> Validation results at epoch {metrics["epoch"][-1]}:')
             for key, value in info.items():
@@ -181,7 +194,9 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
                 print('recall_neg: ',metrics['recall_neg'][-1])
             if denoise_coord_error_acum > 0:
                 print('denoise_error_val: ',metrics['denoise_error_val'][-1])
-            
+            if align_coord_error_acum > 0:
+                print('align_error_val: ',metrics['align_error_val'][-1])
+
             print('<<<<<<<<<<<<<<<<<<')
     model.train()
 
