@@ -158,8 +158,14 @@ class ScanpathCentroidCache:
             raise ValueError(
                 f"centroid cache has {len(stored_paths)} unique images but the dataset rebuilt "
                 f"{len(rebuilt)} — filter/coverage mismatch.")
+        # Compare separator-agnostically: a cache built on Windows stores backslash paths, but
+        # os.path.normpath does NOT rewrite '\\' on POSIX, so a Windows-built cache read on Linux
+        # would spuriously mismatch. The first-seen ORDER (row u) is what matters and is identical
+        # across OSes; only the path string separator differs.
+        def _norm(q):
+            return os.path.normpath(q).replace("\\", "/")
         for u, p in enumerate(rebuilt):
-            if os.path.normpath(stored_paths[u]) != os.path.normpath(p):
+            if _norm(stored_paths[u]) != _norm(p):
                 raise ValueError(
                     f"centroid cache/order mismatch at unique {u}: {stored_paths[u]} != {p}")
 
