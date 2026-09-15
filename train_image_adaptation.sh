@@ -47,7 +47,7 @@ source /mnt/beegfs/home/leonardo.ulloa/miniconda3/etc/profile.d/conda.sh
 
 echo "Activating Conda env"
 conda activate scanpath
-
+pip3 install -U scikit-learn
 echo "Moving to project"
 cd projects/From-Noisy-Eye-Tracking-To-Scanpath/
 
