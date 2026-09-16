@@ -55,6 +55,10 @@ OUT_DIR = os.path.join("outputs", "image_reliance_drop")
 SAVE_FULL_RESIDUALS = True     # also persist full fixation cross residuals (float16) for offline PCA
 EPS_IGNORE = 1e-3              # normalised-units threshold: |shuffled - clean| < eps ⇒ "unchanged"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+# Pass B decoding regime. False = autoregressive (the real use case: the model never sees true
+# fixations). True = teacher-forced, only for probing checkpoints trained with
+# `training.use_scheduled_sampling: false`, whose free-running rollout drifts off-distribution.
+PERTURB_TEACHER_FORCED = False
 
 
 # ── Load ──────────────────────────────────────────────────────────────────────
@@ -88,7 +92,8 @@ def _load_checkpoint_model(pipe, ckpt_path):
 
 
 def main(ckpt_path=CKPT_PATH, run_name=RUN_NAME, out_dir=OUT_DIR,
-         save_full=SAVE_FULL_RESIDUALS, eps_ignore=EPS_IGNORE, device=DEVICE):
+         save_full=SAVE_FULL_RESIDUALS, eps_ignore=EPS_IGNORE, device=DEVICE,
+         perturb_teacher_forced=PERTURB_TEACHER_FORCED):
     os.makedirs(out_dir, exist_ok=True)
     print(f"\n>>> Image-reliance diagnostic — {run_name}  ({ckpt_path})")
 
@@ -118,7 +123,15 @@ def main(ckpt_path=CKPT_PATH, run_name=RUN_NAME, out_dir=OUT_DIR,
     batch_size = int(cfg.data.load.batch_size if "load" in cfg.data else cfg.data.batch_size)
     if batch_size < 2:                                  # FR18
         print("  [WARN] batch_size < 2: the perturbation pass will write all-NaN columns.")
-    b_records = run_perturbation_pass(model, test_dl, device, eps_ignore=eps_ignore)
+    ss_off = not bool(cfg.training.get("use_scheduled_sampling", False))
+    if ss_off and not perturb_teacher_forced:
+        print("  [WARN] this run trained with use_scheduled_sampling=false but Pass B is set to "
+              "free-run; the rollout will be off-distribution and the perturbation test "
+              "uninformative. Set PERTURB_TEACHER_FORCED = True.")
+    print(f"  Pass B decoding regime: "
+          f"{'teacher-forced (matches validate())' if perturb_teacher_forced else 'autoregressive'}")
+    b_records = run_perturbation_pass(model, test_dl, device, eps_ignore=eps_ignore,
+                                      teacher_forced=perturb_teacher_forced)
 
     # ── Coverage checks (Data Architecture Integrity) ───────────────────────────
     # CoupledDataloader iterates the test image Subset (== number of test samples); path_dataset
@@ -147,6 +160,7 @@ def main(ckpt_path=CKPT_PATH, run_name=RUN_NAME, out_dir=OUT_DIR,
         "n_decoder": int(support["n_decoder"]),
         "n_eye_decoder": int(support["n_eye_decoder"]),
         "target_mode": "pred",
+        "perturb_mode": "teacher_forced" if perturb_teacher_forced else "autoregressive",
         "split": "test",
         "eps_ignore": eps_ignore,
         "created_at": datetime.now(timezone.utc).isoformat(),

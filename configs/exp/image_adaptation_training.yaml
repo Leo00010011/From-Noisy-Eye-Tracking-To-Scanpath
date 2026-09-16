@@ -10,7 +10,9 @@ defaults:
 training:
   decisive_metric: "reg_error_val"
   pretrained_model: null
-  use_scheduled_sampling: false
+  # On: the model is used free-running at inference, and validate() then measures the
+  # autoregressive reg_error_val (ratio 1 in eval) instead of the teacher-forced one.
+  use_scheduled_sampling: true
   Phases: ["ImageAdaptation", "Combined", "FullFinetune"]
   ImageAdaptation:
     name: "ImageAdaptation"
@@ -45,3 +47,14 @@ loss:
 data:
   load:
     use_precomputed_features: True
+
+# The sampler steps on every batch from the start of the run (global epochs, all phases), so the
+# warmup covers the whole ImageAdaptation phase (40) and the ramp starts with Combined:
+#   epochs 0-40 teacher-forced | 40-100 ramp to max_prob (inside Combined) | 100-240 at max_prob.
+# Invariant: warmup_epochs >= ImageAdaptation.epochs; warmup + active <= total epochs (240).
+scheduled_sampling:
+  warmup_epochs: 40
+  active_epochs: 60
+  n_updates: -1
+  min_prob: 0
+  max_prob: 0.85

@@ -791,3 +791,48 @@ def test_8_3_checkpoint_roundtrip():
     off = make_model(image_adaptation=False)
     missing, unexpected = off.load_state_dict(sd, strict=False)
     assert any(k.startswith("align_head.") for k in unexpected)
+
+
+# ===========================================================================
+# Group 9 — scheduled sampling on the three-phase run
+# ===========================================================================
+def _attach_sampler(m):
+    from src.training.training_utils import ScheduledSampling
+    s = ScheduledSampling(active_epochs=1, warmup_epochs=0, device="cpu", steps_per_epoch=1)
+    m.set_scheduled_sampling(s)
+    return s
+
+
+def test_9_1_image_adaptation_bypasses_sampler_in_eval():
+    # eval ⇒ get_current_ratio() == 1; ImageAdaptation must still return align outputs.
+    m = make_model(image_adaptation=True)
+    set_synth_centroids(m, U=4, C_max=3)
+    _attach_sampler(m)
+    m.set_phase("ImageAdaptation")
+    m.eval()
+    out = m(**ia_batch(B=2))
+    assert set(out.keys()) == {"align", "token_centers", "image_centroids", "centroid_mask"}
+    assert out["align"].shape == (2, S_TOKENS, 2)
+
+
+def test_9_2_full_finetune_uses_sampler_in_eval():
+    m = make_model(image_adaptation=True)
+    set_synth_centroids(m)
+    _attach_sampler(m)
+    m.set_phase("FullFinetune")
+    m.eval()
+    batch = ia_batch(B=2, N=3)
+    batch["tgt_mask"] = torch.ones(2, 4, dtype=torch.bool)   # K1 = N + 1 decode steps
+    out = m(**batch)
+    assert "align" not in out
+    assert out["coord"].shape[:2] == (2, 4)
+
+
+def test_9_3_exp_config_schedule_invariants():
+    from omegaconf import OmegaConf
+    cfg = OmegaConf.load(os.path.join("configs", "exp", "image_adaptation_training.yaml"))
+    t, ss = cfg.training, cfg.scheduled_sampling
+    assert t.use_scheduled_sampling is True
+    total = sum(t[p].epochs for p in t.Phases)
+    assert ss.warmup_epochs >= t.ImageAdaptation.epochs      # sampler counts global epochs
+    assert ss.warmup_epochs + ss.active_epochs <= total

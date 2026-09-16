@@ -1022,7 +1022,9 @@ class MixerModel(nn.Module):
         # `skip_denoise` drops the denoise branch of the Combined phase for this call. It is set
         # by ScheduledSampling, which runs the denoise head once outside its decode loop (the
         # head reads only the loop-invariant encoder output).
-        if self.scheduled_sampling is not None and ('pass_sampler' not in kwargs or kwargs['pass_sampler'] is False) and self.scheduled_sampling.get_current_ratio() > 0:
+        # ImageAdaptation has no decode loop (decode_align is a single per-token pass), so it never
+        # goes through the sampler — otherwise validate() (ratio 1 in eval) would route it there.
+        if self.scheduled_sampling is not None and self.phase != 'ImageAdaptation' and ('pass_sampler' not in kwargs or kwargs['pass_sampler'] is False) and self.scheduled_sampling.get_current_ratio() > 0:
             return self.scheduled_sampling(**kwargs)
         if 'pass_sampler' not in kwargs or kwargs['pass_sampler'] is False:
             self.encode(**kwargs)

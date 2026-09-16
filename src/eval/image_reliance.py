@@ -31,7 +31,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from src.eval.eval_utils import eval_autoregressive
+from src.eval.eval_utils import concat_reg, eval_autoregressive
 from src.training.training_utils import move_data_to_device
 
 
@@ -342,17 +342,43 @@ def run_recording_pass(model, dataloader, device, recorder, *, save_full_residua
 # ─────────────────────────────────────────────────────────────────────────────
 # Pass B — input-perturbation (recorder off)
 # ─────────────────────────────────────────────────────────────────────────────
-def run_perturbation_pass(model, dataloader, device, *, eps_ignore=1e-3):
+def _teacher_forced_reg(model, inp):
+    """One teacher-forced forward -> ``reg (B, K1, 3)`` — the regime ``validate()`` measures.
+
+    ``model.forward`` re-runs ``encode``, so a shuffled ``image_src`` genuinely reaches both
+    decoders; only the *decoder queries* differ from the autoregressive path (ground-truth
+    prefix instead of the model's own drifting predictions).
+    """
+    kw = dict(inp)
+    kw["in_tgt"] = None
+    out = dict(model(**kw))
+    out["reg"] = concat_reg(out)
+    return out
+
+
+def run_perturbation_pass(model, dataloader, device, *, eps_ignore=1e-3, teacher_forced=False):
     """Pass B: per-sample normalised regression error with the true image vs. the image tensor
     shuffled within the batch (gaze/masks/tgt identical). Recorder is untouched (off). Returns
-    per-sample records (FR9–FR11)."""
+    per-sample records (FR9–FR11).
+
+    ``teacher_forced=False`` (default, unchanged) rolls the scanpath out autoregressively.
+    ``teacher_forced=True`` feeds the ground-truth prefix instead — the same regime
+    ``training_utils.validate`` uses, and the only meaningful one for a checkpoint trained with
+    ``use_scheduled_sampling: false``: such a model has never consumed its own predictions, so a
+    free-running rollout drifts off-distribution and becomes insensitive to *every* input, the
+    image included. A clean ``reg_error`` far above the run's ``reg_error_val`` (converted out of
+    pixel space) is the tell.
+    """
     records = []
+    n_noop = n_shuffled = 0     # rows whose "shuffled" image is the SAME stimulus (roll collision)
+    _reg = ((lambda m, i: _teacher_forced_reg(m, i)) if teacher_forced
+            else (lambda m, i: eval_autoregressive(m, i, only_last=True)))
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="Pass B (perturbation)"):
             inp = move_data_to_device(batch, device)
             B = inp["src"].size(0)
 
-            out_c = eval_autoregressive(model, inp, only_last=True)
+            out_c = _reg(model, inp)
             rc, dc = per_sample_reg_error(out_c["reg"], inp["tgt"], inp.get("tgt_mask"))
 
             if B >= 2:
@@ -360,9 +386,15 @@ def run_perturbation_pass(model, dataloader, device, *, eps_ignore=1e-3):
                 perm_img, perm = shuffle_images_in_batch(inp[img_key])
                 inp_s = dict(inp)
                 inp_s[img_key] = perm_img
-                out_s = eval_autoregressive(model, inp_s, only_last=True)
+                out_s = _reg(model, inp_s)
                 rs, ds = per_sample_reg_error(out_s["reg"], inp["tgt"], inp.get("tgt_mask"))
                 perm = perm.cpu().numpy()
+                # A cyclic roll is a derangement of *rows*, not of *stimuli*: when two rows in the
+                # batch are scanpaths over the same image the swap is a silent no-op. Count it.
+                if "image_idx" in inp:
+                    iidx = inp["image_idx"].cpu().numpy()
+                    n_noop += int((iidx[perm] == iidx).sum())
+                    n_shuffled += B
             else:
                 print("  [WARN] trailing batch of size 1 cannot be shuffled; "
                       "writing NaN perturbation columns for it.")
@@ -379,6 +411,10 @@ def run_perturbation_pass(model, dataloader, device, *, eps_ignore=1e-3):
                     "dur_error_shuffled": float(ds[i]),
                     "perm_index": int(perm[i]),
                 })
+    if n_shuffled:
+        frac = n_noop / n_shuffled
+        print(f"  Shuffle check: {frac:.2%} of rows received the SAME stimulus "
+              f"({n_noop}/{n_shuffled}) — those rows dilute the measured delta.")
     return records
 
 
@@ -531,6 +567,7 @@ def write_summary(path, pass_a_records, pass_b_records, support, attrs):
         "checkpoint_path": attrs.get("checkpoint_path", ""),
         "n_samples": len(pass_a_records),
         "eps_ignore": eps_ignore,
+        "perturb_mode": str(attrs.get("perturb_mode", "autoregressive")),
         "residuals": {},
         "perturbation": {},
         "in_range": {},
@@ -652,7 +689,8 @@ def _print_summary(summary, support):
 
     pert = summary.get("perturbation", {})
     if pert:
-        print("\n[Test 2] Input-perturbation (image shuffled within batch):")
+        print(f"\n[Test 2] Input-perturbation (image shuffled within batch; "
+              f"{summary.get('perturb_mode', 'autoregressive')} decoding):")
         print(f"  mean reg_error clean    : {pert['mean_reg_error_clean']:.4f}")
         print(f"  mean reg_error shuffled : {pert['mean_reg_error_shuffled']:.4f}")
         print(f"  abs delta / rel delta   : {pert['abs_delta']:+.4f} / {pert['rel_delta']:+.2%}")
