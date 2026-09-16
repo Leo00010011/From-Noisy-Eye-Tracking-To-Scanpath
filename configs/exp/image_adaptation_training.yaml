@@ -66,7 +66,7 @@ data:
 # Invariant: warmup_epochs == epochs of the phases before Combined (40 with ImageAdaptation, 0
 # without); warmup + active <= total epochs.
 scheduled_sampling:
-  warmup_epochs: 10
+  warmup_epochs: 0
   active_epochs: 60
   n_updates: -1
   min_prob: 0
