@@ -47,7 +47,8 @@ from src.eval.image_reliance import (
 
 # CKPT_PATH = os.path.join("outputs","2026-09-02","19-45-06")   # <-- checkpoint run directory
 # CKPT_PATH = os.path.join("outputs","2026-09-03","16-08-35")   # <-- checkpoint run directory
-CKPT_PATH = os.path.join("outputs","2026-09-07","13-15-42")   # <-- checkpoint run directory
+# CKPT_PATH = os.path.join("outputs","2026-09-07","13-15-42")   # <-- checkpoint run directory
+CKPT_PATH = os.path.join("outputs","2026-09-15","17-51-42")   # <-- checkpoint run directory
 
 RUN_NAME = "mask2former_ms"
 OUT_DIR = os.path.join("outputs", "image_reliance_drop")
