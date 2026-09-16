@@ -99,8 +99,13 @@ class MetricsStorage:
             json.dump(self.metrics, f)
 
 
-def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True, inference_recorder = None, recorder_phase = None):
+def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True, inference_recorder = None, recorder_phase = None,
+             reliance_probe = None):
+    """Returns the image-reliance summary dict (empty when no probe is given)."""
     model.eval()
+    if reliance_probe is not None:
+        reliance_probe.reset()
+        reliance_probe.active = True
     with torch.no_grad():
         denoise_coord_error_acum = 0
         align_coord_error_acum = 0
@@ -121,6 +126,8 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
 
         for batch_index, batch in enumerate(val_dataloader):
             input = move_data_to_device(batch, device)
+            if reliance_probe is not None:
+                reliance_probe.start_batch(input.get('src_mask'), input.get('tgt_mask'))
             if inference_recorder is not None:
                 if record_index == batch_index:
                     inference_recorder.enabled = True
@@ -198,6 +205,12 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
             metrics['align_error_val'].append(align_coord_error_acum / cnt)
         if align_px_error_acum > 0:
             metrics['align_error_px_val'].append(align_px_error_acum / cnt)
+        reliance = {}
+        if reliance_probe is not None:
+            reliance_probe.active = False
+            reliance = reliance_probe.summary()
+            for key, value in reliance.items():
+                metrics.setdefault(key, []).append(value)
         if log:
             print(f'>>>>>>> Validation results at epoch {metrics["epoch"][-1]}:')
             for key, value in info.items():
@@ -216,9 +229,14 @@ def validate(model, loss_fn, val_dataloader, epoch, device, metrics, log = True,
                 print('align_error_val: ',metrics['align_error_val'][-1])
             if align_px_error_acum > 0:
                 print('align_error_px_val: ',metrics['align_error_px_val'][-1])
+            if reliance:
+                # layer means only; per-layer values are in the metrics file / W&B
+                print('image reliance: ' + ', '.join(
+                    f'{k[:-len("_mean")]}={v:.4f}' for k, v in reliance.items() if k.endswith('_mean')))
 
             print('<<<<<<<<<<<<<<<<<<')
     model.train()
+    return reliance
 
 
 def compute_loss(input, output):

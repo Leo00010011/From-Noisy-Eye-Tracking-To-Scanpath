@@ -156,6 +156,18 @@
 
 ## In Progress
 
+- **EVE head-to-head `prediction.json` export (blocked on EyeNet coverage)** — writes the
+  few-shot-scanpath eval repo's contract file (1062 `(name, subject)` test cells, 512×384
+  metric screen, int-ms `T`, EOS-stop length ≤ 16) from a `MixerModel` run on each cell's
+  own EyeNet gaze + per-trial screen render. Pure helpers `src/eval/prediction_contract.py`
+  (GT hash check, cell→`exp_key` resolution, length/coord conversion, validator mirroring
+  the scorer), driver `src/notebooks/save_prediction_contract_eve.py` (writes
+  `pred_seed0.json` + `run_notes.md`, deterministic ⇒ one seed), stdlib checker
+  `scripts/validate_prediction.py`. `EveRealNoiseDataset`/`EveRealNoiseImgDataset` gain
+  additive `exp_keys=` restriction and `dedup_by="exp_key"` (default unchanged). 34-test
+  suite `tests/test_prediction_contract.py`. **Blocker:** the EyeNet cache covers only 332
+  of 1062 cells — the other 730 belong to 26 EyeNet-*train* participants (in-sample risk);
+  see `spec/handoff/eve_eyenet_coverage.md` + `eve_eyenet_missing_exp_keys.csv`.
 - **Spec-driven development workflow** — Constitution documents written; first sprint-level feature spec (EVE real-noise scanpath inference) delivered end-to-end under `spec/2026-07-27-eve-real-noise-scanpath-inference/`
 - **Multi-scale image backbone migration (Mask2Former)** — replacing the single-scale frozen DINOv3 image encoder with a vendored, detectron2-free **ResNet50 + MSDeformAttn pixel decoder** (from the Mask2Former clone at `../mask2former/`), and making the eye-decoder and fixation-decoder deformable cross-attentions **multi-scale**. Factored into six independently testable features **F1–F6** (see the dedicated Backlog subsection below and the TechStack "Multi-scale Image Backbone Migration" section for full contracts). **F1, F2, F3, F4, and F6 are ✓ DONE — the migration is complete: the Mask2Former backbone is reachable end-to-end via `model/image_encoder=mask2former`.** F1 (`DeformableAttention`) is now N-level capable and byte-identical at `n_levels=1`; its as-built API and the multi-scale shape reference live in TechStack §"Deformable param layout (F1 as-built)". F2 (`Mask2FormerBackbone` in `src/model/ms_deform_backbone.py`) is the vendored, detectron2-free **torchvision ResNet50 (ImageNet, frozen) + freshly-initialized, trainable pixel decoder** consuming F1 at `n_levels=3`; it emits 3 CLS-free multi-scale maps `[B,256,Hₗ,Wₗ]`. F3 (`src/model/ms_features.py`) is the `MultiScaleFeatures` bundle + two backbone adapters that decouple `MixerModel` from backbone specifics. F4 (multiscale-capable eye & fixation decoders) consumes F1 at *N* levels. F6 (`MixerModel` + `PipelineBuilder` + the `configs/model/image_encoder/` group) constructs the F2 backbone from config, wraps it in the F3 adapter, feeds the bundle through the F4 decoders with per-level PE (shared `shared_gaussian` basis) + a `level_embed`, and guards every DINOv3-only access behind an explicit `image_encoder_type` — **DINOv3 stays byte-identical and old checkpoints load** (dual path, not unified). The backbone is **ImageNet-pretrained ResNet50 frozen + trainable pixel decoder** — no external segmentation checkpoint is loaded. **DINOv3 remains selectable** — the new backbone is additive, gated by a config group, so the existing single-scale path and its checkpoints keep working throughout. Remaining migration follow-ups are non-blocking (stride-4 4th level, path unification — see "Open items").
 

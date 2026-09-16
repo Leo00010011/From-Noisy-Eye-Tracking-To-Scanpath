@@ -7,6 +7,7 @@ import math
 import itertools
 
 from src.training.inference_recorder import record_module_value
+from src.eval.reliance_probe import probe_begin, probe_cross, probe_gate, probe_end
 
 
 def _module_recording_enabled(module: nn.Module) -> bool:
@@ -979,6 +980,7 @@ class DeformableDecoder(nn.Module):
         else:                                      # F3 multi-scale bundle (CLS-free)
             value = mem
         x = src
+        probe_begin(self)
         if self.norm_first:
             temp = self.__self_attention(self.norm1(x), attn_mask=tgt_mask)
             if _module_recording_enabled(self):
@@ -989,6 +991,7 @@ class DeformableDecoder(nn.Module):
                                           level_start_index=level_start_index)
             if _module_recording_enabled(self):
                 record_module_value(self, "cross_attention_res", temp)
+            probe_cross(self, "eye", "img", x, temp)
             x = x + temp
             temp = self.__feed_forward(self.norm3(x))
             if _module_recording_enabled(self):
@@ -996,11 +999,13 @@ class DeformableDecoder(nn.Module):
             x = x + temp
         else:
             x = self.norm1(x + self.__self_attention(x, attn_mask=tgt_mask))
-            x = self.norm2(x + self.__cross_attention(x, value, reference_points=reference_points,
-                                                      spatial_shapes=spatial_shapes,
-                                                      level_start_index=level_start_index))
+            temp = self.__cross_attention(x, value, reference_points=reference_points,
+                                          spatial_shapes=spatial_shapes,
+                                          level_start_index=level_start_index)
+            probe_cross(self, "eye", "img", x, temp)
+            x = self.norm2(x + temp)
             x = self.norm3(x + self.__feed_forward(x))
-
+        probe_end(self, x)
         return x
         
 
@@ -1187,6 +1192,7 @@ class DeformableDoubleInputDecoder(nn.Module):
         else:                                      # F3 multi-scale bundle (CLS-free)
             value2 = mem2
         x = src
+        probe_begin(self)
         if self.norm_first:
             temp = self.__self_attention(self.self_attn_norm(x), attn_mask=tgt_mask, src_rope= None)
             if _module_recording_enabled(self):
@@ -1195,6 +1201,7 @@ class DeformableDoubleInputDecoder(nn.Module):
             temp = self.__cross_attention1(self.first_cross_attn_norm(x), mem1, attn_mask=mem1_mask, src_rope=None, mem1_rope=None)
             if _module_recording_enabled(self):
                 record_module_value(self, "first_cross_res", temp)
+            probe_cross(self, "dec", "gaze", x, temp)
             x = x + self.gaze_drop_path(temp)
             temp = self.__cross_attention2(self.second_cross_attn_norm(x), value2,
                                            reference_points=reference_points,
@@ -1202,7 +1209,9 @@ class DeformableDoubleInputDecoder(nn.Module):
                                            level_start_index=level_start_index)
             if _module_recording_enabled(self):
                 record_module_value(self, "second_cross_res", temp)
+            probe_cross(self, "dec", "img", x, temp)
             if self.image_gated_fusion:
+                probe_gate(self, self.image_gate, temp, x)
                 x = self.image_gate(temp, x)          # img*gate + dec*(1-gate)
             else:
                 x = x + temp
@@ -1212,14 +1221,18 @@ class DeformableDoubleInputDecoder(nn.Module):
             x = x + temp
         else:
             x = self.self_attn_norm(x + self.__self_attention(x, attn_mask=tgt_mask, src_rope= None))
-            x = self.first_cross_attn_norm(x + self.gaze_drop_path(self.__cross_attention1(x, mem1, attn_mask=mem1_mask, src_rope= None, mem1_rope=None)))
+            temp = self.__cross_attention1(x, mem1, attn_mask=mem1_mask, src_rope= None, mem1_rope=None)
+            probe_cross(self, "dec", "gaze", x, temp)
+            x = self.first_cross_attn_norm(x + self.gaze_drop_path(temp))
             temp = self.__cross_attention2(
                     x, value2, reference_points=reference_points,
                     spatial_shapes=spatial_shapes, level_start_index=level_start_index)
+            probe_cross(self, "dec", "img", x, temp)
             if self.image_gated_fusion:
+                probe_gate(self, self.image_gate, temp, x)
                 x = self.second_cross_attn_norm(self.image_gate(temp, x))
             else:
                 x = self.second_cross_attn_norm(x + temp)
             x = self.linear_norm(x + self.__feed_forward(x))
-
+        probe_end(self, x)
         return x

@@ -24,6 +24,7 @@ from __future__ import annotations
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterable
 
 import h5py
 import numpy as np
@@ -392,13 +393,15 @@ class EyeNetGazeCache:
 # ── Step 4 — shared row filter ─────────────────────────────────────────────────
 
 def _accepted_rows(cache: EyeNetGazeCache, eyenet_split: "str | None",
-                   min_valid_frames: int) -> "list[tuple[int, str]]":
+                   min_valid_frames: int,
+                   exp_keys: "Iterable[str] | None" = None) -> "list[tuple[int, str]]":
     """Return ``[(row_index_in_cache, exp_key), ...]`` in cache order (FR8.2).
 
     Shared by both datasets so positional index ``i`` refers to the same ``exp_key``
     in each. ``eyenet_split`` is validated against EyeNet's split vocabulary, not
     EVE's — passing an EVE-only label such as ``"train"`` raises rather than silently
-    returning an empty dataset.
+    returning an empty dataset. ``exp_keys``, when given, additionally restricts the
+    rows to that set (keys absent from the cache are simply not returned).
     """
     if eyenet_split is not None and eyenet_split not in _EYENET_SPLITS:
         raise ValueError(
@@ -407,8 +410,11 @@ def _accepted_rows(cache: EyeNetGazeCache, eyenet_split: "str | None",
             "the recovery model never saw EVE, so only EyeNet's split is meaningful."
         )
     sdf = cache.splits_df
+    keep = None if exp_keys is None else set(exp_keys)
     out: list[tuple[int, str]] = []
     for i, k in enumerate(cache.exp_keys):
+        if keep is not None and k not in keep:
+            continue
         if eyenet_split is not None and sdf.at[i, "eyenet_split"] != eyenet_split:
             continue
         if int(cache.get_validity(k).sum()) < min_valid_frames:
@@ -431,12 +437,13 @@ class EveRealNoiseDataset(Dataset):
 
     def __init__(self, cache: EyeNetGazeCache, bundle, eyenet_split: "str | None" = None,
                  max_fixations: int = 20, min_valid_frames: int = 5,
-                 transforms: list = (), log: bool = False) -> None:
+                 transforms: list = (), log: bool = False,
+                 exp_keys: "Iterable[str] | None" = None) -> None:
         self.transforms = list(transforms)
         self.max_fixations = max_fixations
         self.eyenet_split = eyenet_split
 
-        accepted = _accepted_rows(cache, eyenet_split, min_valid_frames)
+        accepted = _accepted_rows(cache, eyenet_split, min_valid_frames, exp_keys)
         sdf = cache.splits_df
 
         xs, ys, masks = [], [], []
@@ -524,12 +531,21 @@ class EveRealNoiseImgDataset(Dataset):
     the same ``exp_key`` in both. Images are deduplicated by ``stimulus_name`` and
     squashed non-uniformly from 1920×1080 to ``resize_size``×``resize_size`` — the
     same ingest as ``DeduplicatedMemoryDataset`` / ``EveImgDataset``.
+
+    EVE renders each photograph at a per-trial display scale/offset, so the
+    ``stimulus_name`` dedup feeds one trial's screen render to every trial of that
+    stimulus. ``dedup_by="exp_key"`` keeps one image per trial instead (required when
+    predictions are compared in that trial's screen coordinates).
     """
 
     def __init__(self, cache: EyeNetGazeCache, bundle, eyenet_split: "str | None" = None,
                  max_fixations: int = 20, min_valid_frames: int = 5,
-                 resize_size: int = 256, transform=None) -> None:
-        accepted = _accepted_rows(cache, eyenet_split, min_valid_frames)
+                 resize_size: int = 256, transform=None,
+                 exp_keys: "Iterable[str] | None" = None,
+                 dedup_by: str = "stimulus_name") -> None:
+        if dedup_by not in ("stimulus_name", "exp_key"):
+            raise ValueError(f"dedup_by must be 'stimulus_name' or 'exp_key', got {dedup_by!r}")
+        accepted = _accepted_rows(cache, eyenet_split, min_valid_frames, exp_keys)
         sdf = cache.splits_df
 
         ingest = v2.Compose([
@@ -543,7 +559,7 @@ class EveRealNoiseImgDataset(Dataset):
         self.unique_idx: list[int] = []
         self._exp_keys: list[str] = []
         for i, k in accepted:
-            name = sdf.at[i, "stimulus_name"]
+            name = sdf.at[i, "stimulus_name"] if dedup_by == "stimulus_name" else k
             if name not in stim_to_uid:
                 stim_to_uid[name] = len(first_key_per_stimulus)
                 first_key_per_stimulus.append(k)

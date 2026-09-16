@@ -13,6 +13,16 @@ def train(builder:PipelineBuilder, trial=None):
         model, splits = builder.build_model()
         rec_interval = builder.config.training.inference_recorder.rec_interval
         inference_recorder = builder.build_inference_recorder(model)
+        # Image-reliance validation metrics (residual/cross-attn norm ratios, gate stats). Attached
+        # before torch.compile so the decoder layers carry the probe; inert outside validate().
+        reliance_probe = None
+        # On by default; disable with `+training.reliance_metrics=false`.
+        if builder.config.training.get('reliance_metrics', True):
+            from src.eval.reliance_probe import RelianceProbe
+            reliance_probe = RelianceProbe(model)
+            if len(reliance_probe) == 0:
+                print("reliance_metrics: no deformable decoder layers found, skipping.")
+                reliance_probe = None
         if splits is not None:
             print("Loading splits from pretrained model")
             train_idx, val_idx, test_idx = splits
@@ -157,7 +167,7 @@ def train(builder:PipelineBuilder, trial=None):
                     if curriculum_noise is not None:
                         curriculum_noise.enabled = False
                     prev_len = len(metrics_storage.metrics["reg_error_val"])
-                    validate(
+                    reliance = validate(
                         model,
                         loss_fn,
                         val_dataloader,
@@ -167,6 +177,7 @@ def train(builder:PipelineBuilder, trial=None):
                         log = builder.config.training.log,
                         inference_recorder = inference_recorder if record_val_split and record_index > 0 else None,
                         recorder_phase = phase,
+                        reliance_probe = reliance_probe,
                     )
                     if curriculum_noise is not None:
                         curriculum_noise.enabled = True
@@ -178,6 +189,7 @@ def train(builder:PipelineBuilder, trial=None):
                             seq = metrics_storage.metrics.get(key, [])
                             if seq:
                                 log[f"val/{key}"] = seq[-1]
+                        log.update({f"val_reliance/{key}": value for key, value in (reliance or {}).items()})
                         wb.log(log)
                     # Optuna pruning: only report when validate() actually appended a new
                     # reg_error_val (it does so only when coord_error_acum > 0).
