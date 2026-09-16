@@ -684,6 +684,20 @@ class PipelineBuilder:
                     pixel_scale = [float(v) for v in np.asarray(pixel_scale).ravel()]
                 model.set_alignment_centroids(cache.centroids, cache.centroid_mask,
                                               pixel_scale=pixel_scale)
+
+                # Reuse a finished ImageAdaptation phase: load only the adapter trunk + align head.
+                # Accepts a run directory (…/model.pth appended) or a model.pth path.
+                adapter_path = ia_cfg.get('pretrained_adapter_path', None)
+                if adapter_path is not None:
+                    if os.path.isdir(adapter_path):
+                        adapter_path = os.path.join(adapter_path, 'model.pth')
+                    model.load_image_adapter(adapter_path)
+                    # The adapter saw that run's training images; reuse its split so none of them
+                    # land in this run's val/test.
+                    adapter_dir = str(Path(adapter_path).parent)
+                    if splits is None and os.path.exists(os.path.join(adapter_dir, 'split.pth')):
+                        print(f"Reusing split from adapter run {adapter_dir}")
+                        splits = load_test_data(self, adapter_dir, return_dataloaders=False)
         elif model_name == 'PathModel':
             model = PathModel(input_dim = self.config.model.input_dim,
                               output_dim = self.config.model.output_dim,

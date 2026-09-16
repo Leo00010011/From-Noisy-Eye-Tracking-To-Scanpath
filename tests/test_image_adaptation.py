@@ -835,4 +835,49 @@ def test_9_3_exp_config_schedule_invariants():
     assert t.use_scheduled_sampling is True
     total = sum(t[p].epochs for p in t.Phases)
     assert ss.warmup_epochs >= t.ImageAdaptation.epochs      # sampler counts global epochs
+    assert cfg.model.image_adaptation.pretrained_adapter_path is None
     assert ss.warmup_epochs + ss.active_epochs <= total
+
+
+# ===========================================================================
+# Group 10 — reusing a finished ImageAdaptation phase
+# ===========================================================================
+def _adapter_items(m):
+    return {k: v for k, v in m.state_dict().items() if k.startswith(MixerModel.ADAPTER_PREFIXES)}
+
+
+def test_10_1_load_image_adapter_copies_only_adapter(tmp_path):
+    src = make_model(image_adaptation=True)
+    with torch.no_grad():
+        for p in src.parameters():
+            p.add_(1.0)                                      # make src differ from any fresh init
+    ckpt = tmp_path / "model.pth"
+    torch.save({"model_state_dict": {"_orig_mod." + k: v for k, v in src.state_dict().items()}},
+               ckpt)
+
+    dst = make_model(image_adaptation=True)
+    before = {k: v.clone() for k, v in dst.state_dict().items()}
+    dst.load_image_adapter(str(ckpt))
+
+    src_ad = _adapter_items(src)
+    assert src_ad and any(k.startswith("align_head.") for k in src_ad)
+    for k, v in _adapter_items(dst).items():
+        assert torch.equal(v, src_ad[k]), k
+    for k, v in dst.state_dict().items():                    # everything else untouched
+        if not k.startswith(MixerModel.ADAPTER_PREFIXES):
+            assert torch.equal(v, before[k]), k
+
+
+def test_10_2_load_image_adapter_rejects_checkpoint_without_adapter(tmp_path):
+    off = make_model(image_adaptation=True)
+    sd = {k: v for k, v in off.state_dict().items()
+          if not k.startswith(MixerModel.ADAPTER_PREFIXES)}
+    ckpt = tmp_path / "model.pth"
+    torch.save({"model_state_dict": sd}, ckpt)
+    with pytest.raises(ValueError):
+        make_model(image_adaptation=True).load_image_adapter(str(ckpt))
+
+
+def test_10_3_load_image_adapter_requires_adaptation_on(tmp_path):
+    with pytest.raises(RuntimeError):
+        make_model(image_adaptation=False).load_image_adapter(str(tmp_path / "x.pth"))

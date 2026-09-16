@@ -4,6 +4,15 @@
 #   1. ImageAdaptation — adapter trunk + align head only (centroid-alignment loss)
 #   2. Combined        — encoder + decoder + heads, adapter frozen (fixation loss)
 #   3. FullFinetune    — whole model incl. adapter, pixel decoder stays frozen (fixation loss)
+#
+# Reusing a finished ImageAdaptation phase (skip re-training the adapter):
+#   1. Once:  py train.py exp=image_adaptation_training 'training.Phases=[ImageAdaptation]'
+#   2. Then set model.image_adaptation.pretrained_adapter_path to that run and override:
+#        py train.py exp=image_adaptation_training \
+#          model.image_adaptation.pretrained_adapter_path=outputs/<date>/<time> \
+#          'training.Phases=[Combined,FullFinetune]' scheduled_sampling.warmup_epochs=0
+#      (warmup_epochs=0 because the sampler counts epochs from the start of the run and there is
+#      no ImageAdaptation phase to wait out anymore.) The adapter run's split.pth is reused.
 defaults:
   - override /model/image_encoder: mask2former_precomputed
 
@@ -13,7 +22,7 @@ training:
   # On: the model is used free-running at inference, and validate() then measures the
   # autoregressive reg_error_val (ratio 1 in eval) instead of the teacher-forced one.
   use_scheduled_sampling: true
-  Phases: ["ImageAdaptation", "Combined", "FullFinetune"]
+  Phases: ["Combined", "FullFinetune"]
   ImageAdaptation:
     name: "ImageAdaptation"
     denoise_weight: 0
@@ -38,6 +47,9 @@ model:
     centroid_cache_path: "data/Coco FreeView/scanpath_centroids.h5"
     align_head_hidden_dim: [256, 128]
     align_head_output_dropout: 0
+    # Run directory (or its model.pth) of a finished ImageAdaptation run. When set, only
+    # img_input_proj.* + align_head.* are loaded from it; drop ImageAdaptation from Phases.
+    pretrained_adapter_path: "outputs/2026-09-15/17-51-42"
 
 loss:
   complex_type: "combined"
@@ -51,9 +63,10 @@ data:
 # The sampler steps on every batch from the start of the run (global epochs, all phases), so the
 # warmup covers the whole ImageAdaptation phase (40) and the ramp starts with Combined:
 #   epochs 0-40 teacher-forced | 40-100 ramp to max_prob (inside Combined) | 100-240 at max_prob.
-# Invariant: warmup_epochs >= ImageAdaptation.epochs; warmup + active <= total epochs (240).
+# Invariant: warmup_epochs == epochs of the phases before Combined (40 with ImageAdaptation, 0
+# without); warmup + active <= total epochs.
 scheduled_sampling:
-  warmup_epochs: 40
+  warmup_epochs: 10
   active_epochs: 60
   n_updates: -1
   min_prob: 0

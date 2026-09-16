@@ -615,6 +615,35 @@ class MixerModel(nn.Module):
             if any(expected_key in k for k in missing_keys):
                 print(f"⚠️ Warning: Expected block '{expected_key}' was NOT loaded.")
 
+    ADAPTER_PREFIXES = ("img_input_proj.", "align_head.")
+
+    def load_image_adapter(self, checkpoint_path):
+        """Load only the image-adaptation weights (``img_input_proj`` trunk + ``align_head``) from
+        a checkpoint, so a finished ImageAdaptation phase can be reused instead of re-run.
+
+        Raises if the checkpoint has no adapter weights or any expected key is missing/mis-shaped
+        — a silent partial load would train Combined on a random adapter.
+        """
+        if not self.image_adaptation:
+            raise RuntimeError("load_image_adapter requires model.image_adaptation.enabled=True.")
+        state = torch.load(checkpoint_path, map_location="cpu")
+        if "model_state_dict" in state:
+            state = state["model_state_dict"]
+        state = {k.removeprefix("_orig_mod."): v for k, v in state.items()}
+        adapter_state = {k: v for k, v in state.items() if k.startswith(self.ADAPTER_PREFIXES)}
+
+        own = {k: v for k, v in self.state_dict().items() if k.startswith(self.ADAPTER_PREFIXES)}
+        missing = sorted(set(own) - set(adapter_state))
+        mismatched = sorted(k for k in own.keys() & adapter_state.keys()
+                            if own[k].shape != adapter_state[k].shape)
+        if not adapter_state or missing or mismatched:
+            raise ValueError(
+                f"adapter checkpoint {checkpoint_path} does not match this model: "
+                f"{len(adapter_state)} adapter keys found, missing={missing[:5]}, "
+                f"shape-mismatched={mismatched[:5]}")
+        self.load_state_dict(adapter_state, strict=False)
+        print(f"Loaded {len(adapter_state)} image-adapter tensors from {checkpoint_path}")
+
     def clear_kv_cache(self):
         for mod in self.decoder:
             mod.clear_kv_cache()
