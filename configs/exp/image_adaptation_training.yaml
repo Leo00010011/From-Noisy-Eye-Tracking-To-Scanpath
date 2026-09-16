@@ -22,7 +22,7 @@ training:
   # On: the model is used free-running at inference, and validate() then measures the
   # autoregressive reg_error_val (ratio 1 in eval) instead of the teacher-forced one.
   use_scheduled_sampling: true
-  Phases: ["Combined", "FullFinetune"]
+  Phases: ["ImageAdaptation","Combined", "FullFinetune"]
   ImageAdaptation:
     name: "ImageAdaptation"
     denoise_weight: 0
@@ -49,7 +49,8 @@ model:
     align_head_output_dropout: 0
     # Run directory (or its model.pth) of a finished ImageAdaptation run. When set, only
     # img_input_proj.* + align_head.* are loaded from it; drop ImageAdaptation from Phases.
-    pretrained_adapter_path: "outputs/2026-09-15/17-51-42"
+    # pretrained_adapter_path: "outputs/2026-09-15/17-51-42"
+    pretrained_adapter_path: null
 
 loss:
   complex_type: "combined"
@@ -66,7 +67,7 @@ data:
 # Invariant: warmup_epochs == epochs of the phases before Combined (40 with ImageAdaptation, 0
 # without); warmup + active <= total epochs.
 scheduled_sampling:
-  warmup_epochs: 0
+  warmup_epochs: 50
   active_epochs: 60
   n_updates: -1
   min_prob: 0
