@@ -65,6 +65,16 @@ input_encoder: "shared_gaussian"
 pos_enc_sigma: 1.0
 use_rope: False
 use_kv_cache: False
+# DETR-style parallel (non-autoregressive) decoding. False => the autoregressive, teacher-forced
+# decoder (default; byte-identical, old checkpoints load). True => the decoder uses learned index
+# query embeddings + standard (non-causal) self-attention and predicts every fixation slot in one
+# pass. It reads NO ground-truth fixation coordinates/durations, so it cannot leak GT once the
+# self-attention is bidirectional. Incompatible with use_kv_cache / use_rope / start_head /
+# image_features_concat (all consume the GT tgt tokens). Scheduled sampling is bypassed.
+parallel_decoding: False
+# Number of decoder query slots when parallel_decoding=True; null => max_pos_dec (query i predicts
+# fixation i, so this must be >= the longest scanpath + 1).
+num_queries: null
 compilate: False
 head_type: "linear"
 activation:  "gelu"

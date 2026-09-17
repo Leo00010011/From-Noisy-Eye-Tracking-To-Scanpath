@@ -317,7 +317,7 @@ class TransformerDecoder(nn.Module):
     
 
 class DoubleInputDecoder(nn.Module):
-    def __init__(self,model_dim = 1024, total_dim = 1024, n_heads = 8, ff_dim = 2048,dropout_p = .1,activation = F.relu,eps = 1e-5,norm_first = False, use_kv_cache = False, device = 'cpu', dtype = torch.float32):
+    def __init__(self,model_dim = 1024, total_dim = 1024, n_heads = 8, ff_dim = 2048,dropout_p = .1,activation = F.relu,eps = 1e-5,norm_first = False, use_kv_cache = False, causal_self_attn = True, device = 'cpu', dtype = torch.float32):
         super().__init__()
         self.model_dim = model_dim
         self.total_dim = total_dim
@@ -328,13 +328,16 @@ class DoubleInputDecoder(nn.Module):
         self.activation = activation
         self.norm_first = norm_first
         self.use_kv_cache = use_kv_cache
+        # `causal_self_attn=True` (default) is the autoregressive path — byte-identical to before.
+        # `False` gives standard bidirectional self-attention for DETR-style parallel decoding.
+        self.causal_self_attn = causal_self_attn
         factory_kwargs = {'device': device, 'dtype': dtype}
         # sa
         self.self_attn = MultiHeadedAttention(model_dim,
                                             total_dim,
                                             n_heads,
                                             is_self_attention=True,
-                                            is_causal= True,
+                                            is_causal= causal_self_attn,
                                             use_kv_cache=use_kv_cache,
                                             **factory_kwargs)
         self.self_attn_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)
@@ -1061,6 +1064,7 @@ class DeformableDoubleInputDecoder(nn.Module):
                       normalize_grid_init = True,
                       gaze_droppath_p = 0.0,
                       image_gated_fusion = False,
+                      causal_self_attn = True,
                       device = 'cpu',
                       dtype = torch.float32):
         super().__init__()
@@ -1076,13 +1080,16 @@ class DeformableDoubleInputDecoder(nn.Module):
         self.num_points = num_points
         self.n_levels = n_levels
         self.spatial_shape = spatial_shape
+        # `causal_self_attn=True` (default) is the autoregressive path — byte-identical to before.
+        # `False` gives standard bidirectional self-attention for DETR-style parallel decoding.
+        self.causal_self_attn = causal_self_attn
         factory_kwargs = {'device': device, 'dtype': dtype}
         # sa
         self.self_attn = MultiHeadedAttention(model_dim,
                                             total_dim,
                                             n_heads,
                                             is_self_attention=True,
-                                            is_causal= True,
+                                            is_causal= causal_self_attn,
                                             use_kv_cache=use_kv_cache,
                                             **factory_kwargs)
         self.self_attn_norm = nn.LayerNorm(model_dim,eps = eps, **factory_kwargs)

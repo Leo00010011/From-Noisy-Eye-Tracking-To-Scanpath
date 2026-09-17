@@ -74,6 +74,8 @@ class MixerModel(nn.Module):
                        n_eye_decoder = 0,
                        use_kv_cache = False,
                        add_denoise_head = True,
+                       parallel_decoding = False,
+                       num_queries = None,
                        image_adaptation = False,
                        align_head_hidden_dim = None,
                        align_head_output_dropout = 0,
@@ -142,6 +144,14 @@ class MixerModel(nn.Module):
         self.geometric_sigma = geometric_sigma
         self.reg_head_output_dropout = reg_head_output_dropout
         self.use_deformable_fixation_decoder = use_deformable_fixation_decoder
+        # DETR-style parallel (non-autoregressive) decoding. Default off ⇒ the autoregressive path
+        # is byte-identical. When on, the decoder uses learned index/query embeddings (NOT the GT
+        # fixation coordinates/durations — those would leak once self-attention is bidirectional)
+        # and standard (non-causal) self-attention, so every fixation slot is predicted in one pass.
+        self.parallel_decoding = bool(parallel_decoding)
+        # One query slot per output position; matches the autoregressive output length (start + N),
+        # which is bounded by `max_pos_dec`. Query i regresses fixation i, keeping the ordered loss.
+        self.num_queries = num_queries if num_queries is not None else max_pos_dec
         self.image_encoder_type = image_encoder_type
         self.n_image_levels = n_image_levels
         self.image_spatial_shapes = None        # set per-encode()
@@ -171,6 +181,24 @@ class MixerModel(nn.Module):
                 "image_encoder_type == 'mask2former' (the precomputed Mask2Former path); "
                 f"got image_encoder={'None' if image_encoder is None else 'set'}, "
                 f"image_encoder_type={image_encoder_type!r}.")
+        # Parallel-decoding guards. These paths all consume the per-fixation GT coordinates/order
+        # (via tgt tokens, KV cache, or RoPE on tgt_coords), which is exactly what parallel decoding
+        # must not read — so they are unsupported together.
+        if self.parallel_decoding:
+            if use_kv_cache:
+                raise ValueError("parallel_decoding is incompatible with use_kv_cache "
+                                 "(there is no autoregressive decode loop to cache).")
+            if use_rope:
+                raise ValueError("parallel_decoding is incompatible with use_rope "
+                                 "(RoPE on the decoder side positions tokens by GT tgt_coords).")
+            if input_encoder == 'image_features_concat':
+                raise ValueError("parallel_decoding is incompatible with "
+                                 "input_encoder='image_features_concat' (it indexes image tokens "
+                                 "by GT tgt_coords).")
+            if head_type == 'start_head':
+                raise ValueError("parallel_decoding is incompatible with head_type='start_head' "
+                                 "(it assumes an autoregressive start token at position 0).")
+
         # Nominal patch size for the shared_gaussian encoders' `patch_size=` arg (only consumed by
         # forward_features(), i.e. the DINOv3 path). On the mask2former path it is never used.
         pos_enc_patch_size = self.patch_resolution[0] if self.patch_resolution is not None else 16
@@ -378,6 +406,7 @@ class MixerModel(nn.Module):
                                            spatial_shape = self.patch_resolution,
                                            gaze_droppath_p = self.gaze_droppath_p,
                                            image_gated_fusion = self.image_gated_fusion,
+                                           causal_self_attn = not self.parallel_decoding,
                                            **factory_mode)
         else:
             decoder_layer = DoubleInputDecoder(model_dim = model_dim,
@@ -388,10 +417,22 @@ class MixerModel(nn.Module):
                                            activation= activation,
                                            norm_first= norm_first,
                                            use_kv_cache = use_kv_cache,
+                                           causal_self_attn = not self.parallel_decoding,
                                            **factory_mode)
         self.decoder = _get_clones(decoder_layer,n_decoder)
         for mod in self.decoder:
             self.fixation_modules.append(mod)
+
+        # DETR-style learned query embeddings (one per output slot). These replace the projected GT
+        # fixation tokens as the decoder input, so no ground-truth coordinate/duration is ever fed.
+        # For the deformable fixation decoder the query reference points are regressed from the
+        # queries themselves (sigmoid → [0,1]), never from GT tgt_coords.
+        if self.parallel_decoding:
+            self.query_embed = nn.Parameter(torch.randn(self.num_queries, model_dim, **factory_mode))
+            self.fixation_modules.append(self.query_embed)
+            if self.use_deformable_fixation_decoder:
+                self.ref_point_head = nn.Linear(model_dim, 2, **factory_mode)
+                self.fixation_modules.append(self.ref_point_head)
         if  norm_first:
             self.final_dec_norm = nn.LayerNorm(model_dim, eps = 1e-5, **factory_mode)
             self.fixation_modules.append(self.final_dec_norm)
@@ -906,9 +947,59 @@ class MixerModel(nn.Module):
         self.image_src = image_src
         self.src_coords = src_coords
     
+    def _run_output_heads(self, output, image_src):
+        # Shared final-norm + head dispatch for both the autoregressive and the parallel paths.
+        if self.norm_first:
+            output = self.final_dec_norm(output)
+        if self.head_type == 'multi_mlp':
+            return {'coord': self.coord_head(output),
+                    'dur': self.dur_head(output),
+                    'cls': self.end_head(output)}
+        elif self.head_type == 'argmax_regressor':
+            reg_out = self.regressor_head(output)
+            return {'coord': self.argmax_regressor(reg_out, image_src),
+                    'dur': self.dur_head(output),
+                    'cls': self.end_head(output)}
+        elif self.head_type == 'mlp' or self.head_type == 'linear':
+            return {'reg': self.regression_head(output), 'cls': self.end_head(output)}
+        elif self.head_type == 'heatmap':
+            return {'heatmaps': self.trajectory_heatmap_generator(image_src, output),
+                    'dur': self.dur_head(output),
+                    'cls': self.end_head(output)}
+        raise ValueError(f"Unsupported head_type for parallel decoding: {self.head_type}")
+
+    def decode_fixation_parallel(self, tgt, src_mask, **kwargs):
+        """DETR-style single-pass decode. Learned query embeddings (never the GT fixation
+        coordinates/durations) drive the decoder with non-causal self-attention, so all fixation
+        slots are predicted in parallel. `tgt` is used only to size the number of output slots to
+        `N+1` (matching the autoregressive path so the ordered loss/metrics align); when `tgt` is
+        None (inference) the full `num_queries` budget is decoded."""
+        src = self.src
+        image_src = self.image_src
+        B = src.size(0)
+        n_slots = (tgt.size(1) + 1) if tgt is not None else self.num_queries
+        if n_slots > self.num_queries:
+            raise ValueError(f"parallel decoding needs {n_slots} query slots but only "
+                             f"{self.num_queries} exist (raise model.num_queries / max_pos_dec).")
+        output = self.query_embed[:n_slots].unsqueeze(0).expand(B, -1, -1)
+        # Non-causal self-attention over content-free learned queries ⇒ no query padding mask.
+        for mod in self.decoder:
+            if self.use_deformable_fixation_decoder:
+                reference_points = torch.sigmoid(
+                    self.ref_point_head(self.query_embed[:n_slots])).unsqueeze(0).expand(B, -1, -1)
+                output = mod(output, src, image_src, None, mem1_mask=src_mask,
+                             reference_points=reference_points,
+                             spatial_shapes=self.image_spatial_shapes,
+                             level_start_index=self.image_level_start_index)
+            else:
+                output = mod(output, image_src, src, None, mem2_mask=src_mask)
+        return self._run_output_heads(output, image_src)
+
     def decode_fixation(self, tgt, tgt_mask, src_mask, in_tgt = None, **kwargs):
         if in_tgt is not None:
             tgt = in_tgt
+        if self.parallel_decoding:
+            return self.decode_fixation_parallel(tgt, src_mask, **kwargs)
         src = self.src
         if self.use_denoised_coordinates:
             output = self.decode_denoise(**kwargs)
@@ -1053,7 +1144,9 @@ class MixerModel(nn.Module):
         # head reads only the loop-invariant encoder output).
         # ImageAdaptation has no decode loop (decode_align is a single per-token pass), so it never
         # goes through the sampler — otherwise validate() (ratio 1 in eval) would route it there.
-        if self.scheduled_sampling is not None and self.phase != 'ImageAdaptation' and ('pass_sampler' not in kwargs or kwargs['pass_sampler'] is False) and self.scheduled_sampling.get_current_ratio() > 0:
+        # Parallel decoding has no autoregressive loop, so it never routes through the sampler
+        # (otherwise validate() with ratio 1 in eval would try to free-run it step by step).
+        if self.scheduled_sampling is not None and not self.parallel_decoding and self.phase != 'ImageAdaptation' and ('pass_sampler' not in kwargs or kwargs['pass_sampler'] is False) and self.scheduled_sampling.get_current_ratio() > 0:
             return self.scheduled_sampling(**kwargs)
         if 'pass_sampler' not in kwargs or kwargs['pass_sampler'] is False:
             self.encode(**kwargs)

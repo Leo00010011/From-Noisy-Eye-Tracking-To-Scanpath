@@ -639,6 +639,8 @@ class PipelineBuilder:
                               eye_encoder_dropout = self.config.model.get('eye_encoder_dropout', 0),
                               end_dropout = self.config.model.get('end_dropout', 0),
                               add_denoise_head = self.config.model.get('add_denoise_head', True),
+                              parallel_decoding = self.config.model.get('parallel_decoding', False),
+                              num_queries = self.config.model.get('num_queries', None),
                               use_kv_cache = self.config.model.get('use_kv_cache', False),
                               geometric_sigma = self.config.model.get('geometric_sigma', 0),
                               decoder_attn_dropout = self.config.model.get('decoder_attn_dropout', 0),

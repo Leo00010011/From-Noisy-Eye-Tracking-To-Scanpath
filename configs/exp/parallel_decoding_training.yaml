@@ -1,0 +1,73 @@
+# @package _global_
+# Image-Feature Adaptation via Scanpath-Centroid Alignment Pretraining, DETR-STYLE PARALLEL DECODER.
+# Identical to image_adaptation_training.yaml (precomputed frozen Mask2Former, centroid alignment,
+# the same ordered phases) EXCEPT the fixation decoder is non-autoregressive:
+#   - model.parallel_decoding=True  -> learned index query embeddings + non-causal self-attention;
+#     every fixation slot is predicted in one pass and no GT coordinate/duration is fed (query i
+#     regresses fixation i). ImageAdaptation is decoder-independent (it trains the adapter/align
+#     head), so it is unaffected; Combined/FullFinetune use the parallel decoder.
+#   - Scheduled sampling is off: there is no autoregressive rollout to sample from, so validate()
+#     measures the true single-pass inference directly (parallel decode is leak-free by design).
+#
+# Three ordered phases on the precomputed frozen Mask2Former path:
+#   1. ImageAdaptation — adapter trunk + align head only (centroid-alignment loss)
+#   2. Combined        — encoder + parallel decoder + heads, adapter frozen (fixation loss)
+#   3. FullFinetune    — whole model incl. adapter, pixel decoder stays frozen (fixation loss)
+#
+# Reusing a finished ImageAdaptation phase (skip re-training the adapter):
+#   1. Once:  py train.py exp=parallel_decoding_training 'training.Phases=[ImageAdaptation]'
+#   2. Then set model.image_adaptation.pretrained_adapter_path to that run and override:
+#        py train.py exp=parallel_decoding_training \
+#          model.image_adaptation.pretrained_adapter_path=outputs/<date>/<time> \
+#          'training.Phases=[Combined,FullFinetune]'
+#      The adapter run's split.pth is reused.
+defaults:
+  - override /model/image_encoder: mask2former_precomputed
+
+training:
+  decisive_metric: "reg_error_val"
+  pretrained_model: null
+  # No autoregressive rollout in parallel decoding => scheduled sampling is inapplicable.
+  use_scheduled_sampling: false
+  Phases: ["Combined", "FullFinetune"]
+  ImageAdaptation:
+    name: "ImageAdaptation"
+    denoise_weight: 0
+    decisive_metric: "align_error_val"
+    epochs: 40
+  Combined:
+    name: "Combined"
+    denoise_weight: 0
+    decisive_metric: ${training.decisive_metric}
+    epochs: 80
+  FullFinetune:
+    name: "FullFinetune"
+    denoise_weight: 0
+    decisive_metric: ${training.decisive_metric}
+    epochs: 120
+
+model:
+  pretrained_encoder_path: null
+  add_denoise_head: False
+  # DETR-style parallel (non-autoregressive) fixation decoder.
+  parallel_decoding: True
+  # One query slot per output position; null => max_pos_dec. Raise both if scanpaths exceed it.
+  num_queries: null
+  image_adaptation:
+    enabled: True
+    centroid_cache_path: "data/Coco FreeView/scanpath_centroids.h5"
+    align_head_hidden_dim: [256, 128]
+    align_head_output_dropout: 0
+    # Run directory (or its model.pth) of a finished ImageAdaptation run. When set, only
+    # img_input_proj.* + align_head.* are loaded from it; drop ImageAdaptation from Phases.
+    pretrained_adapter_path: "outputs/2026-09-16/13-37-17"
+    # pretrained_adapter_path: null
+
+loss:
+  complex_type: "combined"
+  fixation_loss_type: "separated_reg"
+  align_loss_type: "l1"
+
+data:
+  load:
+    use_precomputed_features: True
