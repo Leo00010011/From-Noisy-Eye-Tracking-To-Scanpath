@@ -27,7 +27,24 @@ import h5py
 import numpy as np
 import torch
 
-from sklearn.cluster import MeanShift, DBSCAN
+# scikit-learn is resolved on first use rather than at import time: it is needed only to
+# *build* a centroid cache. Reading a prebuilt one (``ScanpathCentroidCache.__init__``) never
+# clusters, so a training run consuming an existing cache must not be held hostage to the
+# sklearn install — ``pipeline_builder`` imports this module eagerly, and a broken sklearn
+# (e.g. a half-written `pip install -U`) would otherwise kill `train.py` before it builds
+# anything. These stay ``None`` until ``_ensure_sklearn`` fills them in; assigning them
+# directly (as tests do) short-circuits the import entirely.
+MeanShift = None
+DBSCAN = None
+
+
+def _ensure_sklearn():
+    """Populate the module-level ``MeanShift`` / ``DBSCAN`` on first clustering call."""
+    global MeanShift, DBSCAN
+    if MeanShift is None or DBSCAN is None:
+        from sklearn.cluster import MeanShift as _MeanShift, DBSCAN as _DBSCAN
+        MeanShift = MeanShift or _MeanShift
+        DBSCAN = DBSCAN or _DBSCAN
 
 
 def _cluster(cloud, algorithm, bw_px, dbscan_eps_dva, ptoa, min_samples):
@@ -37,6 +54,8 @@ def _cluster(cloud, algorithm, bw_px, dbscan_eps_dva, ptoa, min_samples):
     * ``dbscan``: cluster at ``eps = (dbscan_eps_dva or bandwidth_dva) / ptoa`` px, drop the
       ``label == -1`` noise points, return per-label means.
     """
+    _ensure_sklearn()
+
     if algorithm == "meanshift":
         ms = MeanShift(bandwidth=bw_px, bin_seeding=True).fit(cloud)
         return ms.cluster_centers_

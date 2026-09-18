@@ -10,6 +10,9 @@ Groups mirror ``spec/2026-09-14-image-feature-adaptation-alignment/validation.md
 """
 
 import os
+import subprocess
+import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -881,3 +884,105 @@ def test_10_2_load_image_adapter_rejects_checkpoint_without_adapter(tmp_path):
 def test_10_3_load_image_adapter_requires_adaptation_on(tmp_path):
     with pytest.raises(RuntimeError):
         make_model(image_adaptation=False).load_image_adapter(str(tmp_path / "x.pth"))
+
+
+# ===========================================================================
+# Group 11 — training must not depend on scikit-learn
+# ===========================================================================
+# sklearn is needed only to BUILD a centroid cache (`_cluster`). Reading a prebuilt one
+# never clusters, so a top-level `from sklearn.cluster import ...` in scanpath_centroids.py
+# put every training run at the mercy of the sklearn install -- a broken one on the cluster
+# ("cannot import name 'BaseEstimator' ... circular import") killed `train.py` at import
+# time, before any model was built. The import now lives inside `_cluster`.
+#
+# Run in a subprocess: poisoning sys.meta_path in-process would leak into other tests.
+
+_SKLEARN_POISON = r'''
+import sys
+from importlib.abc import MetaPathFinder, Loader
+from importlib.util import spec_from_loader
+
+ERR = ("cannot import name 'BaseEstimator' from partially initialized module "
+       "'sklearn.base' (most likely due to a circular import)")
+
+
+class _BrokenLoader(Loader):
+    def __init__(self, fullname): self.fullname = fullname
+    def create_module(self, spec): return None
+    def exec_module(self, module):
+        _Poison.executed.append(self.fullname)
+        raise ImportError(ERR)
+
+
+class _Poison(MetaPathFinder):
+    # find_spec probes are harmless (torch._dynamo probes for optional modules); only a real
+    # load attempt -- exec_module -- would crash a run.
+    executed = []
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "sklearn" or fullname.startswith("sklearn."):
+            return spec_from_loader(fullname, _BrokenLoader(fullname))
+        return None
+
+
+for m in [m for m in sys.modules if m == "sklearn" or m.startswith("sklearn.")]:
+    del sys.modules[m]
+sys.meta_path.insert(0, _Poison())
+
+# The poison must actually bite, or the rest of this proves nothing.
+try:
+    import sklearn
+    raise SystemExit("POISON_INERT")
+except ImportError as e:
+    assert "BaseEstimator" in str(e), e
+for m in [m for m in sys.modules if m == "sklearn" or m.startswith("sklearn.")]:
+    del sys.modules[m]
+_Poison.executed.clear()
+
+# The exact chain that died on the cluster.
+from src.training.pipeline import PipelineBuilder
+from src.data.scanpath_centroids import ScanpathCentroidCache, _cluster
+
+assert not _Poison.executed, f"training graph loaded sklearn: {_Poison.executed}"
+assert "sklearn" not in sys.modules
+
+# Building a cache must still fail loudly rather than silently skip clustering.
+try:
+    _cluster([[0.0, 0.0]], "meanshift", 16.0, None, 16.0, 1)
+    raise SystemExit("BUILD_DID_NOT_RAISE")
+except ImportError as e:
+    assert "BaseEstimator" in str(e), e
+
+print("OK")
+'''
+
+
+def test_11_1_training_imports_without_sklearn():
+    """train.py's import chain must survive a broken/absent sklearn."""
+    result = subprocess.run([sys.executable, "-c", _SKLEARN_POISON],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "OK" in result.stdout
+
+
+def test_11_2_sklearn_import_is_not_at_module_scope():
+    """Structural check: no top-level sklearn import in scanpath_centroids.py.
+
+    Parsed rather than grepped, so it does not care *which* function holds the import
+    (it moved from `_cluster` into `_ensure_sklearn`) — only that importing the module
+    does not import sklearn.
+    """
+    import ast
+
+    tree = ast.parse(Path(sc.__file__).read_text(encoding="utf-8"))
+    for node in tree.body:                                   # module scope only, not nested
+        if isinstance(node, ast.Import):
+            names = [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            names = [node.module or ""]
+        else:
+            continue
+        assert not any(n == "sklearn" or n.startswith("sklearn.") for n in names), \
+            f"sklearn imported at module scope (line {node.lineno}) — training would need it"
+
+    # ...and the lazy import must still exist somewhere, or building a cache is broken.
+    assert "from sklearn.cluster import" in Path(sc.__file__).read_text(encoding="utf-8")
