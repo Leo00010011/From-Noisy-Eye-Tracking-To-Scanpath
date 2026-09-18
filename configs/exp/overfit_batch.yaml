@@ -1,0 +1,115 @@
+# @package _global_
+# OVERFIT-A-BATCH SANITY TEST for the parallel-decoding recipe.
+#
+# Inherits the full parallel_decoding_training setup (precomputed frozen Mask2Former features,
+# the image-adapter checkpoint, DETR-style parallel decoding) and strips away everything that
+# stops a model from driving the training loss to ~0 on a handful of samples. If reg_error_val
+# does NOT collapse toward zero here, the fault is in the architecture, the loss wiring, or the
+# optimisation — not in the data, the noise model, or the amount of training.
+#
+# What is deliberately different from the real run:
+#   1. data.overfit.enabled=True    -> train == val == test == the first n_samples scanpaths.
+#   2. Noise transforms REMOVED     -> AddIsotropicGaussianNoise + DiscretizationNoise are gone
+#      and ExtractRandomPeriod.random_offset=False, so each sample's (src, tgt) pair is
+#      byte-identical on every epoch. NOTE: the model therefore sees CLEAN gaze, not noisy —
+#      this is a capacity test, not a denoising test.
+#   3. Every dropout = 0 and weight_decay = 0 -> nothing stochastic or regularising stands
+#      between the model and a zero loss.
+#   4. Phases: ["Combined"] only  -> the adapter comes from the pretrained checkpoint (inherited
+#      pretrained_adapter_path) and stays frozen; Combined is where the parallel decoder trains,
+#      so it is the thing actually under test.
+#   5. val_interval=1 -> a validation point every epoch, so you watch the curve, not endpoints.
+#
+# Run (the two cache paths must be absolute on the cluster — see overfit_batch.sh):
+#   python train.py exp=overfit_batch \
+#     +data.load.feature_cache_path="$FEATURE_CACHE" \
+#     model.image_adaptation.centroid_cache_path="$CENTROID_CACHE"
+#
+# Expected outcome: reg_error_val -> near 0 within a few hundred epochs. A plateau at a
+# non-trivial error is the finding.
+defaults:
+  - parallel_decoding_training
+  - _self_
+
+training:
+  # Only the parallel fixation decoder is under test; the adapter is loaded, not retrained.
+  Phases: ["Combined"]
+  Combined:
+    name: "Combined"
+    denoise_weight: 0
+    decisive_metric: ${training.decisive_metric}
+    epochs: 400
+  num_epochs: 400
+  validate: True
+  val_interval: 1
+  # No regularisation: the target is a zero training loss.
+  weight_decay: 0
+  learning_rate: 0.0003
+  use_scheduled_sampling: false
+  save_best_only: True
+  log: True
+  # Logged every epoch (val_interval=1), so the W&B curves ARE the result of this test:
+  #   train/*            per-epoch training losses  -> must fall toward 0
+  #   val/reg_error_val  the decisive metric on the very rows trained on -> must follow it down
+  #   train/lr           the LR schedule, the usual suspect when a curve flattens
+  #   val_reliance/*     residual / cross-attn ratios (is the image path doing anything?)
+  wandb:
+    enabled: true
+    group: "overfit-batch"
+    name: "overfit-parallel-decoding"
+
+# warmup_stable_decay steps are expressed in EPOCHS (build_scheduler multiplies by
+# steps_per_epoch). These must sum to num_epochs or the LR bottoms out early.
+scheduler:
+  warmup_steps: 20
+  stable_steps: 330
+  decay_steps: 50
+
+model:
+  # Every dropout off — a dropout mask is a fresh random draw each forward and would put a
+  # floor under the achievable training loss.
+  src_word_dropout_prob: 0
+  dur_head_dropout: 0
+  end_dropout: 0
+  image_features_dropout: 0
+  src_dropout: 0
+  tgt_dropout: 0
+  adapter_dropout: 0
+  decoder_dropout: 0
+  decoder_attn_dropout: 0
+  eye_decoder_attn_dropout: 0
+  eye_encoder_dropout: 0
+  eye_decoder_dropout: 0
+  reg_head_dropout: 0
+  reg_head_output_dropout: 0
+  enh_features_dropout: 0
+  word_dropout_prob: 0
+  denoise_head_hidden_dropout: 0
+  denoise_head_output_dropout: 0
+  mixer_dropout: 0
+  dropout_p: 0
+  image_adaptation:
+    align_head_output_dropout: 0
+
+data:
+  # Consumed by PipelineBuilder.apply_overfit_subset (inert when enabled=False). Applied after
+  # the split is resolved, so it also overrides the split.pth reused from the adapter run.
+  overfit:
+    enabled: True
+    # One full batch. Keep n_samples == load.batch_size so the run is exactly one step/epoch.
+    n_samples: 8
+  load:
+    batch_size: 8
+    # Single-process loading: 8 cached feature rows need no worker pool, and workers only add
+    # nondeterminism and startup cost to a run this small.
+    num_workers: 0
+    persistent_workers: False
+    prefetch_factor: null
+    use_precomputed_features: True
+  transforms:
+    # Noise transforms dropped and the crop window pinned => (src, tgt) fixed across epochs.
+    transform_list: ['ExtractRandomPeriod', 'StandarizeTime', 'SaveCleanX',
+                     'NormalizeCoords', 'NormalizeTime',
+                     'NormalizeFixationCoords', 'NormalizeDuration']
+    ExtractRandomPeriod:
+      random_offset: False

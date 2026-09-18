@@ -28,6 +28,9 @@ def train(builder:PipelineBuilder, trial=None):
             train_idx, val_idx, test_idx = splits
         else:
             train_idx, val_idx, test_idx = builder.make_splits()
+        # Overfit-a-batch diagnostic; inert unless data.overfit.enabled. Placed here so it
+        # catches BOTH split sources (make_splits and a reused split.pth).
+        train_idx, val_idx, test_idx = builder.apply_overfit_subset(train_idx, val_idx, test_idx)
         save_splits(train_idx, val_idx, test_idx, builder.config.training.splits_file)
         if builder.config.training.log:
             print(f"Split saved to {builder.config.training.splits_file}")
@@ -162,6 +165,10 @@ def train(builder:PipelineBuilder, trial=None):
                     # define_metric) so each call commits immediately.
                     train_log = {f"train/{key}": value for key, value in loss_info.items()}
                     train_log["epoch"] = global_epoch
+                    # The LR was previously print-only. It is the first thing to check when a
+                    # loss curve flattens (warmup_stable_decay bottoming out early), so it
+                    # belongs on the same chart axis as the losses.
+                    train_log["train/lr"] = optimizer.param_groups[0]["lr"]
                     wb.log(train_log)
                 if needs_validate and ((epoch + 1) % val_interval == 0):
                     if curriculum_noise is not None:

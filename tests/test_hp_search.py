@@ -115,6 +115,10 @@ class _FakeBuilder:
     def make_splits(self):
         return [0], [0], [0]
 
+    def apply_overfit_subset(self, train_idx, val_idx, test_idx):
+        # Mirrors the real builder with no data.overfit block: a pure pass-through.
+        return train_idx, val_idx, test_idx
+
     def build_dataloader(self, *a, **k):
         return _FakeLoader(), _FakeLoader(), None
 
@@ -300,6 +304,9 @@ def test_wandb_logs_train_and_val(tmp_path, patched_pipeline, monkeypatch):
     assert len(val_logs) == 2
     assert all("val/reg_error_val" in p for p in val_logs)
     assert [p["val/reg_error_val"] for p in val_logs] == [0.5, 0.4]
+    # The LR rides on the train payload so it shares the `epoch` x-axis with the losses.
+    assert all("train/lr" in p for p in train_logs)
+    assert all(isinstance(p["train/lr"], float) for p in train_logs)
 
 
 def test_wandb_no_run_skips_logging(tmp_path, patched_pipeline, monkeypatch):

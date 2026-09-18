@@ -384,6 +384,42 @@ class PipelineBuilder:
             test_idx = idx[train_size+val_size:]
         return train_idx, val_idx, test_idx
 
+    def apply_overfit_subset(self, train_idx, val_idx, test_idx):
+        """Overfit-a-batch diagnostic: collapse the split to the first ``n_samples`` training
+        rows and point val/test at that *same* set, so ``reg_error_val`` measures fit on the
+        very rows the model trains on.
+
+        No-op unless ``data.overfit.enabled`` is true, so every existing run composes and
+        splits exactly as before.
+
+        Applied *after* the split source is resolved rather than inside ``make_splits``,
+        because a reused ``split.pth`` (``training.pretrained_model``,
+        ``model.image_adaptation.pretrained_adapter_path``, ``training.reuse_split_from``)
+        makes ``train()`` skip ``make_splits`` entirely — the parallel-decoding exp reuses
+        the adapter run's split, so a truncation inside ``make_splits`` would silently
+        never run.
+        """
+        overfit_cfg = getattr(self.config.data, 'overfit', None)
+        if overfit_cfg is None or not overfit_cfg.get('enabled', False):
+            return train_idx, val_idx, test_idx
+
+        n_samples = int(overfit_cfg.get('n_samples', 0) or 0)
+        if n_samples <= 0:
+            n_samples = int(self.load_config.batch_size)
+
+        train_idx = torch.as_tensor(train_idx)
+        if train_idx.numel() == 0:
+            raise ValueError("data.overfit.enabled=True but the training split is empty.")
+        if n_samples > train_idx.numel():
+            print(f"OVERFIT: requested {n_samples} samples but the training split has "
+                  f"{train_idx.numel()}; using all of them.")
+            n_samples = train_idx.numel()
+
+        train_idx = train_idx[:n_samples].clone()
+        print(f"OVERFIT MODE: train/val/test all collapsed to the same {n_samples} sample(s). "
+              f"Scanpath indices: {train_idx.tolist()}")
+        return train_idx, train_idx.clone(), train_idx.clone()
+
     @staticmethod
     def make_transform(resize_size: int = 256):
         to_tensor = v2.ToImage()
